@@ -52,6 +52,8 @@ nvidia-nvtx-cu12==12.1.105
     # via torch
 pillow==10.2.0
     # via torchvision
+psycopg==3.1.18
+    # via detypify-train
 sympy==1.12
     # via torch
 torch==2.2.1
@@ -60,4 +62,5 @@ torch==2.2.1
 torchvision==0.17.1
     # via detypify-train
 typing-extensions==4.10.0
+    # via psycopg
     # via torch

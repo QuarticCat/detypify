@@ -5,8 +5,13 @@ authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
     "torch>=2.2.1",
     "torchvision>=0.17.1",
+    "psycopg>=3.1.18",
 ]
 requires-python = ">= 3.8"
+
+[project.scripts]
+pre = "pre:main"
+train = "train:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -20,4 +25,4 @@ dev-dependencies = []
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["train"]
+packages = ["pre", "train"]
