@@ -1,3 +1,2 @@
-def main() -> int:
+def main():
     print("Hello from detypify!")
-    return 0

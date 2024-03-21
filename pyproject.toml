@@ -2,9 +2,22 @@
 name = "detypify-train"
 version = "0.1.0"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
-dependencies = ["torch>=2.2.1"]
+dependencies = [
+    "torch>=2.2.1",
+    "torchvision>=0.17.1",
+]
 requires-python = ">= 3.8"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
 dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["train"]

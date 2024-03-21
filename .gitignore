@@ -1,2 +1,7 @@
+/data
+/pre-out
+/train-out
+/web-out
+
 .venv/
 __pycache__/
