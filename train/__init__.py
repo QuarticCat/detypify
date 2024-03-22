@@ -1,5 +1,8 @@
+import numpy as np
 import psycopg
 from torch.utils.data import Dataset
+
+from train.strokes import Stroke
 
 
 class TypSamples(Dataset):
@@ -17,11 +20,17 @@ class TypSamples(Dataset):
             FROM typ_samples
             WHERE id = %s
             """,
-            (idx,),
+            (idx + 1,),
         ).fetchone()
 
 
 def main():
     data = TypSamples()
-    print(len(data))
-    print(data[20])
+    strokes, label = data[2745]
+    strokes = [
+        np.array([[x, y] for x, y, _ in s], dtype=np.float64).view(Stroke)
+        for s in strokes
+    ]
+    print(strokes[0])
+    print(strokes[0].redistribute(10))
+    print(strokes[0].redistribute(10).dominant(2 * np.pi * 15 / 360))

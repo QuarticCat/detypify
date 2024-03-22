@@ -3,8 +3,8 @@ name = "detypify-train"
 version = "0.1.0"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
+    "numpy>=1.26.4",
     "torch>=2.2.1",
-    "torchvision>=0.17.1",
     "psycopg>=3.1.18",
 ]
 requires-python = ">= 3.8"
