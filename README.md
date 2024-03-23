@@ -12,3 +12,7 @@ Download [detexify training data](https://drive.google.com/drive/folders/0ByuYor
 $ rye sync
 $ rye run train
 ```
+
+## License
+
+MIT
