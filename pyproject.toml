@@ -1,5 +1,5 @@
 [project]
-name = "detypify-train"
+name = "detypify"
 version = "0.1.0"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
