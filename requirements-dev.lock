@@ -51,17 +51,19 @@ nvidia-nvjitlink-cu12==12.4.99
 nvidia-nvtx-cu12==12.1.105
     # via torch
 pillow==10.2.0
-    # via detypify-train
+    # via detypify
     # via torchvision
 psycopg==3.1.18
-    # via detypify-train
+    # via detypify
 sympy==1.12
     # via torch
 torch==2.2.1
-    # via detypify-train
+    # via detypify
     # via torchvision
+torchinfo==1.8.0
+    # via detypify
 torchvision==0.17.1
-    # via detypify-train
+    # via detypify
 typing-extensions==4.10.0
     # via psycopg
     # via torch
