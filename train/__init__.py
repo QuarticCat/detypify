@@ -71,7 +71,7 @@ def main():
     torchinfo.summary(model)
 
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.00025)
 
     for epoch in range(10):
         print(f"\n### Epoch {epoch}")
