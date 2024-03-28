@@ -11,8 +11,8 @@
     }
 </script>
 
-<Card class="flex items-center space-x-4" horizontal padding="sm">
-    <Button color="alternative" class="p-0" on:click={copy(logo)}>
+<Card horizontal padding="sm" class="flex items-center space-x-4">
+    <Button color="alternative" class="p-0 focus:ring-0" on:click={copy(logo)}>
         <Avatar rounded size="lg" class="text-5xl">
             {logo}
         </Avatar>
@@ -24,7 +24,7 @@
         {#each info as [key, value]}
             <P>
                 {key}:
-                <Button color="alternative" class="rounded-sm border-0 p-0" on:click={copy(value)}>
+                <Button color="alternative" class="rounded-sm border-0 p-0 focus:ring-0" on:click={copy(value)}>
                     <code class="font-medium">
                         {value}
                     </code>

@@ -42,18 +42,21 @@ def get_data(key_to_typ: dict[str, str]) -> Iterable[tuple[int, str, Strokes]]:
 
 
 def normalize(strokes: Strokes, size: int) -> Optional[Strokes]:
-    min_x = min(x for stroke in strokes for x, _ in stroke)
-    max_x = max(x for stroke in strokes for x, _ in stroke)
-    min_y = min(y for stroke in strokes for _, y in stroke)
-    max_y = max(y for stroke in strokes for _, y in stroke)
-    width = max(max_x - min_x, max_y - min_y) + 40
-    if width == 40:
+    min_x = min(x for s in strokes for x, _ in s)
+    max_x = max(x for s in strokes for x, _ in s)
+    min_y = min(y for s in strokes for _, y in s)
+    max_y = max(y for s in strokes for _, y in s)
+
+    width = max(max_x - min_x, max_y - min_y)
+    if width == 0:
         return None
-    min_x = (max_x + min_x) / 2 - width / 2
-    min_y = (max_y + min_y) / 2 - width / 2
+    width *= 1.2  # leave margin to avoid edge cases
+    zero_x = (max_x + min_x) / 2 - width / 2
+    zero_y = (max_y + min_y) / 2 - width / 2
+    scale = size / width
+
     return [
-        [((x - min_x) / width * size, (y - min_y) / width * size) for x, y in stroke]
-        for stroke in strokes
+        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
     ]
 
 

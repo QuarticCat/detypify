@@ -1,6 +1,7 @@
 <script>
     import "./app.pcss";
     import NavBar from "./components/NavBar.svelte";
+    import Canvas from "./components/Canvas.svelte";
     import Candidate from "./components/Candidate.svelte";
 
     let candidates = [
@@ -24,9 +25,9 @@
 
 <NavBar />
 
-<div class="my-8 grid grid-cols-2 py-4">
-    <div class="col-span-1"></div>
-    <div class="col-span-1 space-y-4">
+<div class="flex flex-wrap justify-evenly py-16 md:px-32">
+    <Canvas />
+    <div class="space-y-4">
         {#each candidates as { logo, info }}
             <Candidate {logo} {info} />
         {/each}

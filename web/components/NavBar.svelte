@@ -6,9 +6,7 @@
 <Navbar>
     <NavBrand>
         <!-- <img src={logo} class="me-3 h-8" alt="Detexify Logo" /> -->
-        <span class="self-center whitespace-nowrap text-2xl font-semibold dark:text-white">
-            Detypify
-        </span>
+        <span class="self-center whitespace-nowrap text-2xl font-semibold dark:text-white">Detypify</span>
     </NavBrand>
     <div class="ms-auto flex items-center">
         <ToolbarButton
