@@ -33,6 +33,7 @@
         dstCanvas = document.createElement("canvas");
         dstCanvas.width = dstCanvas.height = 32;
         dstCtx = dstCanvas.getContext("2d", { willReadFrequently: true });
+        dstCtx.translate(0.5, 0.5);
     });
 
     function drawStart({ offsetX, offsetY }) {
@@ -51,7 +52,6 @@
         srcCtx.beginPath();
         srcCtx.moveTo(...prevP);
         srcCtx.lineTo(...currP);
-        srcCtx.closePath();
         srcCtx.stroke();
     }
 
@@ -77,16 +77,19 @@
 
         // draw to dstCanvas
         dstCtx.clearRect(0, 0, dstWidth, dstWidth);
-        dstCtx.beginPath();
         for (let stroke of strokes) {
-            let [x, y] = stroke[0];
-            dstCtx.moveTo((x - zeroX) * scale, (y - zeroY) * scale);
-            for (let [x, y] of stroke.slice(1)) {
-                dstCtx.lineTo((x - zeroX) * scale, (y - zeroY) * scale);
+            dstCtx.beginPath();
+            for (let [x, y] of stroke) {
+                dstCtx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
             }
+            dstCtx.stroke();
         }
-        dstCtx.closePath();
-        dstCtx.stroke();
+
+        // // [debug] download dstCanvas image
+        // let img = document.createElement("a");
+        // img.href = dstCanvas.toDataURL();
+        // img.download = "test.png";
+        // img.click();
 
         // to tensor
         let data = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
