@@ -33,7 +33,7 @@
         dstCanvas = document.createElement("canvas");
         dstCanvas.width = dstCanvas.height = 32;
         dstCtx = dstCanvas.getContext("2d", { willReadFrequently: true });
-        dstCtx.translate(0.5, 0.5);
+        dstCtx.fillStyle = "white";
     });
 
     function drawStart({ offsetX, offsetY }) {
@@ -76,7 +76,8 @@
         let scale = dstWidth / width;
 
         // draw to dstCanvas
-        dstCtx.clearRect(0, 0, dstWidth, dstWidth);
+        dstCtx.fillRect(0, 0, dstWidth, dstWidth);
+        dstCtx.translate(0.5, 0.5);
         for (let stroke of strokes) {
             dstCtx.beginPath();
             for (let [x, y] of stroke) {
@@ -84,6 +85,7 @@
             }
             dstCtx.stroke();
         }
+        dstCtx.translate(-0.5, -0.5);
 
         // // [debug] download dstCanvas image
         // let img = document.createElement("a");
@@ -95,7 +97,7 @@
         let data = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
         let tensor = new Float32Array(data.length / 4);
         for (let i = 0; i < tensor.length; ++i) {
-            tensor[i] = data[i * 4 + 3] ? 1 : 0;
+            tensor[i] = data[i * 4] == 255 ? 1 : 0;
         }
         tensor = new Tensor("float32", tensor, [1, 1, 32, 32]);
 
