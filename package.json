@@ -16,6 +16,7 @@
         "flowbite": "^2.3.0",
         "flowbite-svelte": "^0.44.24",
         "flowbite-svelte-icons": "^1.5.0",
+        "onnxruntime-web": "^1.17.1",
         "postcss": "^8.4.32",
         "postcss-load-config": "^5.0.2",
         "prettier": "^3.1.1",

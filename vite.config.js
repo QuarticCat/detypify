@@ -9,4 +9,5 @@ export default {
         emptyOutDir: true,
     },
     plugins: [svelte()],
+    assetsInclude: ["**/*.onnx"],
 };

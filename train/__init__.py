@@ -101,4 +101,6 @@ def main():
         elif sym["math-shorthand"]:
             info.append(("Math Shorthand", sym["math-shorthand"]))
         classes[orig_data.class_to_idx[sym["name"]]] = (logo, info)
-    json.dump(classes, open("train-out/classes.json", "w"))
+    # Somehow vite cannot parse JSON so it's a workaround
+    js = "export default " + json.dumps(classes, ensure_ascii=False)
+    open("train-out/classes.js", "w").write(js)

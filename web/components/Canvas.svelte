@@ -1,7 +1,13 @@
 <script>
     import { onMount } from "svelte";
+    import { Tensor, InferenceSession, env } from "onnxruntime-web";
     import { Button, Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
+    import modelUrl from "../../train-out/model.onnx";
+
+    env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
+
+    export let results;
 
     let srcCanvas; // user painting
     let srcCtx;
@@ -49,7 +55,7 @@
         srcCtx.stroke();
     }
 
-    function drawEnd() {
+    async function drawEnd() {
         if (!isDrawing) return; // normal mouse leave
         isDrawing = false;
 
@@ -88,8 +94,15 @@
         for (let i = 0; i < tensor.length; ++i) {
             tensor[i] = data[i * 4 + 3] ? 1 : 0;
         }
+        tensor = new Tensor("float32", tensor, [1, 1, 32, 32]);
 
         // infer
+        let session = await InferenceSession.create(modelUrl);
+        let output = await session.run({ [session.inputNames[0]]: tensor });
+        output = Array.prototype.slice.call(output[session.outputNames[0]].data);
+        let withIdx = output.map((x, i) => [x, i]);
+        withIdx.sort((a, b) => b[0] - a[0]);
+        results = withIdx.slice(0, 5).map(([_, i]) => i);
     }
 
     function drawClear() {
@@ -97,6 +110,7 @@
         strokes = [];
         minX = minY = Infinity;
         maxX = maxY = 0;
+        results = [];
     }
 </script>
 

@@ -25,7 +25,7 @@
             <P>
                 {key}:
                 <Button color="alternative" class="rounded-sm border-0 p-0 focus:ring-0" on:click={copy(value)}>
-                    <code class="font-medium">
+                    <code class="text-base font-medium">
                         {value}
                     </code>
                 </Button>
