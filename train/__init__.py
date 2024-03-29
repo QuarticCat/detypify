@@ -1,6 +1,9 @@
+import json
+import os
+
 import torch
 import torchinfo
-from torch import nn, optim, Generator
+from torch import Generator, nn, onnx, optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
@@ -56,7 +59,6 @@ def main():
     train_data, test_data = random_split(orig_data, [0.9, 0.1], Generator(device))
     train_loader = DataLoader(train_data, batch_size=64)
     test_loader = DataLoader(test_data, batch_size=64)
-    print(train_data[0][0].size())
 
     model = nn.Sequential(
         nn.Conv2d(1, 16, 5),
@@ -78,3 +80,25 @@ def main():
         train_loop(train_loader, model, loss_fn, optimizer)
         test_loop(test_loader, model, loss_fn)
         print("-------------------------------------")
+
+    os.makedirs("train-out", exist_ok=True)
+    onnx.export(model, torch.randn(1, 1, 32, 32), "train-out/model.onnx")
+
+    classes = [None] * len(orig_data.classes)
+    symbols = json.load(open("migrate-out/symbols.json"))
+    for sym in symbols:
+        if sym["name"] not in orig_data.class_to_idx:
+            continue
+        logo = chr(sym["codepoint"])
+        info = [
+            ("Name", sym["name"]),
+            ("Escape", "\\u" + f'{{{sym['codepoint']:0>4X}}}'),
+        ]
+        if sym["markup-shorthand"] and sym["math-shorthand"]:
+            info.append(("Shorthand", sym["markup-shorthand"]))
+        elif sym["markup-shorthand"]:
+            info.append(("Markup Shorthand", sym["markup-shorthand"]))
+        elif sym["math-shorthand"]:
+            info.append(("Math Shorthand", sym["math-shorthand"]))
+        classes[orig_data.class_to_idx[sym["name"]]] = (logo, info)
+    json.dump(classes, open("train-out/classes.json", "w"))
