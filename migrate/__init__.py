@@ -1,25 +1,57 @@
 import json
 import os
-from typing import Iterable, Optional
+import re
+from typing import Any, Iterable, Optional
 
 import psycopg
+from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
-
-IMAGE_DIR = "migrate-out"
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
 
 
-def map_sym() -> dict[str, str]:
+def parse_typ_sym() -> list[dict[str, Any]]:
+    soup = BeautifulSoup(open("data/typ_sym.html").read(), "html.parser")
+    return [
+        {
+            "name": li["id"][len("symbol-") :],
+            "codepoint": int(li["data-codepoint"]),
+            "markup-shorthand": li.get("data-markup-shorthand"),
+            "math-shorthand": li.get("data-math-shorthand"),
+            "accent": li.get("data-accent") == "true",
+            "alternates": li.get_attribute_list("data-alternates", []),
+        }
+        for li in soup.find_all("li", id=re.compile("^symbol-"))
+    ]
+
+
+def map_sym(sym_list) -> dict[str, str]:
     key_to_tex = json.load(open("data/symbols.json"))
     key_to_tex = {x["id"]: x["command"][1:] for x in key_to_tex}
 
     tex_to_typ = json.load(open("data/default.json"))["commands"]
-    tex_to_typ = {k: v["alias"] for k, v in tex_to_typ.items() if v.get("alias")}
+    for k, v in tex_to_typ.items():
+        if v["kind"] == "sym":
+            tex_to_typ[k] = k
+        elif v["kind"] == "alias-sym":
+            tex_to_typ[k] = v["alias"]
+        else:
+            tex_to_typ[k] = None
 
-    return {k: tex_to_typ[v] for k, v in key_to_tex.items() if v in tex_to_typ}
+    to_name = {x["name"]: x["name"] for x in sym_list}
+    to_name |= {chr(x["codepoint"]): x["name"] for x in sym_list}
+    to_name |= {x["markup-shorthand"]: x["name"] for x in sym_list}
+    to_name |= {x["math-shorthand"]: x["name"] for x in sym_list}
+    del to_name[None]
+
+    key_to_typ = {}
+    for k, v in key_to_tex.items():
+        v = to_name.get(tex_to_typ.get(v))
+        if v is not None:
+            key_to_typ[k] = v
+    return key_to_typ
 
 
 def get_data(key_to_typ: dict[str, str]) -> Iterable[tuple[int, str, Strokes]]:
@@ -69,14 +101,15 @@ def draw(strokes: Strokes, size: int) -> Image.Image:
 
 
 def main():
-    os.makedirs(IMAGE_DIR, exist_ok=True)
+    sym_list = parse_typ_sym()
+    os.makedirs("migrate-out", exist_ok=True)
+    json.dump(sym_list, open("migrate-out/symbols.json", "w"))
 
-    for id, typ, strokes in get_data(map_sym()):
+    for id, typ, strokes in get_data(map_sym(sym_list)):
         strokes = [[(x, y) for x, y, _ in s] for s in strokes]  # strip timestamps
         strokes = normalize(strokes, 32)
         if strokes is None:
             continue
         image = draw(strokes, 32)
-        # Prepend '-' to avoid names like '.'
-        os.makedirs(os.path.join(IMAGE_DIR, f"-{typ}"), exist_ok=True)
-        image.save(os.path.join(IMAGE_DIR, f"-{typ}", f"{id}.png"))
+        os.makedirs(f"migrate-out/data/{typ}", exist_ok=True)
+        image.save(f"migrate-out/data/{typ}/{id}.png")

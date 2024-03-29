@@ -52,7 +52,7 @@ def main():
             v2.ToDtype(torch.float32, scale=True),
         ]
     )
-    orig_data = ImageFolder("migrate-out", transform)
+    orig_data = ImageFolder("migrate-out/data", transform)
     train_data, test_data = random_split(orig_data, [0.9, 0.1], Generator(device))
     train_loader = DataLoader(train_data, batch_size=64)
     test_loader = DataLoader(test_data, batch_size=64)

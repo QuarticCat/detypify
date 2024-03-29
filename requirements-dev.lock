@@ -8,6 +8,8 @@
 #   with-sources: false
 
 -e file:.
+beautifulsoup4==4.12.3
+    # via detypify
 filelock==3.13.1
     # via torch
 fsspec==2024.3.1
@@ -55,6 +57,8 @@ pillow==10.2.0
     # via torchvision
 psycopg==3.1.18
     # via detypify
+soupsieve==2.5
+    # via beautifulsoup4
 sympy==1.12
     # via torch
 torch==2.2.1

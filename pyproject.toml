@@ -3,6 +3,7 @@ name = "detypify"
 version = "0.1.0"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
+    "beautifulsoup4>=4.12.3",
     "psycopg>=3.1.18",
     "pillow>=10.2.0",
     "torch>=2.2.1",
