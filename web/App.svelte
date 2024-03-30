@@ -3,7 +3,7 @@
     import NavBar from "./components/NavBar.svelte";
     import Canvas from "./components/Canvas.svelte";
     import Candidate from "./components/Candidate.svelte";
-    import classes from "../train-out/classes.js";
+    import classes from "../train-out/classes.json";
 
     let results = [];
     $: candidates = results.map((i) => classes[i]);
