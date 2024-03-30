@@ -16,13 +16,15 @@
 
 <NavBar />
 
-<div class="flex flex-wrap justify-evenly py-16 md:px-32">
+<div class="flex flex-wrap justify-evenly space-y-8 md:py-8">
+    <div class="hidden md:block"></div>
     <Canvas bind:greyscale />
-    <div class="w-[400px] text-center">
+    <div class="w-[360px] space-y-4 text-center">
         {#await sessionPromise}
             <Spinner size="12" />
         {:then session}
             <Infer {session} {greyscale} />
         {/await}
     </div>
+    <div class="hidden md:block"></div>
 </div>

@@ -10,6 +10,9 @@
     let dstCanvas; // normalized image
     let dstCtx;
 
+    let touchL;
+    let touchT;
+
     let isDrawing;
     let currP;
     let stroke;
@@ -30,7 +33,16 @@
         dstCanvas.width = dstCanvas.height = 32;
         dstCtx = dstCanvas.getContext("2d", { willReadFrequently: true });
         dstCtx.fillStyle = "white";
+
+        ({ left: touchL, top: touchT } = srcCanvas.getBoundingClientRect());
     });
+
+    const touchCall = (fn) => (e) => {
+        fn({
+            offsetX: e.touches[0].clientX - touchL,
+            offsetY: e.touches[0].clientY - touchT,
+        });
+    };
 
     function drawStart({ offsetX, offsetY }) {
         isDrawing = true;
@@ -117,6 +129,10 @@
         on:mousemove={drawMove}
         on:mouseup={drawEnd}
         on:mouseleave={drawEnd}
+        on:touchstart={touchCall(drawStart)}
+        on:touchmove={touchCall(drawMove)}
+        on:touchend={drawEnd}
+        on:touchcancel={drawEnd}
     />
     <button
         type="button"

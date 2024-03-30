@@ -24,8 +24,6 @@
     $: infer(greyscale);
 </script>
 
-<div class="space-y-4">
-    {#each candidates as [logo, info]}
-        <Candidate {logo} {info} />
-    {/each}
-</div>
+{#each candidates as [logo, info]}
+    <Candidate {logo} {info} />
+{/each}
