@@ -27,17 +27,19 @@ Typst symbol classifier.
         $ cargo build --package=mitex-spec-gen
         ```
 
-    1. Copy `default.json` to `data` folder
-
-        ```console
-        $ cp target/mitex-artifacts/spec/default.json <project-root>/data
-        ```
+    1. Move `target/mitex-artifacts/spec/default.json` to `data` folder
 
 1. Prepare Typst symbol page
 
     1. Access https://typst.app/docs/reference/symbols/sym/ in your browser
 
-    1. Right click -> Save as -> `<project-root>/data/typ_sym.html`
+    1. Right click -> Save as -> `data/typ_sym.html`
+
+1. Prepare symbol font
+
+    1. Download *NewComputerModern* from [CTAN](https://ctan.org/pkg/newcomputermodern?lang=en)
+
+    1. Extract and move `otf/NewCMMath-Regular.otf` to `data` folder
 
 1. Run code in project root
 

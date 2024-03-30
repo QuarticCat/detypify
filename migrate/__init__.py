@@ -6,6 +6,7 @@ from typing import Any, Iterable, Optional
 import psycopg
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
+from fontTools import subset
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -28,7 +29,7 @@ def parse_typ_sym() -> list[dict[str, Any]]:
     ]
 
 
-def map_sym(sym_list) -> dict[str, str]:
+def map_sym(sym_list) -> tuple[dict[str, str], set[str]]:
     key_to_tex = json.load(open("data/symbols.json"))
     key_to_tex = {x["id"]: x["command"][1:] for x in key_to_tex}
 
@@ -41,18 +42,20 @@ def map_sym(sym_list) -> dict[str, str]:
         else:
             tex_to_typ[k] = None
 
-    to_name = {x["name"]: x["name"] for x in sym_list}
-    to_name |= {chr(x["codepoint"]): x["name"] for x in sym_list}
-    to_name |= {x["markup-shorthand"]: x["name"] for x in sym_list}
-    to_name |= {x["math-shorthand"]: x["name"] for x in sym_list}
-    del to_name[None]
+    norm = {x["name"]: x for x in sym_list}
+    norm |= {chr(x["codepoint"]): x for x in sym_list}
+    norm |= {x["markup-shorthand"]: x for x in sym_list}
+    norm |= {x["math-shorthand"]: x for x in sym_list}
+    del norm[None]
 
     key_to_typ = {}
+    charset = set()
     for k, v in key_to_tex.items():
-        v = to_name.get(tex_to_typ.get(v))
-        if v is not None:
-            key_to_typ[k] = v
-    return key_to_typ
+        x = norm.get(tex_to_typ.get(v))
+        if x is not None:
+            key_to_typ[k] = x["name"]
+            charset.add(chr(x["codepoint"]))
+    return key_to_typ, charset
 
 
 def get_data(key_to_typ: dict[str, str]) -> Iterable[tuple[int, str, Strokes]]:
@@ -106,7 +109,17 @@ def main():
     os.makedirs("migrate-out", exist_ok=True)
     json.dump(sym_list, open("migrate-out/symbols.json", "w"))
 
-    for id, typ, strokes in get_data(map_sym(sym_list)):
+    key_to_typ, charset = map_sym(sym_list)
+    subset.main(
+        [
+            "data/NewCMMath-Regular.otf",
+            "--text=" + "".join(charset),
+            "--flavor=woff2",
+            "--output-file=migrate-out/NewCMMath-Detypify.woff2",
+        ]
+    )
+
+    for id, typ, strokes in get_data(key_to_typ):
         strokes = [[(x, y) for x, y, _ in s] for s in strokes]  # strip timestamps
         strokes = normalize(strokes, 32)
         if strokes is None:

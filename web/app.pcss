@@ -4,9 +4,12 @@
 
 @layer base {
     @font-face {
-        font-family: NewComputerModernMath;
+        font-family: NewCMMath-Detypify;
         font-weight: 400;
         font-display: swap;
-        src: url(/assets/NewCMMath-Regular.woff2) format("woff2");
+        src:
+            local(NewComputerModernMath-Regular),
+            local(NewComputerModernMath),
+            url(../migrate-out/NewCMMath-Detypify.woff2) format("woff2");
     }
 }

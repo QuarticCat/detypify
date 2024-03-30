@@ -15,7 +15,7 @@
 <div in:fly={{ x: -20, duration: 200 }} out:fly={{ x: 20, duration: 200 }}>
     <Card horizontal padding="sm" class="flex items-center space-x-4">
         <Button color="alternative" class="p-0 focus:ring-0" on:click={copy(logo)}>
-            <Avatar rounded size="lg" class="text-5xl" style="font-family: NewComputerModernMath;">
+            <Avatar rounded size="lg" class="text-5xl" style="font-family: NewCMMath-Detypify;">
                 {logo}
             </Avatar>
         </Button>
