@@ -24,6 +24,7 @@ def parse_typ_sym() -> list[dict[str, Any]]:
             "alternates": li.get_attribute_list("data-alternates", []),
         }
         for li in soup.find_all("li", id=re.compile("^symbol-"))
+        if not chr(int(li["data-codepoint"])).isspace()
     ]
 
 
