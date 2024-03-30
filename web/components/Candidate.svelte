@@ -13,7 +13,7 @@
 
 <Card horizontal padding="sm" class="flex items-center space-x-4">
     <Button color="alternative" class="p-0 focus:ring-0" on:click={copy(logo)}>
-        <Avatar rounded size="lg" class="text-5xl">
+        <Avatar rounded size="lg" class="text-5xl" style="font-family: NewComputerModernMath;">
             {logo}
         </Avatar>
     </Button>
