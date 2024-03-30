@@ -1,13 +1,9 @@
 <script>
     import { onMount } from "svelte";
-    import { Tensor, InferenceSession, env } from "onnxruntime-web";
     import { Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
-    import modelUrl from "../../train-out/model.onnx";
 
-    env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/";
-
-    export let results;
+    export let greyscale;
 
     let srcCanvas; // user painting
     let srcCtx;
@@ -55,7 +51,7 @@
         srcCtx.stroke();
     }
 
-    async function drawEnd() {
+    function drawEnd() {
         if (!isDrawing) return; // normal mouse leave
         isDrawing = false;
 
@@ -93,21 +89,13 @@
         // img.download = "test.png";
         // img.click();
 
-        // to tensor
-        let data = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
-        let tensor = new Float32Array(data.length / 4);
-        for (let i = 0; i < tensor.length; ++i) {
-            tensor[i] = data[i * 4] == 255 ? 1 : 0;
+        // to greyscale
+        let rgba = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
+        let grey = new Float32Array(rgba.length / 4);
+        for (let i = 0; i < grey.length; ++i) {
+            grey[i] = rgba[i * 4] == 255 ? 1 : 0;
         }
-        tensor = new Tensor("float32", tensor, [1, 1, 32, 32]);
-
-        // infer
-        let session = await InferenceSession.create(modelUrl);
-        let output = await session.run({ [session.inputNames[0]]: tensor });
-        output = Array.prototype.slice.call(output[session.outputNames[0]].data);
-        let withIdx = output.map((x, i) => [x, i]);
-        withIdx.sort((a, b) => b[0] - a[0]);
-        results = withIdx.slice(0, 5).map(([_, i]) => i);
+        greyscale = grey;
     }
 
     function drawClear() {
@@ -115,11 +103,11 @@
         strokes = [];
         minX = minY = Infinity;
         maxX = maxY = 0;
-        results = [];
+        greyscale = null;
     }
 </script>
 
-<div class="relative size-[320px]">
+<div class="relative w-[320px]">
     <canvas
         width="320"
         height="320"
