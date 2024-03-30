@@ -2,6 +2,12 @@
 
 Typst symbol classifier.
 
+## Features
+
+1. **Static website**: works offline.
+1. **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
+1. **Decent symbol set**: recognizes 300+ symbols.
+
 ## Development
 
 ### Migration
