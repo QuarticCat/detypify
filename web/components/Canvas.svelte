@@ -129,10 +129,10 @@
         on:mousemove={drawMove}
         on:mouseup={drawEnd}
         on:mouseleave={drawEnd}
-        on:touchstart={touchCall(drawStart)}
-        on:touchmove={touchCall(drawMove)}
-        on:touchend={drawEnd}
-        on:touchcancel={drawEnd}
+        on:touchstart|preventDefault={touchCall(drawStart)}
+        on:touchmove|preventDefault={touchCall(drawMove)}
+        on:touchend|preventDefault={drawEnd}
+        on:touchcancel|preventDefault={drawEnd}
     />
     <button
         type="button"
