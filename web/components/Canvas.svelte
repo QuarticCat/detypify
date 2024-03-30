@@ -1,7 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { Tensor, InferenceSession, env } from "onnxruntime-web";
-    import { Button, Tooltip } from "flowbite-svelte";
+    import { Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
     import modelUrl from "../../train-out/model.onnx";
 
@@ -130,15 +130,12 @@
         on:mouseup={drawEnd}
         on:mouseleave={drawEnd}
     />
-    <!-- TODO: adjust hover & focus colors of the button under light theme -->
-    <Button
-        pill
-        outline
-        color="alternative"
-        class="absolute right-1 top-1 border-0 p-2 focus:ring-0"
+    <button
+        type="button"
+        class="absolute right-1 top-1 p-2 text-black hover:text-primary-700 dark:text-gray-400 dark:hover:text-white"
         on:click={drawClear}
     >
         <CloseOutline class="size-6" />
-    </Button>
+    </button>
     <Tooltip class="dark:bg-gray-900">Clear</Tooltip>
 </div>
