@@ -2,8 +2,8 @@
     <img src="./assets/logo.svg" alt="logo" width="150"/>
     <h1>Detypify (WIP)</h1>
     <p>
-        Typst symbol classifier
-        <a href="https://detypify.quarticcat.com/">🔗</a>
+        Can't remember Typst symbols?
+        <a href="https://detypify.quarticcat.com/">Draw it!</a>
     </p>
 </div>
 
@@ -11,78 +11,68 @@
 
 - **Static website**: works offline.
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
-- **Decent symbol set**: support 350+ common symbols.
+- **Decent symbol set**: support 350+ common symbols. ([list](./supported-symbols.txt))
 
 ## Development
 
-### Migration
+### Preparation
 
-1. Prepare training data
+#### Training Data
 
-    1. Download `detexify.sql.gz` and `symbols.json` from [detexify-data](https://github.com/kirel/detexify-data) to `data` folder
+1. Download `detexify.sql.gz` and `symbols.json` from [detexify-data](https://github.com/kirel/detexify-data) to `data` folder
 
-    1. Import training data to a PostgreSQL database named `detypify`
-
-        ```console
-        $ createdb detypify
-        $ gunzip -c data/detexify.sql.gz | psql detypify
-        ```
-
-1. Prepare symbol mapping
-
-    1. Clone [mitex](https://github.com/mitex-rs/mitex) and build `mitex-spec-gen`
-
-        ```console
-        $ git clone https://github.com/mitex-rs/mitex
-        $ cd mitex
-        $ cargo build --package=mitex-spec-gen
-        ```
-
-    1. Move `target/mitex-artifacts/spec/default.json` to `data` folder
-
-1. Prepare Typst symbol page
-
-    1. Access https://typst.app/docs/reference/symbols/sym/ in your browser
-
-    1. Right click -> Save as -> `data/typ_sym.html`
-
-1. Prepare symbol font
-
-    1. Download *NewComputerModern* from [CTAN](https://ctan.org/pkg/newcomputermodern?lang=en)
-
-    1. Extract and move `otf/NewCMMath-Regular.otf` to `data` folder
-
-1. Run code in project root
+1. Import training data to a PostgreSQL database named `detypify`
 
     ```console
-    $ rye sync         # prepare venv and denpendencies
-    $ rye run migrate  # migrate
+    $ createdb detypify
+    $ gunzip -c data/detexify.sql.gz | psql detypify
     ```
 
-    Outputs will be in `migrate-out` folder.
+#### Symbol Mapping
+
+1. Clone [mitex](https://github.com/mitex-rs/mitex) and build `mitex-spec-gen`
+
+    ```console
+    $ git clone https://github.com/mitex-rs/mitex
+    $ cd mitex
+    $ cargo build --package=mitex-spec-gen
+    ```
+
+1. Move `target/mitex-artifacts/spec/default.json` to `data` folder
+
+#### Typst Symbol Page
+
+1. Access https://typst.app/docs/reference/symbols/sym/ in your browser
+
+1. Right click -> Save as -> `data/typ_sym.html`
+
+#### Symbol Font
+
+1. Download *NewComputerModern* from [CTAN](https://ctan.org/pkg/newcomputermodern?lang=en)
+
+1. Extract and move `otf/NewCMMath-Regular.otf` to `data` folder
+
+### Migration
+
+```console
+$ rye sync         # prepare venv and denpendencies
+$ rye run migrate  # migrate
+```
 
 ### Training
-
-In project root:
 
 ```console
 $ rye sync       # prepare venv and denpendencies
 $ rye run train  # train
 ```
 
-Outputs will be in `train-out` folder.
-
 ### Web Page
-
-In project root:
 
 ```console
 $ bun install    # install dependencies
 $ bun run dev    # start dev server
 $ bun run build  # build for production
 ```
-
-Outputs will be in `web-out` folder.
 
 ### Logo & Favicons (Optional)
 

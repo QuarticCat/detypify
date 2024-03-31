@@ -121,6 +121,9 @@ def main():
         ]
     )
 
+    sym_list = sorted(set(key_to_typ.values()))
+    open("supported-symbols.txt", "w").write("\n".join(sym_list) + "\n")
+
     for id, typ, strokes in get_data(key_to_typ):
         strokes = [[(x, y) for x, y, _ in s] for s in strokes]  # strip timestamps
         strokes = normalize(strokes, 32)
