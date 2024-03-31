@@ -1,12 +1,17 @@
-# Detypify (WIP)
-
-Typst symbol classifier.
+<div align="center">
+    <img src="./assets/logo.svg" alt="logo" width="150"/>
+    <h1>Detypify (WIP)</h1>
+    <p>
+        Typst symbol classifier
+        <a href="https://detypify.quarticcat.com/">🔗</a>
+    </p>
+</div>
 
 ## Features
 
-1. **Static website**: works offline.
-1. **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
-1. **Decent symbol set**: recognizes 300+ symbols.
+- **Static website**: works offline.
+- **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
+- **Decent symbol set**: recognizes 300+ symbols.
 
 ## Development
 
@@ -78,6 +83,20 @@ $ bun run build  # build for production
 ```
 
 Outputs will be in `web-out` folder.
+
+### Logo & Favicons (Optional)
+
+1. Install *NewComputerModernMath* font ([guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig))
+
+1. Convert `detypify.svg`
+
+    ```console
+    $ cd assets
+    $ inkscape detypify.svg --export-text-to-path --export-filename=logo.svg
+    $ bunx svgo --multipass logo.svg
+    ```
+
+1. Generate favicons by https://favicon-generator.s2n.tech/ using `logo.svg`
 
 ## License
 
