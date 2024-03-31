@@ -2,16 +2,40 @@
     import "./app.pcss";
     import NavBar from "./components/NavBar.svelte";
     import Canvas from "./components/Canvas.svelte";
-    import Infer from "./components/Infer.svelte";
+    import Candidate from "./components/Candidate.svelte";
     import { Spinner } from "flowbite-svelte";
-    import { env, InferenceSession } from "onnxruntime-web";
+    import { env as ortConfig, InferenceSession, Tensor } from "onnxruntime-web";
     import modelUrl from "../train-out/model.onnx";
+    import classes from "../train-out/classes.json";
 
-    env.wasm.numThreads = 1;
-    env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/"; // match the version in package.json
+    ortConfig.wasm.numThreads = 1;
+    ortConfig.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
 
-    let sessionPromise = InferenceSession.create(modelUrl);
-    let greyscale;
+    let session, greyscale;
+    let isLoading = true;
+    let candidates = [];
+
+    function infer(grey) {
+        if (!session || !grey) {
+            candidates = [];
+            return;
+        }
+        let tensor = new Tensor("float32", grey, [1, 1, 32, 32]);
+        session.run({ [session.inputNames[0]]: tensor }).then((output) => {
+            output = Array.prototype.slice.call(output[session.outputNames[0]].data);
+            let withIdx = output.map((x, i) => [x, i]);
+            withIdx.sort((a, b) => b[0] - a[0]);
+            candidates = withIdx.slice(0, 5).map(([_, i]) => classes[i]);
+        });
+    }
+
+    InferenceSession.create(modelUrl).then((s) => {
+        session = s;
+        isLoading = false;
+        infer(greyscale);
+    });
+
+    $: infer(greyscale);
 </script>
 
 <NavBar />
@@ -20,11 +44,13 @@
     <div class="hidden md:block"></div>
     <Canvas bind:greyscale />
     <div class="w-[360px] space-y-4 text-center">
-        {#await sessionPromise}
+        {#if isLoading}
             <Spinner size="12" />
-        {:then session}
-            <Infer {session} {greyscale} />
-        {/await}
+        {:else}
+            {#each candidates as [logo, info]}
+                <Candidate {logo} {info} />
+            {/each}
+        {/if}
     </div>
     <div class="hidden md:block"></div>
 </div>
