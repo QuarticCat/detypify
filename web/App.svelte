@@ -40,7 +40,7 @@
 
 <NavBar />
 
-<div class="flex flex-wrap justify-evenly space-y-8 md:py-8">
+<div class="flex flex-wrap justify-evenly space-y-4 md:py-4">
     <div class="hidden md:block"></div>
     <Canvas bind:greyscale />
     <div class="w-[360px] space-y-4 text-center">
