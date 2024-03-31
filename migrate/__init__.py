@@ -5,8 +5,8 @@ from typing import Any, Iterable, Optional
 
 import psycopg
 from bs4 import BeautifulSoup
-from PIL import Image, ImageDraw
 from fontTools import subset
+from PIL import Image, ImageDraw
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -41,6 +41,8 @@ def map_sym(sym_list) -> tuple[dict[str, str], set[str]]:
             tex_to_typ[k] = v["alias"]
         else:
             tex_to_typ[k] = None
+    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        tex_to_typ[f"mathds{{{c}}}"] = c + c
 
     norm = {x["name"]: x for x in sym_list}
     norm |= {chr(x["codepoint"]): x for x in sym_list}

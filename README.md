@@ -11,7 +11,7 @@
 
 - **Static website**: works offline.
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
-- **Decent symbol set**: recognizes 300+ symbols.
+- **Decent symbol set**: support 350+ common symbols.
 
 ## Development
 
