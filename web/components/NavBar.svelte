@@ -37,8 +37,14 @@
 <Modal bind:open={openHelpModal} outsideclose>
     <Heading tag="h4">What symbols does it support?</Heading>
     <P>
-        Check
+        Listed in
         <A href="https://github.com/QuarticCat/detypify/blob/main/supported-symbols.txt">supported-symbols.txt</A>.
+    </P>
+
+    <Heading tag="h4">Can I use it offline?</Heading>
+    <P>
+        Yes. Check the
+        <A href="https://support.google.com/chrome/answer/9658361">guide</A>.
     </P>
 
     <Heading tag="h4">Like it?</Heading>

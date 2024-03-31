@@ -9,9 +9,9 @@
 
 ## Features
 
-- **Static website**: works offline.
-- **Tiny model**: 1.1 MiB (ONNX), fast to load and run.
-- **Decent symbol set**: support 350+ common symbols. ([list](./supported-symbols.txt))
+- **PWA**: installable and works offline
+- **Tiny model**: 1.1 MiB (ONNX), fast to load and run
+- **Decent symbol set**: support 350+ common symbols
 
 ## Development
 
@@ -86,7 +86,7 @@ $ bun run build  # build for production
     $ bunx svgo --multipass logo.svg
     ```
 
-1. Generate favicons by https://favicon-generator.s2n.tech/ using `logo.svg`
+1. Generate favicons by [Favicon InBrowser.App](https://favicon.inbrowser.app/tools/favicon-generator) using `logo.svg`
 
 ## License
 

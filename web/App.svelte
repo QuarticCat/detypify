@@ -16,7 +16,7 @@
     let candidates = [];
 
     function infer(grey) {
-        if (!session || !grey) {
+        if (isLoading || !grey) {
             candidates = [];
             return;
         }
