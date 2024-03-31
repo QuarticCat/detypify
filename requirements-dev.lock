@@ -60,13 +60,13 @@ nvidia-nvtx-cu12==12.1.105
     # via torch
 onnx==1.16.0
     # via detypify
+orjson==3.10.0
+    # via detypify
 pillow==10.2.0
     # via detypify
     # via torchvision
 protobuf==5.26.1
     # via onnx
-psycopg==3.1.18
-    # via detypify
 soupsieve==2.5
     # via beautifulsoup4
 sympy==1.12
@@ -79,7 +79,6 @@ torchinfo==1.8.0
 torchvision==0.17.1
     # via detypify
 typing-extensions==4.10.0
-    # via psycopg
     # via torch
 zopfli==0.2.3
     # via fonttools

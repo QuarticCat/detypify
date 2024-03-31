@@ -1,19 +1,18 @@
-import json
 import os
 import re
-from typing import Any, Iterable, Optional
+from typing import Any, Optional, Iterable
+from concurrent.futures import ProcessPoolExecutor
 
-import psycopg
+import orjson
 from bs4 import BeautifulSoup
 from fontTools import subset
 from PIL import Image, ImageDraw
 
-type Point = tuple[float, float]
-type Stroke = list[Point]
-type Strokes = list[Stroke]
+type Strokes = list[list[tuple[float, float]]]
+type StrokesT = list[list[tuple[float, float, int]]]
 
 
-def parse_typ_sym() -> list[dict[str, Any]]:
+def parse_typ_sym_page() -> list[dict[str, Any]]:
     soup = BeautifulSoup(open("data/typ_sym.html").read(), "html.parser")
     return [
         {
@@ -29,11 +28,11 @@ def parse_typ_sym() -> list[dict[str, Any]]:
     ]
 
 
-def map_sym(sym_list) -> tuple[dict[str, str], set[str]]:
-    key_to_tex = json.load(open("data/symbols.json"))
+def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
+    key_to_tex = orjson.loads(open("data/symbols.json").read())
     key_to_tex = {x["id"]: x["command"][1:] for x in key_to_tex}
 
-    tex_to_typ = json.load(open("data/default.json"))["commands"]
+    tex_to_typ = orjson.loads(open("data/default.json").read())["commands"]
     for k, v in tex_to_typ.items():
         if v["kind"] == "sym":
             tex_to_typ[k] = k
@@ -44,10 +43,10 @@ def map_sym(sym_list) -> tuple[dict[str, str], set[str]]:
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         tex_to_typ[f"mathds{{{c}}}"] = c + c
 
-    norm = {x["name"]: x for x in sym_list}
-    norm |= {chr(x["codepoint"]): x for x in sym_list}
-    norm |= {x["markup-shorthand"]: x for x in sym_list}
-    norm |= {x["math-shorthand"]: x for x in sym_list}
+    norm = {x["name"]: x for x in typ_sym_info}
+    norm |= {chr(x["codepoint"]): x for x in typ_sym_info}
+    norm |= {x["markup-shorthand"]: x for x in typ_sym_info}
+    norm |= {x["math-shorthand"]: x for x in typ_sym_info}
     del norm[None]
 
     key_to_typ = {}
@@ -60,30 +59,11 @@ def map_sym(sym_list) -> tuple[dict[str, str], set[str]]:
     return key_to_typ, charset
 
 
-def get_data(key_to_typ: dict[str, str]) -> Iterable[tuple[int, str, Strokes]]:
-    conn = psycopg.connect("dbname=detypify")
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TEMPORARY TABLE key_to_typ (
-            key text,
-            typ text)
-    """)
-    with cur.copy("COPY key_to_typ (key, typ) FROM STDIN") as copy:
-        for item in key_to_typ.items():
-            copy.write_row(item)
-    return cur.execute("""
-        SELECT id, typ, strokes
-        FROM samples
-        JOIN key_to_typ
-        ON samples.key = key_to_typ.key
-    """)
-
-
-def normalize(strokes: Strokes, size: int) -> Optional[Strokes]:
-    min_x = min(x for s in strokes for x, _ in s)
-    max_x = max(x for s in strokes for x, _ in s)
-    min_y = min(y for s in strokes for _, y in s)
-    max_y = max(y for s in strokes for _, y in s)
+def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
+    min_x = min([x for s in strokes for x, _, _ in s])
+    max_x = max([x for s in strokes for x, _, _ in s])
+    min_y = min([y for s in strokes for _, y, _ in s])
+    max_y = max([y for s in strokes for _, y, _ in s])
 
     width = max(max_x - min_x, max_y - min_y)
     if width == 0:
@@ -94,7 +74,7 @@ def normalize(strokes: Strokes, size: int) -> Optional[Strokes]:
     scale = size / width
 
     return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
+        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y, _ in s] for s in strokes
     ]
 
 
@@ -106,12 +86,7 @@ def draw(strokes: Strokes, size: int) -> Image.Image:
     return image
 
 
-def main():
-    sym_list = parse_typ_sym()
-    os.makedirs("migrate-out", exist_ok=True)
-    json.dump(sym_list, open("migrate-out/symbols.json", "w"))
-
-    key_to_typ, charset = map_sym(sym_list)
+def strip_font(charset: Iterable[str]):
     subset.main(
         [
             "data/NewCMMath-Regular.otf",
@@ -121,14 +96,29 @@ def main():
         ]
     )
 
-    sym_list = sorted(set(key_to_typ.values()))
-    open("supported-symbols.txt", "w").write("\n".join(sym_list) + "\n")
 
-    for id, typ, strokes in get_data(key_to_typ):
-        strokes = [[(x, y) for x, y, _ in s] for s in strokes]  # strip timestamps
-        strokes = normalize(strokes, 32)
+def main():
+    executor = ProcessPoolExecutor()
+
+    typ_sym_info = parse_typ_sym_page()
+    key_to_typ, charset = map_sym(typ_sym_info)
+    typ_sym_names = sorted(set(key_to_typ.values()))
+
+    executor.submit(strip_font, charset)
+
+    os.makedirs("migrate-out", exist_ok=True)
+    open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
+    open("supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
+
+    def handle(i, row):
+        typ = key_to_typ.get(row[0])
+        if typ is None:
+            return
+        strokes = normalize(row[1], 32)
         if strokes is None:
-            continue
-        image = draw(strokes, 32)
+            return
         os.makedirs(f"migrate-out/data/{typ}", exist_ok=True)
-        image.save(f"migrate-out/data/{typ}/{id}.png")
+        draw(strokes, 32).save(f"migrate-out/data/{typ}/{i}.png")
+
+    detexify_data = orjson.loads(open("data/detexify.json").read())
+    executor.map(handle, enumerate(detexify_data), chunksize=1000)

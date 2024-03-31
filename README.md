@@ -21,11 +21,11 @@
 
 1. Download `detexify.sql.gz` and `symbols.json` from [detexify-data](https://github.com/kirel/detexify-data) to `data` folder
 
-1. Import training data to a PostgreSQL database named `detypify`
+1. Convert training data to json
 
     ```console
-    $ createdb detypify
     $ gunzip -c data/detexify.sql.gz | psql detypify
+    $ psql detypify -qAtXc 'SELECT json_agg(json_build_array(key, strokes)) FROM samples' -o data/detexify.json
     ```
 
 #### Symbol Mapping
