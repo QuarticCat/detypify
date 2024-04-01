@@ -59,11 +59,15 @@ arrow.ccw.half
 arrow.cw
 arrow.cw.half
 arrow.l
+arrow.l.bar
 arrow.l.double
+arrow.l.double.bar
 arrow.l.double.long
+arrow.l.double.long.bar
 arrow.l.double.not
 arrow.l.hook
 arrow.l.long
+arrow.l.long.bar
 arrow.l.loop
 arrow.l.not
 arrow.l.r
@@ -79,7 +83,9 @@ arrow.l.twohead
 arrow.r
 arrow.r.bar
 arrow.r.double
+arrow.r.double.bar
 arrow.r.double.long
+arrow.r.double.long.bar
 arrow.r.double.not
 arrow.r.hook
 arrow.r.long
@@ -128,6 +134,7 @@ dash.em
 dash.en
 degree
 delta
+diameter
 diamond.stroked
 diamond.stroked.small
 diff
@@ -162,6 +169,7 @@ forall
 forces
 gamma
 gt
+gt.approx
 gt.dot
 gt.double
 gt.eq
@@ -197,7 +205,12 @@ in.rev
 in.rev.small
 integral
 integral.cont
+integral.cont.ccw
+integral.cont.cw
 integral.double
+integral.quad
+integral.slash
+integral.square
 integral.surf
 integral.triple
 iota

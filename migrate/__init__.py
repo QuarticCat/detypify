@@ -1,7 +1,6 @@
 import os
 import re
-from typing import Any, Optional, Iterable
-from concurrent.futures import ProcessPoolExecutor
+from typing import Any, Iterable, Optional
 
 import orjson
 from bs4 import BeautifulSoup
@@ -29,17 +28,19 @@ def parse_typ_sym_page() -> list[dict[str, Any]]:
 
 
 def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
-    key_to_tex = orjson.loads(open("data/symbols.json").read())
-    key_to_tex = {x["id"]: x["command"][1:] for x in key_to_tex}
+    json = orjson.loads(open("data/symbols.json").read())
+    key_to_tex = {x["id"]: x["command"][1:] for x in json}
 
-    tex_to_typ = orjson.loads(open("data/default.json").read())["commands"]
-    for k, v in tex_to_typ.items():
+    table = open("data/unicode-math-table.tex").read()
+    tex_to_typ = {t: chr(int(u, 16)) for u, t in re.findall(r'"(.*?)}{\\(.*?) ', table)}
+
+    json = orjson.loads(open("data/default.json").read())
+    for k, v in json["commands"].items():
         if v["kind"] == "sym":
             tex_to_typ[k] = k
         elif v["kind"] == "alias-sym":
             tex_to_typ[k] = v["alias"]
-        else:
-            tex_to_typ[k] = None
+
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         tex_to_typ[f"mathds{{{c}}}"] = c + c
 
@@ -98,27 +99,23 @@ def strip_font(charset: Iterable[str]):
 
 
 def main():
-    executor = ProcessPoolExecutor()
-
     typ_sym_info = parse_typ_sym_page()
     key_to_typ, charset = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(key_to_typ.values()))
 
-    executor.submit(strip_font, charset)
+    strip_font(charset)
 
     os.makedirs("migrate-out", exist_ok=True)
     open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
     open("supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
-    def handle(i, row):
-        typ = key_to_typ.get(row[0])
+    detexify_data = orjson.loads(open("data/detexify.json").read())
+    for i, [key, strokes] in enumerate(detexify_data):
+        typ = key_to_typ.get(key)
         if typ is None:
-            return
-        strokes = normalize(row[1], 32)
+            continue
+        strokes = normalize(strokes, 32)
         if strokes is None:
-            return
+            continue
         os.makedirs(f"migrate-out/data/{typ}", exist_ok=True)
         draw(strokes, 32).save(f"migrate-out/data/{typ}/{i}.png")
-
-    detexify_data = orjson.loads(open("data/detexify.json").read())
-    executor.map(handle, enumerate(detexify_data), chunksize=1000)
