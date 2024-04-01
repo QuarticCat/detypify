@@ -1,6 +1,6 @@
 <div align="center">
     <img src="./assets/logo.svg" alt="logo" width="150"/>
-    <h1>Detypify (WIP)</h1>
+    <h1>Detypify</h1>
     <p>
         Can't remember Typst symbols?
         <a href="https://detypify.quarticcat.com/">Draw it!</a>
@@ -11,58 +11,33 @@
 
 - **PWA**: installable and works offline
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run
-- **Decent symbol set**: support 350+ common symbols
+- **Decent symbol set**: support 350+ symbols
+
+## Help Wanted
+
+I'm neither an AI scientist nor a frontend engineer. This project is not what I am good at. So I hope to get some help from the community. If you have interest, please take a look at [my issues](https://github.com/QuarticCat/detypify/issues/created_by/QuarticCat).
+
+And of course, PRs are welcome. 🥰
 
 ## Development
 
-### Preparation
+Before building the project, you need to prepare necessary data ([Git LFS](https://git-lfs.com/) required).
 
-#### Training Data
-
-1. Download `detexify.sql.gz` and `symbols.json` from [detexify-data](https://github.com/kirel/detexify-data) to `data` folder
-
-1. Convert training data to json
-
-    ```console
-    $ gunzip -c data/detexify.sql.gz | psql detypify
-    $ psql detypify -qAtXc 'SELECT json_agg(json_build_array(key, strokes)) FROM samples' -o data/detexify.json
-    ```
-
-#### Symbol Mapping
-
-1. Clone [mitex](https://github.com/mitex-rs/mitex) and build `mitex-spec-gen`
-
-    ```console
-    $ git clone https://github.com/mitex-rs/mitex
-    $ cd mitex
-    $ cargo build --package=mitex-spec-gen
-    ```
-
-1. Move `target/mitex-artifacts/spec/default.json` to `data` folder
-
-#### Typst Symbol Page
-
-1. Access https://typst.app/docs/reference/symbols/sym/ in your browser
-
-1. Right click -> Save as -> `data/typ_sym.html`
-
-#### Symbol Font
-
-1. Download *NewComputerModern* from [CTAN](https://ctan.org/pkg/newcomputermodern?lang=en)
-
-1. Extract and move `otf/NewCMMath-Regular.otf` to `data` folder
+```console
+$ git clone --depth=1 https://github.com/QuarticCat/detypify-data data
+```
 
 ### Migration
 
 ```console
-$ rye sync         # prepare venv and denpendencies
+$ rye sync         # install venv and denpendencies
 $ rye run migrate  # migrate
 ```
 
 ### Training
 
 ```console
-$ rye sync       # prepare venv and denpendencies
+$ rye sync       # install venv and denpendencies
 $ rye run train  # train
 ```
 
