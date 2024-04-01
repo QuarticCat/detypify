@@ -1,6 +1,6 @@
 <script>
-    import { Navbar, NavBrand, ToolbarButton, Tooltip, DarkMode, Modal, Heading, P, A } from "flowbite-svelte";
-    import { QuestionCircleSolid, GithubSolid } from "flowbite-svelte-icons";
+    import { A, DarkMode, Heading, Modal, NavBrand, Navbar, P, ToolbarButton, Tooltip } from "flowbite-svelte";
+    import { GithubSolid, QuestionCircleSolid } from "flowbite-svelte-icons";
 
     let openHelpModal = false;
 </script>

@@ -1,7 +1,8 @@
 <script>
-    import { onMount } from "svelte";
     import { Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
+    import { onMount } from "svelte";
+    import Button from "../utils/Button.svelte";
 
     export let greyscale;
 
@@ -134,12 +135,8 @@
         on:touchend|preventDefault={drawEnd}
         on:touchcancel|preventDefault={drawEnd}
     />
-    <button
-        type="button"
-        class="absolute right-1 top-1 p-2 text-black hover:text-primary-700 dark:text-gray-400 dark:hover:text-white"
-        on:click={drawClear}
-    >
+    <Button class="absolute right-1 top-1 p-2" on:click={drawClear}>
         <CloseOutline class="size-6" />
-    </button>
+    </Button>
     <Tooltip class="dark:bg-gray-900">Clear</Tooltip>
 </div>

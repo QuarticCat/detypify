@@ -1,13 +1,14 @@
 <script>
+    import { Avatar, P, Tooltip } from "flowbite-svelte";
     import { fly } from "svelte/transition";
-    import { Avatar, Button, Tooltip, P } from "flowbite-svelte";
+    import Button from "../utils/Button.svelte";
 
     export let logo, info;
 
     let tip;
 
-    async function copy(text) {
-        await navigator.clipboard.writeText(text);
+    async function copy() {
+        await navigator.clipboard.writeText(this.textContent);
         tip = "Copied!";
     }
 </script>
@@ -17,19 +18,19 @@
     in:fly={{ x: -20, duration: 200 }}
     out:fly={{ x: 20, duration: 200 }}
 >
-    <Button color="alternative" class="p-0 focus:ring-0" on:click={copy(logo)}>
+    <Button on:click={copy}>
         <Avatar rounded size="lg" class="text-5xl" style="font-family: NewCMMath-Detypify;">
             {logo}
         </Avatar>
+        <Tooltip class="dark:bg-gray-900" on:show={() => (tip = "Copy")}>
+            {tip}
+        </Tooltip>
     </Button>
-    <Tooltip class="dark:bg-gray-900" on:show={() => (tip = "Copy")}>
-        {tip}
-    </Tooltip>
     <div class="space-y-1">
         {#each info as [key, value]}
             <P>
                 {key}:
-                <Button color="alternative" class="rounded-sm border-0 p-0 focus:ring-0" on:click={copy(value)}>
+                <Button on:click={copy}>
                     <code class="text-base font-medium">
                         {value}
                     </code>
