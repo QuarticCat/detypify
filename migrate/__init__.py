@@ -99,13 +99,14 @@ def strip_font(charset: Iterable[str]):
 
 
 def main():
+    os.makedirs("migrate-out", exist_ok=True)
+
     typ_sym_info = parse_typ_sym_page()
     key_to_typ, charset = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(key_to_typ.values()))
 
     strip_font(charset)
 
-    os.makedirs("migrate-out", exist_ok=True)
     open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
