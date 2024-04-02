@@ -1,5 +1,6 @@
 import os
 import re
+import csv
 from typing import Any, Optional
 
 import orjson
@@ -27,21 +28,22 @@ def parse_typ_sym_page() -> list[dict[str, Any]]:
 
 
 def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
-    json = orjson.loads(open("data/symbols.json").read())
-    key_to_tex = {x["id"]: x["command"][1:] for x in json}
+    label_list = orjson.loads(open("data/symbols.json").read())
+    key_to_tex = {x["id"]: x["command"][1:] for x in label_list}
 
-    table = open("data/unicode-math-table.tex").read()
-    tex_to_typ = {t: chr(int(u, 16)) for u, t in re.findall(r'"(.*?)}{\\(.*?) ', table)}
+    unitex_map = open("data/unicode-math-table.tex").read()
+    unitex_map = re.findall(r'"(.*?)}{\\(.*?) ', unitex_map)
+    tex_to_typ = {t: chr(int(u, 16)) for u, t in unitex_map}
 
-    json = orjson.loads(open("data/default.json").read())
-    for k, v in json["commands"].items():
+    mitex_map = orjson.loads(open("data/default.json").read())
+    for k, v in mitex_map["commands"].items():
         if v["kind"] == "sym":
             tex_to_typ[k] = k
         elif v["kind"] == "alias-sym":
             tex_to_typ[k] = v["alias"]
 
-    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-        tex_to_typ[f"mathds{{{c}}}"] = c + c
+    extra_map = csv.reader(open("assets/tex_to_typ_extra.csv"))
+    tex_to_typ |= {k[1:]: v for k, v in extra_map}
 
     norm = {x["name"]: x["name"] for x in typ_sym_info}
     norm |= {chr(x["codepoint"]): x["name"] for x in typ_sym_info}

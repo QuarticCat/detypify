@@ -35,15 +35,19 @@
 </Navbar>
 
 <Modal bind:open={openHelpModal} outsideclose>
-    <Heading tag="h4">What symbols does it support?</Heading>
+    <Heading tag="h4">Cannot find some symbols?</Heading>
     <P>
-        Listed in
+        Supported symbols are listed in
         <A href="https://github.com/QuarticCat/detypify/blob/main/assets/supported-symbols.txt">supported-symbols.txt</A>.
     </P>
-
-    <Heading tag="h4">Can I use it offline?</Heading>
     <P>
-        Yes. Check the
+        If Detexify supports it but Detypify doesn't, PR to
+        <A href="https://github.com/QuarticCat/detypify/blob/main/assets/tex_to_typ_extra.csv">tex_to_typ_extra.csv</A>.
+    </P>
+
+    <Heading tag="h4">Want to use it offline?</Heading>
+    <P>
+        Check the
         <A href="https://support.google.com/chrome/answer/9658361">guide</A>.
     </P>
 

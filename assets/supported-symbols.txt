@@ -109,6 +109,7 @@ arrows.rl
 arrows.rr
 arrows.tt
 ast.circle
+at
 backslash
 bar.v.double
 because
@@ -214,6 +215,7 @@ integral.square
 integral.surf
 integral.triple
 iota
+join
 kappa
 kappa.alt
 lambda

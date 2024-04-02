@@ -70,10 +70,10 @@
 
         // update
         strokes.push(stroke);
-        xs = stroke.map((p) => p[0]);
+        let xs = stroke.map((p) => p[0]);
         minX = Math.min(minX, ...xs);
         maxX = Math.max(maxX, ...xs);
-        ys = stroke.map((p) => p[1]);
+        let ys = stroke.map((p) => p[1]);
         minY = Math.min(minY, ...ys);
         maxY = Math.max(maxY, ...ys);
 
