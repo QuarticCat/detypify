@@ -1,4 +1,5 @@
 /data
+/external
 /migrate-out
 /train-out
 /web-out

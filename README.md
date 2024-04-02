@@ -25,6 +25,7 @@ Before building the project, you need to prepare necessary data ([Git LFS](https
 
 ```console
 $ git clone --depth=1 https://github.com/QuarticCat/detypify-data data
+$ git clone --depth=1 https://github.com/QuarticCat/detypify-external external
 ```
 
 ### Migration

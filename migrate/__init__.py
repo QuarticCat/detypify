@@ -12,7 +12,7 @@ type StrokesT = list[list[tuple[float, float, int]]]
 
 
 def parse_typ_sym_page() -> list[dict[str, Any]]:
-    soup = BeautifulSoup(open("data/typ_sym.html").read(), "html.parser")
+    soup = BeautifulSoup(open("external/typ_sym.html").read(), "html.parser")
     return [
         {
             "name": li["id"][len("symbol-") :],
@@ -28,14 +28,14 @@ def parse_typ_sym_page() -> list[dict[str, Any]]:
 
 
 def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
-    label_list = orjson.loads(open("data/symbols.json").read())
+    label_list = orjson.loads(open("external/symbols.json").read())
     key_to_tex = {x["id"]: x["command"][1:] for x in label_list}
 
-    unitex_map = open("data/unicode-math-table.tex").read()
+    unitex_map = open("external/unicode-math-table.tex").read()
     unitex_map = re.findall(r'"(.*?)}{\\(.*?) ', unitex_map)
     tex_to_typ = {t: chr(int(u, 16)) for u, t in unitex_map}
 
-    mitex_map = orjson.loads(open("data/default.json").read())
+    mitex_map = orjson.loads(open("external/default.json").read())
     for k, v in mitex_map["commands"].items():
         if v["kind"] == "sym":
             tex_to_typ[k] = k
@@ -96,7 +96,7 @@ def main():
     open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
-    detexify_data = orjson.loads(open("data/detexify.json").read())
+    detexify_data = orjson.loads(open("external/detexify.json").read())
     for i, [key, strokes] in enumerate(detexify_data):
         typ = key_to_typ.get(key)
         if typ is None:

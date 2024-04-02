@@ -13,7 +13,7 @@ def main():
 
     subset.main(
         [
-            "data/NewCMMath-Regular.otf",
+            "external/NewCMMath-Regular.otf",
             "--text=" + text,
             "--flavor=woff2",
             "--output-file=migrate-out/NewCMMath-Detypify.woff2",
