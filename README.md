@@ -30,8 +30,9 @@ $ git clone --depth=1 https://github.com/QuarticCat/detypify-data data
 ### Migration
 
 ```console
-$ rye sync         # install venv and denpendencies
-$ rye run migrate  # migrate
+$ rye sync              # install venv and denpendencies
+$ rye run migrate       # migrate
+$ rye run migrate-font  # strip font (optional)
 ```
 
 ### Training

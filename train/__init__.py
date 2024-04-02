@@ -92,7 +92,7 @@ def main():
         logo = chr(sym["codepoint"])
         info = [
             ("Name", sym["name"]),
-            ("Escape", "\\u" + f'{{{sym['codepoint']:0>4X}}}'),
+            ("Escape", "\\u" + f"{{{sym['codepoint']:0>4X}}}"),
         ]
         if sym["markup-shorthand"] and sym["math-shorthand"]:
             info.append(("Shorthand", sym["markup-shorthand"]))

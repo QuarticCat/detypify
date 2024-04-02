@@ -7,18 +7,18 @@ dependencies = [
     "orjson>=3.10.0",
     # migrate
     "beautifulsoup4>=4.12.3",
-    "fonttools[woff]>=4.50.0",
     "pillow>=10.2.0",
+    "fonttools[woff]>=4.50.0",
     # train
     "torch>=2.2.1",
     "torchvision>=0.17.1",
     "torchinfo>=1.8.0",
     "onnx>=1.16.0",
 ]
-requires-python = ">= 3.8"
 
 [project.scripts]
 migrate = "migrate:main"
+migrate-font = "migrate.font:main"
 train = "train:main"
 
 [build-system]

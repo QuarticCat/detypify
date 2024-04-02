@@ -1,10 +1,9 @@
 import os
 import re
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 import orjson
 from bs4 import BeautifulSoup
-from fontTools import subset
 from PIL import Image, ImageDraw
 
 type Strokes = list[list[tuple[float, float]]]
@@ -44,20 +43,18 @@ def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         tex_to_typ[f"mathds{{{c}}}"] = c + c
 
-    norm = {x["name"]: x for x in typ_sym_info}
-    norm |= {chr(x["codepoint"]): x for x in typ_sym_info}
-    norm |= {x["markup-shorthand"]: x for x in typ_sym_info}
-    norm |= {x["math-shorthand"]: x for x in typ_sym_info}
+    norm = {x["name"]: x["name"] for x in typ_sym_info}
+    norm |= {chr(x["codepoint"]): x["name"] for x in typ_sym_info}
+    norm |= {x["markup-shorthand"]: x["name"] for x in typ_sym_info}
+    norm |= {x["math-shorthand"]: x["name"] for x in typ_sym_info}
     del norm[None]
 
     key_to_typ = {}
-    charset = set()
     for k, v in key_to_tex.items():
         x = norm.get(tex_to_typ.get(v))
         if x is not None:
-            key_to_typ[k] = x["name"]
-            charset.add(chr(x["codepoint"]))
-    return key_to_typ, charset
+            key_to_typ[k] = x
+    return key_to_typ
 
 
 def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
@@ -87,25 +84,12 @@ def draw(strokes: Strokes, size: int) -> Image.Image:
     return image
 
 
-def strip_font(charset: Iterable[str]):
-    subset.main(
-        [
-            "data/NewCMMath-Regular.otf",
-            "--text=" + "".join(charset),
-            "--flavor=woff2",
-            "--output-file=migrate-out/NewCMMath-Detypify.woff2",
-        ]
-    )
-
-
 def main():
     os.makedirs("migrate-out", exist_ok=True)
 
     typ_sym_info = parse_typ_sym_page()
-    key_to_typ, charset = map_sym(typ_sym_info)
+    key_to_typ = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(key_to_typ.values()))
-
-    strip_font(charset)
 
     open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
