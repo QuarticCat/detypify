@@ -70,10 +70,12 @@
 
         // update
         strokes.push(stroke);
-        minX = Math.min(minX, ...stroke.map((p) => p[0]));
-        minY = Math.min(minY, ...stroke.map((p) => p[1]));
-        maxX = Math.max(maxX, ...stroke.map((p) => p[0]));
-        maxY = Math.max(maxY, ...stroke.map((p) => p[1]));
+        xs = stroke.map((p) => p[0]);
+        minX = Math.min(minX, ...xs);
+        maxX = Math.max(maxX, ...xs);
+        ys = stroke.map((p) => p[1]);
+        minY = Math.min(minY, ...ys);
+        maxY = Math.max(maxY, ...ys);
 
         // normalize
         let dstWidth = dstCanvas.width;

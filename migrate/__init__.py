@@ -61,10 +61,10 @@ def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
 
 
 def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
-    min_x = min([x for s in strokes for x, _, _ in s])
-    max_x = max([x for s in strokes for x, _, _ in s])
-    min_y = min([y for s in strokes for _, y, _ in s])
-    max_y = max([y for s in strokes for _, y, _ in s])
+    xs = [x for s in strokes for x, _, _ in s]
+    min_x, max_x = min(xs), max(xs)
+    ys = [y for s in strokes for _, y, _ in s]
+    min_y, max_y = min(ys), max(ys)
 
     width = max(max_x - min_x, max_y - min_y)
     if width == 0:
