@@ -107,7 +107,7 @@ def main():
 
     os.makedirs("migrate-out", exist_ok=True)
     open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
-    open("supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
+    open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
     detexify_data = orjson.loads(open("data/detexify.json").read())
     for i, [key, strokes] in enumerate(detexify_data):

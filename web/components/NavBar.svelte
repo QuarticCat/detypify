@@ -38,7 +38,7 @@
     <Heading tag="h4">What symbols does it support?</Heading>
     <P>
         Listed in
-        <A href="https://github.com/QuarticCat/detypify/blob/main/supported-symbols.txt">supported-symbols.txt</A>.
+        <A href="https://github.com/QuarticCat/detypify/blob/main/assets/supported-symbols.txt">supported-symbols.txt</A>.
     </P>
 
     <Heading tag="h4">Can I use it offline?</Heading>
