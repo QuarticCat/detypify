@@ -2,46 +2,28 @@
     import { Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
     import { onMount } from "svelte";
+    import { strokes } from "../store";
     import Button from "../utils/Button.svelte";
 
-    export let greyscale;
-
-    let srcCanvas; // user painting
+    let srcCanvas;
     let srcCtx;
-    let dstCanvas; // normalized image
-    let dstCtx;
-
-    let touchL;
-    let touchT;
 
     let isDrawing;
     let currP;
     let stroke;
-
-    let strokes = [];
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = 0;
-    let maxY = 0;
 
     onMount(() => {
         srcCtx = srcCanvas.getContext("2d");
         srcCtx.lineWidth = 5;
         srcCtx.lineJoin = "round";
         srcCtx.lineCap = "round";
-
-        dstCanvas = document.createElement("canvas");
-        dstCanvas.width = dstCanvas.height = 32;
-        dstCtx = dstCanvas.getContext("2d", { willReadFrequently: true });
-        dstCtx.fillStyle = "white";
-
-        ({ left: touchL, top: touchT } = srcCanvas.getBoundingClientRect());
     });
 
     const touchCall = (fn) => (e) => {
+        ({ left, top } = srcCanvas.getBoundingClientRect());
         fn({
-            offsetX: e.touches[0].clientX - touchL,
-            offsetY: e.touches[0].clientY - touchT,
+            offsetX: e.touches[0].clientX - left,
+            offsetY: e.touches[0].clientY - top,
         });
     };
 
@@ -67,58 +49,13 @@
     function drawEnd() {
         if (!isDrawing) return; // normal mouse leave
         isDrawing = false;
-
-        // update
-        strokes.push(stroke);
-        let xs = stroke.map((p) => p[0]);
-        minX = Math.min(minX, ...xs);
-        maxX = Math.max(maxX, ...xs);
-        let ys = stroke.map((p) => p[1]);
-        minY = Math.min(minY, ...ys);
-        maxY = Math.max(maxY, ...ys);
-
-        // normalize
-        let dstWidth = dstCanvas.width;
-        let width = Math.max(maxX - minX, maxY - minY);
-        if (width == 0) return;
-        width *= 1.2;
-        let zeroX = (maxX + minX) / 2 - width / 2;
-        let zeroY = (maxY + minY) / 2 - width / 2;
-        let scale = dstWidth / width;
-
-        // draw to dstCanvas
-        dstCtx.fillRect(0, 0, dstWidth, dstWidth);
-        dstCtx.translate(0.5, 0.5);
-        for (let stroke of strokes) {
-            dstCtx.beginPath();
-            for (let [x, y] of stroke) {
-                dstCtx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
-            }
-            dstCtx.stroke();
-        }
-        dstCtx.translate(-0.5, -0.5);
-
-        // // [debug] download dstCanvas image
-        // let img = document.createElement("a");
-        // img.href = dstCanvas.toDataURL();
-        // img.download = "test.png";
-        // img.click();
-
-        // to greyscale
-        let rgba = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
-        let grey = new Float32Array(rgba.length / 4);
-        for (let i = 0; i < grey.length; ++i) {
-            grey[i] = rgba[i * 4] == 255 ? 1 : 0;
-        }
-        greyscale = grey;
+        if (stroke.length === 1) return; // no line
+        $strokes = [...$strokes, stroke];
     }
 
     function drawClear() {
         srcCtx.clearRect(0, 0, srcCanvas.width, srcCanvas.height);
-        strokes = [];
-        minX = minY = Infinity;
-        maxX = maxY = 0;
-        greyscale = null;
+        $strokes = [];
     }
 </script>
 

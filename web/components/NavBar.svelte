@@ -1,6 +1,7 @@
 <script>
     import { A, DarkMode, Heading, Modal, NavBrand, Navbar, P, ToolbarButton, Tooltip } from "flowbite-svelte";
-    import { GithubSolid, QuestionCircleSolid } from "flowbite-svelte-icons";
+    import { FireOutline, FireSolid, GithubSolid, QuestionCircleSolid } from "flowbite-svelte-icons";
+    import { isContribMode } from "../store";
 
     let openHelpModal = false;
 </script>
@@ -29,6 +30,19 @@
         </ToolbarButton>
         <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">View on GitHub</Tooltip>
 
+        <ToolbarButton
+            size="lg"
+            class="inline-block hover:text-gray-900 dark:hover:text-white"
+            on:click={() => isContribMode.update((v) => !v)}
+        >
+            {#if $isContribMode}
+                <FireOutline size="lg" />
+            {:else}
+                <FireSolid size="lg" />
+            {/if}
+        </ToolbarButton>
+        <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle contrib mode</Tooltip>
+
         <DarkMode size="lg" class="inline-block hover:text-gray-900 dark:hover:text-white" />
         <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle dark mode</Tooltip>
     </div>
@@ -38,10 +52,15 @@
     <Heading tag="h4">Cannot find some symbols?</Heading>
     <P>
         Supported symbols are listed in
-        <A href="https://github.com/QuarticCat/detypify/blob/main/assets/supported-symbols.txt">supported-symbols.txt</A>.
+        <A href="https://github.com/QuarticCat/detypify/blob/main/assets/supported-symbols.txt">
+            supported-symbols.txt
+        </A>.
     </P>
     <P>
-        If Detexify supports it but Detypify doesn't, PR to
+        You can click <FireSolid class="inline align-text-top" /> to contribute your drawings to the dataset.
+    </P>
+    <P>
+        If Detexify supports a symbol but Detypify doesn't, PR to
         <A href="https://github.com/QuarticCat/detypify/blob/main/assets/tex_to_typ_extra.csv">tex_to_typ_extra.csv</A>.
     </P>
 
