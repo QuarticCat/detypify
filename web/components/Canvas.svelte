@@ -57,6 +57,20 @@
         srcCtx.clearRect(0, 0, srcCanvas.width, srcCanvas.height);
         $strokes = [];
     }
+
+    function redraw(strokes) {
+        if (!srcCanvas) return;
+        srcCtx.clearRect(0, 0, srcCanvas.width, srcCanvas.height);
+        for (let stroke of strokes) {
+            srcCtx.beginPath();
+            for (let [x, y] of stroke) {
+                srcCtx.lineTo(x, y);
+            }
+            srcCtx.stroke();
+        }
+    }
+
+    $: redraw($strokes);
 </script>
 
 <div class="relative w-[320px]">

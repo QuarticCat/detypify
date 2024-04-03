@@ -2,7 +2,7 @@
     import { Button, Input } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
     import MyButton from "../utils/Button.svelte";
-    import { greyscale, inputText, savedSamples } from "../store";
+    import { greyscale, inputText, savedSamples, strokes } from "../store";
 
     let symbols = {
         "fence.l.double": "⧚",
@@ -33,6 +33,19 @@
         $inputText = newInput;
     }
 
+    function save() {
+        $savedSamples = [
+            {
+                name: $inputText,
+                strokes: $strokes,
+            },
+            ...$savedSamples,
+        ];
+        $strokes = [];
+    }
+
+    function submit() {}
+
     $: validateInput($inputText);
     $: disableSave = inputColor !== "green" || !$greyscale;
     $: disableSubmit = $savedSamples.length === 0;
@@ -45,6 +58,6 @@
 </div>
 
 <div class="flex justify-around">
-    <Button class="w-5/12" disabled={disableSave}>Save</Button>
-    <Button class="w-5/12" disabled={disableSubmit}>Submit</Button>
+    <Button class="w-5/12" disabled={disableSave} on:click={save}>Save</Button>
+    <Button class="w-5/12" disabled={disableSubmit} on:click={submit}>Submit</Button>
 </div>
