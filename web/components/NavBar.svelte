@@ -1,9 +1,15 @@
 <script>
     import { A, DarkMode, Heading, Modal, NavBrand, Navbar, P, ToolbarButton, Tooltip } from "flowbite-svelte";
     import { FireOutline, FireSolid, GithubSolid, QuestionCircleSolid } from "flowbite-svelte-icons";
-    import { isContribMode } from "../store";
+    import { isContribMode, strokes } from "../store";
 
     let openHelpModal = false;
+
+    function toggleContribMode() {
+        $isContribMode = !$isContribMode;
+        $strokes = [];
+        // should I reset inputText and savedSamples?
+    }
 </script>
 
 <Navbar>
@@ -33,7 +39,7 @@
         <ToolbarButton
             size="lg"
             class="inline-block hover:text-gray-900 dark:hover:text-white"
-            on:click={() => isContribMode.update((v) => !v)}
+            on:click={toggleContribMode}
         >
             {#if $isContribMode}
                 <FireOutline size="lg" />

@@ -8,10 +8,6 @@ ortConfig.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/
 
 export const session = writable();
 
-InferenceSession.create(modelUrl).then((s) => {
-    session.set(s);
-});
-
 export const isContribMode = writable(false);
 
 export const strokes = writable([]);
@@ -28,29 +24,25 @@ let minY = Infinity;
 let maxX = 0;
 let maxY = 0;
 
-export const greyscale = derived(strokes, ($strokes) => {
-    if ($strokes.length === 0) {
-        minX = minY = Infinity;
-        maxX = maxY = 0;
-        return null;
-    }
-
-    // update
-    let stroke = $strokes[$strokes.length - 1];
+function updateMinMax(stroke) {
     let xs = stroke.map((p) => p[0]);
     minX = Math.min(minX, ...xs);
     maxX = Math.max(maxX, ...xs);
     let ys = stroke.map((p) => p[1]);
     minY = Math.min(minY, ...ys);
     maxY = Math.max(maxY, ...ys);
+}
+
+function normalize($strokes) {
+    updateMinMax($strokes[$strokes.length - 1]);
 
     // normalize
     let dstWidth = dstCanvas.width;
     let width = Math.max(maxX - minX, maxY - minY);
     if (width == 0) return;
     width *= 1.2;
-    let zeroX = (maxX + minX) / 2 - width / 2;
-    let zeroY = (maxY + minY) / 2 - width / 2;
+    let zeroX = (minX + maxX - width) / 2;
+    let zeroY = (minY + maxY - width) / 2;
     let scale = dstWidth / width;
 
     // draw to dstCanvas
@@ -64,32 +56,45 @@ export const greyscale = derived(strokes, ($strokes) => {
         dstCtx.stroke();
     }
     dstCtx.translate(-0.5, -0.5);
+}
 
-    // // [debug] download dstCanvas image
-    // let img = document.createElement("a");
-    // img.href = dstCanvas.toDataURL();
-    // img.download = "test.png";
-    // img.click();
+InferenceSession.create(modelUrl).then((s) => {
+    // do we really need to do this?
+    for (let stroke of get(strokes)) {
+        updateMinMax(stroke);
+    }
+    session.set(s);
+});
+
+export const candidates = derived(strokes, async ($strokes, set) => {
+    let sess = get(session);
+
+    // not loaded or clear
+    if (get(isContribMode) || !sess) {
+        set([]);
+        return;
+    }
+
+    // clear
+    if ($strokes.length === 0) {
+        minX = minY = Infinity;
+        maxX = maxY = 0;
+        set([]);
+        return;
+    }
+
+    normalize($strokes);
 
     // to greyscale
+    let dstWidth = dstCanvas.width;
     let rgba = dstCtx.getImageData(0, 0, dstWidth, dstWidth).data;
     let grey = new Float32Array(rgba.length / 4);
     for (let i = 0; i < grey.length; ++i) {
         grey[i] = rgba[i * 4] == 255 ? 1 : 0;
     }
-    return grey;
-});
-
-export const candidates = derived(greyscale, async ($greyscale, set) => {
-    let sess = get(session);
-
-    if (get(isContribMode) || !sess || !$greyscale) {
-        set([]);
-        return;
-    }
 
     // infer
-    let tensor = new Tensor("float32", $greyscale, [1, 1, 32, 32]);
+    let tensor = new Tensor("float32", grey, [1, 1, 32, 32]);
     let output = await sess.run({ [sess.inputNames[0]]: tensor });
     output = Array.prototype.slice.call(output[sess.outputNames[0]].data);
 
@@ -97,4 +102,11 @@ export const candidates = derived(greyscale, async ($greyscale, set) => {
     let withIdx = output.map((x, i) => [x, i]);
     withIdx.sort((a, b) => b[0] - a[0]);
     set(withIdx.slice(0, 5).map(([_, i]) => classes[i]));
+});
+
+export const imgUrl = derived(strokes, ($strokes) => {
+    let blank = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+    if (!get(isContribMode) || $strokes.length === 0) return blank;
+    normalize($strokes);
+    return dstCanvas.toDataURL();
 });

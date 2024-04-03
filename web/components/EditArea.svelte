@@ -1,8 +1,8 @@
 <script>
     import { Button, Input } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
+    import { imgUrl, inputText, savedSamples, strokes } from "../store";
     import MyButton from "../utils/Button.svelte";
-    import { greyscale, inputText, savedSamples, strokes } from "../store";
 
     let symbols = {
         "fence.l.double": "⧚",
@@ -13,6 +13,8 @@
     let inputColor = "base";
     let disableSave = true;
     let disableSubmit = true;
+
+    let sampleId = 0;
 
     function validateInput(input) {
         if (input === "") {
@@ -36,18 +38,22 @@
     function save() {
         $savedSamples = [
             {
+                id: sampleId,
                 name: $inputText,
+                logo: symbols[$inputText],
                 strokes: $strokes,
+                imgUrl: $imgUrl,
             },
             ...$savedSamples,
         ];
+        sampleId += 1;
         $strokes = [];
     }
 
     function submit() {}
 
     $: validateInput($inputText);
-    $: disableSave = inputColor !== "green" || !$greyscale;
+    $: disableSave = inputColor !== "green" || $strokes.length === 0;
     $: disableSubmit = $savedSamples.length === 0;
 </script>
 

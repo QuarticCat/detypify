@@ -20,10 +20,10 @@
     });
 
     const touchCall = (fn) => (e) => {
-        ({ left, top } = srcCanvas.getBoundingClientRect());
+        let rect = srcCanvas.getBoundingClientRect();
         fn({
-            offsetX: e.touches[0].clientX - left,
-            offsetY: e.touches[0].clientY - top,
+            offsetX: e.touches[0].clientX - rect.left,
+            offsetY: e.touches[0].clientY - rect.top,
         });
     };
 
@@ -54,23 +54,12 @@
     }
 
     function drawClear() {
-        srcCtx.clearRect(0, 0, srcCanvas.width, srcCanvas.height);
         $strokes = [];
     }
 
-    function redraw(strokes) {
-        if (!srcCanvas) return;
+    $: if (!!srcCanvas && $strokes.length === 0) {
         srcCtx.clearRect(0, 0, srcCanvas.width, srcCanvas.height);
-        for (let stroke of strokes) {
-            srcCtx.beginPath();
-            for (let [x, y] of stroke) {
-                srcCtx.lineTo(x, y);
-            }
-            srcCtx.stroke();
-        }
     }
-
-    $: redraw($strokes);
 </script>
 
 <div class="relative w-[320px]">

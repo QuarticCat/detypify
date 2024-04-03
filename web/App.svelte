@@ -1,11 +1,17 @@
 <script>
-    import { Spinner } from "flowbite-svelte";
+    import { Hr, Spinner } from "flowbite-svelte";
     import "./app.pcss";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
     import EditArea from "./components/EditArea.svelte";
     import NavBar from "./components/NavBar.svelte";
-    import { candidates, isContribMode, session } from "./store";
+    import Preview from "./components/Preview.svelte";
+    import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
+
+    let symbols = {
+        "fence.l.double": "⧚",
+        "ast.circle": "⊛",
+    };
 </script>
 
 <NavBar />
@@ -26,7 +32,11 @@
                 <Candidate {logo} {info} />
             {/each}
         {:else}
-            <Spinner size="12" />
+            <Preview logo={symbols[$inputText] ?? "�"} imgUrl={$imgUrl} />
+            <Hr classHr="w-[240px] h-2 rounded mx-auto" />
+            {#each $savedSamples as { id, logo, imgUrl } (id)}
+                <Preview {logo} {imgUrl} />
+            {/each}
         {/if}
     </div>
     <div class="hidden md:block"></div>
