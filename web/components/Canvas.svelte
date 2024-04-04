@@ -36,14 +36,13 @@
     function drawMove({ offsetX, offsetY }) {
         if (!isDrawing) return;
 
-        let prevP = currP;
+        srcCtx.beginPath();
+        srcCtx.moveTo(currP[0], currP[1]);
+        srcCtx.lineTo(offsetX, offsetY);
+        srcCtx.stroke();
+
         currP = [offsetX, offsetY];
         stroke.push(currP);
-
-        srcCtx.beginPath();
-        srcCtx.moveTo(...prevP);
-        srcCtx.lineTo(...currP);
-        srcCtx.stroke();
     }
 
     function drawEnd() {
@@ -79,6 +78,6 @@
     />
     <Button class="absolute right-1 top-1 p-2" on:click={drawClear}>
         <CloseOutline class="size-6" />
+        <Tooltip class="dark:bg-gray-900">Clear</Tooltip>
     </Button>
-    <Tooltip class="dark:bg-gray-900">Clear</Tooltip>
 </div>

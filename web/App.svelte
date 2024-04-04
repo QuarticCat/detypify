@@ -35,7 +35,7 @@
             <Preview logo={symbols[$inputText] ?? "�"} imgUrl={$imgUrl} />
             <Hr classHr="w-[240px] h-2 rounded mx-auto" />
             {#each $savedSamples as { id, logo, imgUrl } (id)}
-                <Preview {logo} {imgUrl} />
+                <Preview {id} {logo} {imgUrl} closeable />
             {/each}
         {/if}
     </div>
