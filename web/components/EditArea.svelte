@@ -49,25 +49,41 @@
         $strokes = [];
     }
 
+    // async function submit() {
+    //     isSubmitting = true;
+
+    //     let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
+    //     $savedSamples = [];
+
+    //     let form = new FormData();
+    //     form.append("c", JSON.stringify(samples));
+    //     let response = await fetch(`https://corsproxy.io/?${encodeURIComponent("https://pb.mgt.moe/")}`, {
+    //         method: "POST",
+    //         body: form,
+    //     });
+    //     let text = await response.text();
+
+    //     let pasteUrl = text.match(/url: (.*?)\n/)[1];
+    //     window.open(
+    //         `https://github.com/QuarticCat/detypify-data/issues/new` +
+    //             `?title=${encodeURIComponent("Samples 0.1.0")}` +
+    //             `&body=${encodeURIComponent(`${pasteUrl}\n\n<!-- Do not modify, just submit -->`)}`,
+    //     );
+
+    //     isSubmitting = false;
+    // }
+
     async function submit() {
         isSubmitting = true;
 
         let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
         $savedSamples = [];
 
-        let form = new FormData();
-        form.append("c", JSON.stringify(samples));
-        let response = await fetch(`https://corsproxy.io/?${encodeURIComponent("https://pb.mgt.moe/")}`, {
-            method: "POST",
-            body: form,
-        });
-        let text = await response.text();
-
-        let pasteUrl = text.match(/url: (.*?)\n/)[1];
+        await navigator.clipboard.writeText(JSON.stringify(samples));
         window.open(
             `https://github.com/QuarticCat/detypify-data/issues/new` +
-                `?title=${encodeURIComponent("Samples 0.1.0")}` +
-                `&body=${encodeURIComponent(`${pasteUrl}\n\n<!-- Do not modify, just submit -->`)}`,
+                `?title=${encodeURIComponent("Samples 0.2.0")}` +
+                `&body=${encodeURIComponent(`<!-- Data has been saved to your clipboard. Paste them just this line and submit. -->\n`)}`,
         );
 
         isSubmitting = false;
