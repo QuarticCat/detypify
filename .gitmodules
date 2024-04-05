@@ -1,0 +1,6 @@
+[submodule "data"]
+	path = data
+	url = https://github.com/QuarticCat/detypify-data
+[submodule "external"]
+	path = external
+	url = https://github.com/QuarticCat/detypify-external

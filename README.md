@@ -13,20 +13,15 @@
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 350+ symbols
 
-## Help Wanted
-
-I'm neither an AI scientist nor a frontend engineer. This project is not what I am good at. So I hope to get some help from the community. If you have interest, please take a look at [my issues](https://github.com/QuarticCat/detypify/issues/created_by/QuarticCat).
-
-And of course, PRs are welcome. 🥰
-
 ## Development
 
-Before building the project, you need to prepare necessary data ([Git LFS](https://git-lfs.com/) required).
+If you want to build `migrate` or `train`, you need to pull submodules. ([Git LFS](https://git-lfs.com/) is required)
 
 ```console
-$ git clone --depth=1 https://github.com/QuarticCat/detypify-data data
-$ git clone --depth=1 https://github.com/QuarticCat/detypify-external external
+$ git submodule update --init --recursive
 ```
+
+If you just want to build `web`, you can download `train-out.zip` from releases and extract it to project folder.
 
 ### Migration
 
