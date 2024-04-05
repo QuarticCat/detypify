@@ -84,7 +84,7 @@ def main():
     os.makedirs("train-out", exist_ok=True)
     onnx.export(model, torch.randn(1, 1, 32, 32), "train-out/model.onnx")
 
-    symbols = orjson.loads(open("migrate-out/symbols.json").read())
+    symbols = orjson.loads(open("migrate-out/symbols.json", "rb").read())
     classes = [None] * len(orig_data.classes)
     for sym in symbols:
         if sym["name"] not in orig_data.class_to_idx:
