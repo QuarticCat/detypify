@@ -19,22 +19,20 @@ dstCanvas.width = dstCanvas.height = 32;
 let dstCtx = dstCanvas.getContext("2d", { willReadFrequently: true });
 dstCtx.fillStyle = "white";
 
-let minX = Infinity;
-let minY = Infinity;
-let maxX = 0;
-let maxY = 0;
-
-function updateMinMax(stroke) {
-    let xs = stroke.map((p) => p[0]);
-    minX = Math.min(minX, ...xs);
-    maxX = Math.max(maxX, ...xs);
-    let ys = stroke.map((p) => p[1]);
-    minY = Math.min(minY, ...ys);
-    maxY = Math.max(maxY, ...ys);
-}
-
-function normalize($strokes) {
-    updateMinMax($strokes[$strokes.length - 1]);
+function drawToDst($strokes) {
+    // find rect
+    let minX = Infinity;
+    let maxX = 0;
+    let minY = Infinity;
+    let maxY = 0;
+    for (let stroke of $strokes) {
+        for (let [x, y] of stroke) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+    }
 
     // normalize
     let dstWidth = dstCanvas.width;
@@ -59,27 +57,17 @@ function normalize($strokes) {
 }
 
 InferenceSession.create(modelUrl).then((s) => {
-    // do we really need to do this?
-    for (let stroke of get(strokes)) {
-        updateMinMax(stroke);
-    }
     session.set(s);
+    strokes.set(get(strokes)); // trigger drawing
 });
 
 export const candidates = derived(strokes, async ($strokes, set) => {
     let sess = get(session);
 
-    // not loaded
-    if (get(isContribMode) || !sess) return set([]);
+    // not loaded or clear
+    if (get(isContribMode) || !sess || $strokes.length === 0) return set([]);
 
-    // clear
-    if ($strokes.length === 0) {
-        minX = minY = Infinity;
-        maxX = maxY = 0;
-        return set([]);
-    }
-
-    normalize($strokes);
+    drawToDst($strokes);
 
     // to greyscale
     let dstWidth = dstCanvas.width;
@@ -103,16 +91,9 @@ export const candidates = derived(strokes, async ($strokes, set) => {
 export const imgUrl = derived(strokes, ($strokes) => {
     let blank = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-    // not loaded
-    if (!get(isContribMode)) return blank;
+    // not loaded or clear
+    if (!get(isContribMode) || $strokes.length === 0) return blank;
 
-    // clear
-    if ($strokes.length === 0) {
-        minX = minY = Infinity;
-        maxX = maxY = 0;
-        return blank;
-    }
-
-    normalize($strokes);
+    drawToDst($strokes);
     return dstCanvas.toDataURL();
 });

@@ -69,8 +69,8 @@ def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
     if width == 0:
         return None
     width *= 1.2  # leave margin to avoid edge cases
-    zero_x = (max_x + min_x) / 2 - width / 2
-    zero_y = (max_y + min_y) / 2 - width / 2
+    zero_x = (max_x + min_x - width) / 2
+    zero_y = (max_y + min_y - width) / 2
     scale = size / width
 
     return [
