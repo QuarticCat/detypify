@@ -83,7 +83,7 @@
         window.open(
             `https://github.com/QuarticCat/detypify-data/issues/new` +
                 `?title=${encodeURIComponent("Samples 0.2.0")}` +
-                `&body=${encodeURIComponent(`<!-- Data has been saved to your clipboard. Paste them just this line and submit. -->\n`)}`,
+                `&body=${encodeURIComponent(`<!-- Data has been saved to your clipboard. Paste them below this line and submit. -->\n`)}`,
         );
 
         isSubmitting = false;
