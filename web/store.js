@@ -69,18 +69,14 @@ InferenceSession.create(modelUrl).then((s) => {
 export const candidates = derived(strokes, async ($strokes, set) => {
     let sess = get(session);
 
-    // not loaded or clear
-    if (get(isContribMode) || !sess) {
-        set([]);
-        return;
-    }
+    // not loaded
+    if (get(isContribMode) || !sess) return set([]);
 
     // clear
     if ($strokes.length === 0) {
         minX = minY = Infinity;
         maxX = maxY = 0;
-        set([]);
-        return;
+        return set([]);
     }
 
     normalize($strokes);
@@ -106,7 +102,17 @@ export const candidates = derived(strokes, async ($strokes, set) => {
 
 export const imgUrl = derived(strokes, ($strokes) => {
     let blank = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-    if (!get(isContribMode) || $strokes.length === 0) return blank;
+
+    // not loaded
+    if (!get(isContribMode)) return blank;
+
+    // clear
+    if ($strokes.length === 0) {
+        minX = minY = Infinity;
+        maxX = maxY = 0;
+        return blank;
+    }
+
     normalize($strokes);
     return dstCanvas.toDataURL();
 });
