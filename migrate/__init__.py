@@ -1,6 +1,6 @@
+import csv
 import os
 import re
-import csv
 from typing import Any, Optional
 
 import orjson
@@ -8,7 +8,8 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
 
 type Strokes = list[list[tuple[float, float]]]
-type StrokesT = list[list[tuple[float, float, int]]]
+
+IMAGE_SIZE = 32  # px
 
 
 def is_space(c) -> bool:
@@ -63,10 +64,10 @@ def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
     return key_to_typ
 
 
-def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
-    xs = [x for s in strokes for x, _, _ in s]
+def normalize(strokes: Strokes) -> Optional[Strokes]:
+    xs = [x for s in strokes for x, _ in s]
     min_x, max_x = min(xs), max(xs)
-    ys = [y for s in strokes for _, y, _ in s]
+    ys = [y for s in strokes for _, y in s]
     min_y, max_y = min(ys), max(ys)
 
     width = max(max_x - min_x, max_y - min_y)
@@ -75,15 +76,15 @@ def normalize(strokes: StrokesT, size: int) -> Optional[Strokes]:
     width *= 1.2  # leave margin to avoid edge cases
     zero_x = (max_x + min_x - width) / 2
     zero_y = (max_y + min_y - width) / 2
-    scale = size / width
+    scale = IMAGE_SIZE / width
 
     return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y, _ in s] for s in strokes
+        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
     ]
 
 
-def draw(strokes: Strokes, size: int) -> Image.Image:
-    image = Image.new("1", (size, size), 1)
+def draw(strokes: Strokes) -> Image.Image:
+    image = Image.new("1", (IMAGE_SIZE, IMAGE_SIZE), 1)
     draw = ImageDraw.Draw(image)
     for stroke in strokes:
         draw.line(stroke)
@@ -105,8 +106,9 @@ def main():
         typ = key_to_typ.get(key)
         if typ is None:
             continue
-        strokes = normalize(strokes, 32)
+        strokes = [[(x, y) for x, y, _ in s] for s in strokes]
+        strokes = normalize(strokes)
         if strokes is None:
             continue
         os.makedirs(f"migrate-out/data/{typ}", exist_ok=True)
-        draw(strokes, 32).save(f"migrate-out/data/{typ}/{i}.png")
+        draw(strokes).save(f"migrate-out/data/{typ}/{i}.png")

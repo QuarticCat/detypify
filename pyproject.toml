@@ -5,6 +5,9 @@ authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
     # common
     "orjson>=3.10.0",
+    # bot
+    "requests>=2.31.0",
+    "PyGithub>=2.3.0",
     # migrate
     "beautifulsoup4>=4.12.3",
     "pillow>=10.2.0",
@@ -17,6 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
+bot = "bot:main"
 migrate = "migrate:main"
 migrate-font = "migrate.font:main"
 train = "train:main"
@@ -33,4 +37,4 @@ dev-dependencies = []
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["migrate", "train"]
+packages = ["bot", "migrate", "train"]
