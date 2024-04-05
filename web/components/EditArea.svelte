@@ -1,13 +1,10 @@
 <script>
     import { Button, Input, Spinner } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
+    import symbols from "../../train-out/symbols.json";
     import { imgUrl, inputText, savedSamples, strokes } from "../store";
     import MyButton from "../utils/Button.svelte";
 
-    let symbols = {
-        "fence.l.double": "⧚",
-        "ast.circle": "⊛",
-    };
     let symbolKeys = Object.keys(symbols);
 
     let inputColor = "base";
@@ -53,9 +50,11 @@
     }
 
     async function submit() {
-        let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
-
         isSubmitting = true;
+
+        let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
+        $savedSamples = [];
+
         let form = new FormData();
         form.append("c", JSON.stringify(samples));
         let response = await fetch(`https://corsproxy.io/?${encodeURIComponent("https://pb.mgt.moe/")}`, {
@@ -63,16 +62,15 @@
             body: form,
         });
         let text = await response.text();
-        isSubmitting = false;
-
-        $savedSamples = [];
 
         let pasteUrl = text.match(/url: (.*?)\n/)[1];
         window.open(
             `https://github.com/QuarticCat/detypify-data/issues/new` +
-                `?title=${encodeURIComponent("[Samples] v0.1.0")}` +
-                `&body=${encodeURIComponent(`${pasteUrl}\n\n<!-- Do not modify -->`)}`,
+                `?title=${encodeURIComponent("Samples 0.1.0")}` +
+                `&body=${encodeURIComponent(`${pasteUrl}\n\n<!-- Do not modify, just submit -->`)}`,
         );
+
+        isSubmitting = false;
     }
 
     $: validateInput($inputText);

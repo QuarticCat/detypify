@@ -84,8 +84,8 @@ def main():
     os.makedirs("train-out", exist_ok=True)
     onnx.export(model, torch.randn(1, 1, 32, 32), "train-out/model.onnx")
 
-    classes = [None] * len(orig_data.classes)
     symbols = orjson.loads(open("migrate-out/symbols.json").read())
+    classes = [None] * len(orig_data.classes)
     for sym in symbols:
         if sym["name"] not in orig_data.class_to_idx:
             continue
@@ -102,3 +102,6 @@ def main():
             info.append(("Math Shorthand", sym["math-shorthand"]))
         classes[orig_data.class_to_idx[sym["name"]]] = (logo, info)
     open("train-out/classes.json", "wb").write(orjson.dumps(classes))
+
+    symbols = {s["name"]: chr(s["codepoint"]) for s in symbols}
+    open("train-out/symbols.json", "wb").write(orjson.dumps(symbols))

@@ -8,3 +8,6 @@
 __pycache__/
 
 node_modules/
+
+/*.zsh
+/*.zip

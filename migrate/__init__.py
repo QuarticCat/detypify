@@ -11,6 +11,10 @@ type Strokes = list[list[tuple[float, float]]]
 type StrokesT = list[list[tuple[float, float, int]]]
 
 
+def is_space(c) -> bool:
+    return c.isspace() or c in "\u2060\u200b\u200c\u200d\u200e\u200f"
+
+
 def parse_typ_sym_page() -> list[dict[str, Any]]:
     soup = BeautifulSoup(open("external/typ_sym.html").read(), "html.parser")
     return [
@@ -23,7 +27,7 @@ def parse_typ_sym_page() -> list[dict[str, Any]]:
             "alternates": li.get_attribute_list("data-alternates", []),
         }
         for li in soup.find_all("li", id=re.compile("^symbol-"))
-        if not chr(int(li["data-codepoint"])).isspace()
+        if not is_space(chr(int(li["data-codepoint"])))
     ]
 
 

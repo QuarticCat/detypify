@@ -1,5 +1,6 @@
 <script>
     import { Hr, Spinner } from "flowbite-svelte";
+    import symbols from "../train-out/symbols.json";
     import "./app.pcss";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
@@ -7,11 +8,6 @@
     import NavBar from "./components/NavBar.svelte";
     import Preview from "./components/Preview.svelte";
     import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
-
-    let symbols = {
-        "fence.l.double": "⧚",
-        "ast.circle": "⊛",
-    };
 </script>
 
 <NavBar />
