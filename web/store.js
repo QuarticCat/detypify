@@ -89,10 +89,8 @@ export const candidates = derived(strokes, async ($strokes, set) => {
 });
 
 export const imgUrl = derived(strokes, ($strokes) => {
-    let blank = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
-
     // not loaded or clear
-    if (!get(isContribMode) || $strokes.length === 0) return blank;
+    if (!get(isContribMode) || $strokes.length === 0) return;
 
     drawToDst($strokes);
     return dstCanvas.toDataURL();

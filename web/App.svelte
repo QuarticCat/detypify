@@ -8,6 +8,8 @@
     import NavBar from "./components/NavBar.svelte";
     import Preview from "./components/Preview.svelte";
     import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
+
+    const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAP7//wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
 </script>
 
 <NavBar />
@@ -28,10 +30,10 @@
                 <Candidate {logo} {info} />
             {/each}
         {:else}
-            <Preview logo={symbols[$inputText] ?? "�"} imgUrl={$imgUrl} />
+            <Preview logo={symbols[$inputText] ?? ""} imgUrl={$imgUrl ?? BLANK} />
             <Hr classHr="w-[240px] h-2 rounded mx-auto" />
             {#each $savedSamples as { id, logo, imgUrl } (id)}
-                <Preview {id} {logo} {imgUrl} closeable />
+                <Preview {id} {logo} {imgUrl} />
             {/each}
         {/if}
     </div>

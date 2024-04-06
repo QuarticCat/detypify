@@ -5,8 +5,8 @@
     import Card from "../utils/Card.svelte";
     import { savedSamples } from "../store";
 
-    export let id, imgUrl, logo;
-    export let closeable = false;
+    export let id = null;
+    export let imgUrl, logo;
 
     function deleteSelf() {
         $savedSamples = $savedSamples.filter((s) => s.id !== id);
@@ -20,7 +20,7 @@
     <Hr classHr="w-12 h-1 rounded" />
     <Avatar rounded size="lg" src={imgUrl} />
 
-    <Button class="absolute right-1 top-1 p-2 {closeable ? '' : 'hidden'}" on:click={deleteSelf}>
+    <Button class="absolute right-1 top-1 p-2 {id === null ? 'hidden' : ''}" on:click={deleteSelf}>
         <CloseOutline class="size-6" />
         <Tooltip class="dark:bg-gray-900">Delete</Tooltip>
     </Button>

@@ -5,15 +5,14 @@
     import { imgUrl, inputText, savedSamples, strokes } from "../store";
     import MyButton from "../utils/Button.svelte";
 
+    // Ref: https://github.com/toeverything/blocksuite/blob/master/packages/framework/global/src/env/index.ts
+    const IS_SAFARI = window.navigator && /Apple Computer/.test(window.navigator.vendor);
+
     let symbolKeys = Object.keys(symbols);
 
     let inputColor = "base";
     let disableSave = true;
     let disableSubmit = true;
-
-    let sampleId = 0;
-
-    let isSubmitting = false;
 
     function validateInput(input) {
         if (input === "") {
@@ -26,14 +25,11 @@
     }
 
     function refreshInput() {
-        let oldInput = $inputText;
-        let newInput;
-        do {
-            newInput = symbolKeys[(symbolKeys.length * Math.random()) << 0];
-        } while (newInput === oldInput);
-        $inputText = newInput;
+        let old = $inputText;
+        while (($inputText = symbolKeys[(symbolKeys.length * Math.random()) << 0]) === old);
     }
 
+    let sampleId = 0;
     function save() {
         $savedSamples = [
             {
@@ -49,40 +45,24 @@
         $strokes = [];
     }
 
-    // async function submit() {
-    //     isSubmitting = true;
+    let copyText = "Copy";
+    async function copyOnSafari() {
+        await navigator.clipboard.writeText(JSON.stringify(samples));
+        copyText = "Copied!";
+        setTimeout(() => (copyText = "Copy"), 500);
+    }
 
-    //     let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
-    //     $savedSamples = [];
-
-    //     let form = new FormData();
-    //     form.append("c", JSON.stringify(samples));
-    //     let response = await fetch(`https://corsproxy.io/?${encodeURIComponent("https://pb.mgt.moe/")}`, {
-    //         method: "POST",
-    //         body: form,
-    //     });
-    //     let text = await response.text();
-
-    //     let pasteUrl = text.match(/url: (.*?)\n/)[1];
-    //     window.open(
-    //         `https://github.com/QuarticCat/detypify-data/issues/new` +
-    //             `?title=${encodeURIComponent("Samples 0.1.0")}` +
-    //             `&body=${encodeURIComponent(`${pasteUrl}\n\n<!-- Do not modify, just submit -->`)}`,
-    //     );
-
-    //     isSubmitting = false;
-    // }
-
+    let isSubmitting = false;
     async function submit() {
         isSubmitting = true;
 
         let samples = $savedSamples.map(({ name, strokes }) => [name, strokes]);
         $savedSamples = [];
 
-        await navigator.clipboard.writeText(JSON.stringify(samples));
+        if (!IS_SAFARI) await navigator.clipboard.writeText(JSON.stringify(samples));
         let title = encodeURIComponent("Samples 0.2.0");
         let body = encodeURIComponent(`<!--
-- Data has been saved to your clipboard
+- Data has been saved to your clipboard (Safari users need to click copy button)
 - Paste it below and submit
 - Don't modify the title or add extra description (use comments instead)
 -->\n`);
@@ -97,14 +77,17 @@
 </script>
 
 <div>
-    <Input type="text" placeholder="Symbol Name" color={inputColor} bind:value={$inputText}>
+    <Input type="text" placeholder="Symbol" color={inputColor} bind:value={$inputText}>
         <MyButton slot="right" on:click={refreshInput}><RefreshOutline /></MyButton>
     </Input>
 </div>
 
-<div class="flex justify-around">
-    <Button class="w-5/12" disabled={disableSave} on:click={save}>Save</Button>
-    <Button class="w-5/12" disabled={disableSubmit} on:click={submit}>
+<div class="flex justify-around gap-4">
+    <Button class="w-full" disabled={disableSave} on:click={save}>Save</Button>
+    {#if IS_SAFARI}
+        <Button class="w-full" disabled={disableSubmit} on:click={copyOnSafari}>{copyText}</Button>
+    {/if}
+    <Button class="w-full" disabled={disableSubmit} on:click={submit}>
         {#if isSubmitting}
             <Spinner size="5" />
         {:else}
