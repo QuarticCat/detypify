@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw
 
 type Strokes = list[list[tuple[float, float]]]
 
-IMAGE_SIZE = 32  # px
+IMG_SIZE = 32  # px
 
 
 def is_space(c) -> bool:
@@ -76,15 +76,15 @@ def normalize(strokes: Strokes) -> Optional[Strokes]:
     width *= 1.2  # leave margin to avoid edge cases
     zero_x = (max_x + min_x - width) / 2
     zero_y = (max_y + min_y - width) / 2
-    scale = IMAGE_SIZE / width
+    scale = IMG_SIZE / width
 
     return [
         [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
     ]
 
 
-def draw(strokes: Strokes) -> Image.Image:
-    image = Image.new("1", (IMAGE_SIZE, IMAGE_SIZE), 1)
+def draw_to_img(strokes: Strokes) -> Image.Image:
+    image = Image.new("1", (IMG_SIZE, IMG_SIZE), 1)
     draw = ImageDraw.Draw(image)
     for stroke in strokes:
         draw.line(stroke)
@@ -111,4 +111,4 @@ def main():
         if strokes is None:
             continue
         os.makedirs(f"migrate-out/data/{typ}", exist_ok=True)
-        draw(strokes).save(f"migrate-out/data/{typ}/{i}.png")
+        draw_to_img(strokes).save(f"migrate-out/data/{typ}/{i}.png")

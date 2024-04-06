@@ -1,13 +1,16 @@
+import csv
 import os
 import shutil
-import csv
 from getpass import getpass
 
-import requests
 import orjson
 from github import Auth, Github
+from PIL import Image, ImageDraw, ImageFont
 
-from migrate import normalize, draw
+from migrate import draw_to_img
+from migrate import normalize, parse_typ_sym_page
+
+REF_SIZE = 100  # px
 
 
 def main():
@@ -15,33 +18,52 @@ def main():
     gh = Github(auth=Auth.Token(token))
     repo = gh.get_repo("QuarticCat/detypify-data")
 
-    print("Downloading samples...")
+    print("\n### Downloading samples...")
     all_samples = {}
     for issue in repo.get_issues(state="open"):
-        if not issue.title.startswith("Samples"):
+        if issue.title != "Samples 0.2.0":
             continue
-        pb_url = issue.body.splitlines()[0]
-        all_samples[issue.number] = requests.get(pb_url).json()
+        body = issue.body
+        json = body[body.find("[") : body.rfind("]") + 1]
+        try:
+            all_samples[issue.number] = orjson.loads(json)
+        except Exception:
+            print(f"- parse failed: #{issue.number}")
 
-    print("Generating images...")
+    print("\n### Generating images...")
     shutil.rmtree("bot-out", ignore_errors=True)
     os.mkdir("bot-out")
     for num, samples in all_samples.items():
         for idx, [name, strokes] in enumerate(samples):
             os.makedirs(f"bot-out/{name}", exist_ok=True)
-            draw(normalize(strokes)).save(f"bot-out/{name}/{num}-{idx}.png")
+            img = draw_to_img(normalize(strokes))
+            img.save(f"bot-out/{name}/{num}.{idx}.png")
 
-    print("Go through bot-out folder and delete unwanted images")
+    print("\n### Generating references...")
+    sym_map = {x["name"]: chr(x["codepoint"]) for x in parse_typ_sym_page()}
+    for name in os.listdir("bot-out"):
+        text = sym_map[name]
+        img = Image.new("1", (100, 100), 1)
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype("external/NewCMMath-Regular.otf", size=80)
+        _, _, w, h = draw.textbbox((0, 0), text, font=font)
+        draw.text(((REF_SIZE - w) / 2, (REF_SIZE - h) / 2), text, font=font)
+        img.save(f"bot-out/{name}/_ref.png")
+
+    print("\n### Go through bot-out folder and delete unwanted images")
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
 
-    print("Collecting wanted samples...")
+    print("\n### Collecting wanted samples...")
     for name in os.listdir("bot-out"):
         for file in os.listdir(f"bot-out/{name}"):
-            num, idx = file.split(".")[0].split("-")
-            name, strokes = all_samples[int(num)][int(idx)]
+            if file == "_ref.png":
+                continue
+            num, idx, _ = file.split(".")
+            _, strokes = all_samples[int(num)][int(idx)]
             writer = csv.writer(open(f"data/dataset/{name}.csv", "a"))
             writer.writerow([num, idx, orjson.dumps(strokes).decode()])
 
-    print("Here's the generated commit message:")
-    print(", ".join([f"close #{n}" for n in all_samples.keys()]))
+    details = ", ".join([f"close #{n}" for n in all_samples.keys()])
+    print("\n### Here's the generated commit message:")
+    print(rf"<<< $'merge contributions\n\n{details}'")

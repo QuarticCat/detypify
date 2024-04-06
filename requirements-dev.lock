@@ -90,7 +90,6 @@ pyjwt==2.8.0
 pynacl==1.5.0
     # via pygithub
 requests==2.31.0
-    # via detypify
     # via pygithub
 soupsieve==2.5
     # via beautifulsoup4

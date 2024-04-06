@@ -6,7 +6,6 @@ dependencies = [
     # common
     "orjson>=3.10.0",
     # bot
-    "requests>=2.31.0",
     "PyGithub>=2.3.0",
     # migrate
     "beautifulsoup4>=4.12.3",
