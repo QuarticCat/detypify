@@ -80,11 +80,13 @@
         $savedSamples = [];
 
         await navigator.clipboard.writeText(JSON.stringify(samples));
-        window.open(
-            `https://github.com/QuarticCat/detypify-data/issues/new` +
-                `?title=${encodeURIComponent("Samples 0.2.0")}` +
-                `&body=${encodeURIComponent(`<!-- Data has been saved to your clipboard. Paste them below this line and submit. -->\n`)}`,
-        );
+        let title = encodeURIComponent("Samples 0.2.0");
+        let body = encodeURIComponent(`<!--
+- Data has been saved to your clipboard
+- Paste it below and submit
+- Don't modify the title or add extra description (use comments instead)
+-->\n`);
+        window.open(`https://github.com/QuarticCat/detypify-data/issues/new?title=${title}&body=${body}`);
 
         isSubmitting = false;
     }

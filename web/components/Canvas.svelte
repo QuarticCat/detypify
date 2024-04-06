@@ -29,12 +29,19 @@
 
     function drawStart({ offsetX, offsetY }) {
         isDrawing = true;
+
+        offsetX = Math.round(offsetX);
+        offsetY = Math.round(offsetY);
+
         currP = [offsetX, offsetY];
         stroke = [currP];
     }
 
     function drawMove({ offsetX, offsetY }) {
         if (!isDrawing) return;
+
+        offsetX = Math.round(offsetX);
+        offsetY = Math.round(offsetY);
 
         srcCtx.beginPath();
         srcCtx.moveTo(currP[0], currP[1]);
