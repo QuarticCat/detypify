@@ -2,6 +2,7 @@
     import { Hr, Spinner } from "flowbite-svelte";
     import symbols from "../train-out/symbols.json";
     import "./app.pcss";
+    import Alert from "./components/Alert.svelte";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
     import ContribPanel from "./components/ContribPanel.svelte";
@@ -18,7 +19,9 @@
     <div class="hidden md:block"></div>
     <div class="w-[320px] space-y-4">
         <Canvas />
-        {#if $isContribMode}
+        {#if !$isContribMode}
+            <Alert />
+        {:else}
             <ContribPanel />
         {/if}
     </div>
