@@ -2,12 +2,17 @@
     "name": "detypify",
     "version": "0.2.1",
     "type": "module",
+    "workspaces": [
+        "worker"
+    ],
     "scripts": {
         "dev": "vite dev",
         "build": "vite build",
         "preview": "vite preview",
-        "lint": "prettier --ignore-path .gitignore --check .",
-        "format": "prettier --ignore-path .gitignore --write ."
+        "worker:dev": "bun run --cwd worker dev",
+        "worker:deploy": "bun run --cwd worker deploy",
+        "lint": "prettier --check .",
+        "format": "prettier --write ."
     },
     "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^3.0.2",

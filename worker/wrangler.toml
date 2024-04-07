@@ -1,0 +1,10 @@
+name = "detypify"
+main = "main.js"
+minify = true
+compatibility_date = "2024-04-05"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "detypify"
+database_id = "440614c0-0265-4051-ae67-cec65b5b5c00"

@@ -4,7 +4,7 @@
     import "./app.pcss";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
-    import EditArea from "./components/EditArea.svelte";
+    import ContribPanel from "./components/ContribPanel.svelte";
     import NavBar from "./components/NavBar.svelte";
     import Preview from "./components/Preview.svelte";
     import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
@@ -19,7 +19,7 @@
     <div class="w-[320px] space-y-4">
         <Canvas />
         {#if $isContribMode}
-            <EditArea />
+            <ContribPanel />
         {/if}
     </div>
     <div class="w-[360px] space-y-4 text-center">
