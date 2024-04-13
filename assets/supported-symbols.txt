@@ -102,6 +102,7 @@ arrow.t.b.double
 arrow.t.double
 arrow.tl
 arrow.tr
+arrow.zigzag
 arrows.bb
 arrows.ll
 arrows.lr
@@ -111,6 +112,7 @@ arrows.tt
 ast.circle
 at
 backslash
+bar.v.broken
 bar.v.double
 because
 beta
@@ -128,6 +130,7 @@ colon
 complement
 compose
 copyright
+copyright.sound
 dagger
 dagger.double
 dash.circle
@@ -154,6 +157,7 @@ dotless.j
 dots.down
 dots.h
 dots.h.c
+dots.up
 dots.v
 ell
 epsilon
@@ -164,6 +168,7 @@ eq.prec
 eq.succ
 equiv
 eta
+euro
 exists
 exists.not
 forall
@@ -261,6 +266,7 @@ or.curly
 parallel
 parallel.not
 percent
+permille
 perp
 phi
 phi.alt
@@ -289,10 +295,15 @@ product.co
 prop
 psi
 qed
+quote.angle.l.double
+quote.angle.l.single
+quote.angle.r.double
+quote.angle.r.single
 quote.l.double
 quote.l.single
 quote.r.double
 quote.r.single
+refmark
 rho
 rho.alt
 sect

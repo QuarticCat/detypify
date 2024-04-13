@@ -8,6 +8,7 @@ dependencies = [
     # bot
     "PyGithub>=2.3.0",
     # migrate
+    "unicodeit>=0.7.5",
     "beautifulsoup4>=4.12.3",
     "pillow>=10.2.0",
     "fonttools[woff]>=4.50.0",

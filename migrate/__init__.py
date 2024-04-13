@@ -6,13 +6,14 @@ from typing import Any, Optional
 import orjson
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
+from unicodeit.data import REPLACEMENTS
 
 type Strokes = list[list[tuple[float, float]]]
 
 IMG_SIZE = 32  # px
 
 
-def is_space(c) -> bool:
+def is_space(c: str) -> bool:
     return c.isspace() or c in "\u2060\u200b\u200c\u200d\u200e\u200f"
 
 
@@ -36,9 +37,7 @@ def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
     label_list = orjson.loads(open("external/symbols.json", "rb").read())
     key_to_tex = {x["id"]: x["command"][1:] for x in label_list}
 
-    unitex_map = open("external/unicode-math-table.tex").read()
-    unitex_map = re.findall(r'"(.*?)}{\\(.*?) ', unitex_map)
-    tex_to_typ = {t: chr(int(u, 16)) for u, t in unitex_map}
+    tex_to_typ = {t[1:]: u for t, u in REPLACEMENTS}
 
     mitex_map = orjson.loads(open("external/default.json", "rb").read())
     for k, v in mitex_map["commands"].items():

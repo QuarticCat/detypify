@@ -105,6 +105,8 @@ torchvision==0.17.1
 typing-extensions==4.10.0
     # via pygithub
     # via torch
+unicodeit==0.7.5
+    # via detypify
 urllib3==2.2.1
     # via pygithub
     # via requests
