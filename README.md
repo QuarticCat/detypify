@@ -50,11 +50,11 @@ $ bun run build  # build for production
 
 1. Install *NewComputerModernMath* font ([guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig))
 
-1. Convert `detypify.svg`
+1. Convert `manuscript.svg`
 
     ```console
     $ cd assets
-    $ inkscape detypify.svg --export-text-to-path --export-filename=logo.svg
+    $ inkscape manuscript.svg --export-text-to-path --export-filename=logo.svg
     $ bunx svgo --multipass logo.svg
     ```
 
