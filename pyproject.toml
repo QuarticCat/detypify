@@ -5,8 +5,6 @@ authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
     # common
     "orjson>=3.10.0",
-    # bot
-    "PyGithub>=2.3.0",
     # migrate
     "unicodeit>=0.7.5",
     "beautifulsoup4>=4.12.3",

@@ -83,7 +83,7 @@ def normalize(strokes: Strokes) -> Optional[Strokes]:
 
 
 def draw_to_img(strokes: Strokes) -> Image.Image:
-    image = Image.new("1", (IMG_SIZE, IMG_SIZE), 1)
+    image = Image.new("1", (IMG_SIZE, IMG_SIZE), "white")
     draw = ImageDraw.Draw(image)
     for stroke in strokes:
         draw.line(stroke)
