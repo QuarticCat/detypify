@@ -37,30 +37,24 @@ def map_sym(typ_sym_info) -> tuple[dict[str, str], set[str]]:
     label_list = orjson.loads(open("external/symbols.json", "rb").read())
     key_to_tex = {x["id"]: x["command"][1:] for x in label_list}
 
-    tex_to_typ = {t[1:]: u for t, u in REPLACEMENTS}
+    uni_to_typ = {chr(x["codepoint"]): x["name"] for x in typ_sym_info}
+    tex_to_typ = {k[1:]: uni_to_typ[v] for k, v in REPLACEMENTS if v in uni_to_typ}
+
+    norm = {x["name"]: x["name"] for x in typ_sym_info} | uni_to_typ
+    norm |= {x["markup-shorthand"]: x["name"] for x in typ_sym_info}
+    norm |= {x["math-shorthand"]: x["name"] for x in typ_sym_info}
 
     mitex_map = orjson.loads(open("external/default.json", "rb").read())
     for k, v in mitex_map["commands"].items():
-        if v["kind"] == "sym":
-            tex_to_typ[k] = k
-        elif v["kind"] == "alias-sym":
-            tex_to_typ[k] = v["alias"]
+        if v["kind"] == "sym" and k in norm:
+            tex_to_typ[k] = norm[k]
+        elif v["kind"] == "alias-sym" and v["alias"] in norm:
+            tex_to_typ[k] = norm[v["alias"]]
 
     extra_map = csv.reader(open("assets/tex_to_typ_extra.csv"))
     tex_to_typ |= {k[1:]: v for k, v in extra_map}
 
-    norm = {x["name"]: x["name"] for x in typ_sym_info}
-    norm |= {chr(x["codepoint"]): x["name"] for x in typ_sym_info}
-    norm |= {x["markup-shorthand"]: x["name"] for x in typ_sym_info}
-    norm |= {x["math-shorthand"]: x["name"] for x in typ_sym_info}
-    del norm[None]
-
-    key_to_typ = {}
-    for k, v in key_to_tex.items():
-        x = norm.get(tex_to_typ.get(v))
-        if x is not None:
-            key_to_typ[k] = x
-    return key_to_typ
+    return {k: tex_to_typ[v] for k, v in key_to_tex.items() if v in tex_to_typ}
 
 
 def normalize(strokes: Strokes) -> Optional[Strokes]:
