@@ -1,15 +1,15 @@
 <script>
     import { Button, Input, Modal, Spinner } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
-    import symbols from "../../train-out/symbols.json";
+    import contribSyms from "../../train-out/contrib.json";
     import { imgUrl, inputText, savedSamples, strokes } from "../store";
     import MyButton from "../utils/Button.svelte";
 
-    let symbolKeys = Object.keys(symbols);
+    let symKeys = Object.keys(contribSyms);
     let inputColor, disableSave, disableSubmit;
 
     function validateInput(input) {
-        if (symbols[input]) {
+        if (contribSyms[input]) {
             inputColor = "green";
         } else {
             inputColor = "red";
@@ -18,7 +18,7 @@
 
     function refreshInput() {
         let old = $inputText;
-        while (($inputText = symbolKeys[(symbolKeys.length * Math.random()) << 0]) === old);
+        while (($inputText = symKeys[(symKeys.length * Math.random()) << 0]) === old);
         $strokes = [];
     }
 
@@ -28,7 +28,7 @@
             {
                 id: sampleId,
                 name: $inputText,
-                logo: symbols[$inputText],
+                logo: contribSyms[$inputText],
                 strokes: $strokes,
                 imgUrl: $imgUrl,
             },

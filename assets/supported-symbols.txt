@@ -37,6 +37,7 @@ XX
 Xi
 YY
 ZZ
+alef
 aleph
 alpha
 amp
@@ -111,8 +112,8 @@ arrows.lr
 arrows.rl
 arrows.rr
 arrows.tt
-ast.basic
 ast.circle
+ast.op
 at
 backslash
 bar.v.broken
@@ -129,9 +130,11 @@ checkmark
 chi
 circle.nested
 circle.stroked.big
+circle.stroked.tiny
 colon
 complement
 compose
+convolve
 copyright
 copyright.sound
 dagger
@@ -163,6 +166,7 @@ dots.h.c
 dots.up
 dots.v
 ell
+emptyset
 epsilon
 epsilon.alt
 eq.delta
@@ -171,6 +175,7 @@ eq.lt
 eq.not
 eq.prec
 eq.succ
+eq.triple
 equiv
 eta
 euro
@@ -179,8 +184,17 @@ exists.not
 forall
 forces
 gamma
+gradient
 gt
 gt.approx
+gt.curly
+gt.curly.approx
+gt.curly.eq
+gt.curly.eq.not
+gt.curly.napprox
+gt.curly.not
+gt.curly.ntilde
+gt.curly.tilde
 gt.dot
 gt.double
 gt.eq
@@ -214,6 +228,7 @@ in
 in.not
 in.rev
 in.rev.small
+infinity
 integral
 integral.cont
 integral.cont.ccw
@@ -233,6 +248,14 @@ lozenge.filled
 lozenge.stroked
 lt
 lt.approx
+lt.curly
+lt.curly.approx
+lt.curly.eq
+lt.curly.eq.not
+lt.curly.napprox
+lt.curly.not
+lt.curly.ntilde
+lt.curly.tilde
 lt.dot
 lt.double
 lt.eq
@@ -271,6 +294,7 @@ or.big
 or.curly
 parallel
 parallel.not
+partial
 percent
 permille
 perp
@@ -347,11 +371,13 @@ supset.eq.not
 supset.eq.sq
 supset.neq
 supset.sq
+tack.b
 tack.l
 tack.r
 tack.r.double
 tack.r.double.not
 tack.r.not
+tack.t
 tau
 therefore
 theta
@@ -397,4 +423,6 @@ upsilon
 without
 wreath
 xi
+xor
+xor.big
 zeta

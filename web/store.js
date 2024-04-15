@@ -1,4 +1,4 @@
-import classes from "../train-out/classes.json";
+import inferSyms from "../train-out/infer.json";
 import modelUrl from "../train-out/model.onnx";
 import { InferenceSession, Tensor, env as ortConfig } from "onnxruntime-web";
 import { writable, derived, get } from "svelte/store";
@@ -38,7 +38,7 @@ function drawToDst($strokes) {
     let dstWidth = dstCanvas.width;
     let width = Math.max(maxX - minX, maxY - minY);
     if (width == 0) return;
-    width *= 1.2;
+    width = width * 1.2 + 20;
     let zeroX = (minX + maxX - width) / 2;
     let zeroY = (minY + maxY - width) / 2;
     let scale = dstWidth / width;
@@ -85,7 +85,7 @@ export const candidates = derived(strokes, async ($strokes, set) => {
     // select top K
     let withIdx = output.map((x, i) => [x, i]);
     withIdx.sort((a, b) => b[0] - a[0]);
-    set(withIdx.slice(0, 5).map(([_, i]) => classes[i]));
+    set(withIdx.slice(0, 5).map(([_, i]) => inferSyms[i]));
 });
 
 export const imgUrl = derived(strokes, ($strokes) => {

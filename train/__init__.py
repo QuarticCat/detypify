@@ -85,23 +85,19 @@ def main():
     onnx.export(model, torch.randn(1, 1, 32, 32), "train-out/model.onnx")
 
     symbols = orjson.loads(open("migrate-out/symbols.json", "rb").read())
-    classes = [None] * len(orig_data.classes)
-    for sym in symbols:
-        if sym["name"] not in orig_data.class_to_idx:
-            continue
-        logo = chr(sym["codepoint"])
-        info = [
-            ("Name", sym["name"]),
-            ("Escape", "\\u" + f"{{{sym['codepoint']:0>4X}}}"),
-        ]
+    code_to_sym = {s["codepoint"]: s for s in symbols}
+    infer = []
+    for c in orig_data.classes:
+        sym = code_to_sym[int(c)]
+        info = {"names": sym["names"], "codepoint": sym["codepoint"]}
         if sym["markup-shorthand"] and sym["math-shorthand"]:
-            info.append(("Shorthand", sym["markup-shorthand"]))
+            info["shorthand"] = sym["markup-shorthand"]
         elif sym["markup-shorthand"]:
-            info.append(("Markup Shorthand", sym["markup-shorthand"]))
+            info["markupShorthand"] = sym["markup-shorthand"]
         elif sym["math-shorthand"]:
-            info.append(("Math Shorthand", sym["math-shorthand"]))
-        classes[orig_data.class_to_idx[sym["name"]]] = (logo, info)
-    open("train-out/classes.json", "wb").write(orjson.dumps(classes))
+            info["mathShorthand"] = sym["math-shorthand"]
+        infer.append(info)
+    open("train-out/infer.json", "wb").write(orjson.dumps(infer))
 
-    symbols = {s["name"]: chr(s["codepoint"]) for s in symbols}
-    open("train-out/symbols.json", "wb").write(orjson.dumps(symbols))
+    contrib = {n: chr(s["codepoint"]) for s in symbols for n in s["names"]}
+    open("train-out/contrib.json", "wb").write(orjson.dumps(contrib))

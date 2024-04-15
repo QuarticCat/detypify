@@ -11,7 +11,7 @@
 
 - **PWA**: installable and works offline
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run
-- **Decent symbol set**: support 350+ symbols
+- **Decent symbol set**: support 400+ symbols
 
 ## Development
 

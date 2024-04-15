@@ -1,6 +1,6 @@
 <script>
     import { Hr, Spinner } from "flowbite-svelte";
-    import symbols from "../train-out/symbols.json";
+    import contribSyms from "../train-out/contrib.json";
     import "./app.pcss";
     import Alert from "./components/Alert.svelte";
     import Candidate from "./components/Candidate.svelte";
@@ -29,11 +29,11 @@
         {#if !$session}
             <Spinner size="12" />
         {:else if !$isContribMode}
-            {#each $candidates as [logo, info]}
-                <Candidate {logo} {info} />
+            {#each $candidates as info}
+                <Candidate {info} />
             {/each}
         {:else}
-            <Preview logo={symbols[$inputText] ?? ""} imgUrl={$imgUrl ?? BLANK} />
+            <Preview logo={contribSyms[$inputText] ?? ""} imgUrl={$imgUrl ?? BLANK} />
             <Hr classHr="w-[240px] h-2 rounded mx-auto" />
             {#each $savedSamples as { id, logo, imgUrl } (id)}
                 <Preview {id} {logo} {imgUrl} />

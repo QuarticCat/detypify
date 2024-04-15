@@ -4,5 +4,5 @@
 </script>
 
 <Alert color="blue" border dismissable>
-    Cannot identify your symbol? Click <FireSolid class="inline size-4 align-text-top" /> to help us improve our dataset!
+    Cannot identify your symbol? Click <FireSolid class="inline size-4 align-[-3px]" /> to help us improve our dataset!
 </Alert>
