@@ -13,6 +13,15 @@
 - **Tiny model**: 1.1 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
+## News
+
+- 2024-04-06: This project has been integrated into Tinymist. [🔗](https://github.com/Myriad-Dreamin/tinymist/releases/tag/v0.11.3)
+
+## Associated Repos
+
+- [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contribution on the website finally goes here)
+- [detypify-external](https://github.com/QuarticCat/detypify-external): Necessary external data to bootstrap Detypify
+
 ## Development
 
 If you want to build `migrate` or `train`, you need to pull submodules. ([Git LFS](https://git-lfs.com/) is required)
@@ -23,7 +32,7 @@ $ git submodule update --init --recursive
 
 If you just want to build `web`, you can download `train-out.zip` from releases and extract it to project folder.
 
-### Migration
+### Migrating
 
 ```console
 $ rye sync              # install venv and denpendencies
