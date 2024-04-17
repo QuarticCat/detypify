@@ -2,7 +2,7 @@
     <img src="./assets/logo.svg" alt="logo" width="150"/>
     <h1>Detypify</h1>
     <p>
-        Can't remember Typst symbols?
+        Can't remember some Typst symbol?
         <a href="https://detypify.quarticcat.com/">Draw it!</a>
     </p>
 </div>
@@ -10,7 +10,7 @@
 ## Features
 
 - **PWA**: installable and works offline
-- **Tiny model**: 1.1 MiB (ONNX), fast to load and run
+- **Tiny model**: 1.3 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
 ## News
@@ -19,7 +19,7 @@
 
 ## Associated Repos
 
-- [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contribution on the website finally goes here)
+- [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contributions on the website finally go here)
 - [detypify-external](https://github.com/QuarticCat/detypify-external): Necessary external data to bootstrap Detypify
 
 ## Development
