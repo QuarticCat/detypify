@@ -1,6 +1,6 @@
-import csv
 import os
 import re
+# import string
 from typing import Any, Optional
 
 import orjson
@@ -17,9 +17,24 @@ def is_space(c: str) -> bool:
     return c.isspace() or c in "\u2060\u200b\u200c\u200d\u200e\u200f"
 
 
-def parse_typ_sym_page() -> list[dict[str, Any]]:
+def get_typ_sym_info() -> list[dict[str, Any]]:
     soup = BeautifulSoup(open("external/typ_sym.html").read(), "html.parser")
+
     sym_info = {}
+
+    # tex_to_uni = {k[1:]: v for k, v in REPLACEMENTS}
+    # for style in ["frak", "bb", "cal"]:
+    #     for c in string.ascii_letters:
+    #         codepoint = ord(tex_to_uni[f"math{style}{{{c}}}"])
+    #         sym_info[codepoint] = {
+    #             "names": [f"{style}({c})"],
+    #             "codepoint": codepoint,
+    #             "markup-shorthand": None,
+    #             "math-shorthand": None,
+    #             "accent": False,
+    #             "alternates": [],
+    #         }
+
     for li in soup.find_all("li", id=re.compile("^symbol-")):
         codepoint = int(li["data-codepoint"])
         if is_space(chr(codepoint)):
@@ -33,8 +48,9 @@ def parse_typ_sym_page() -> list[dict[str, Any]]:
                 "markup-shorthand": li.get("data-markup-shorthand"),
                 "math-shorthand": li.get("data-math-shorthand"),
                 "accent": li.get("data-accent") == "true",
-                "alternates": li.get_attribute_list("data-alternates", []),
+                "alternates": li.get("data-alternates", "").split(),
             }
+
     return list(sym_info.values())
 
 
@@ -56,8 +72,8 @@ def map_sym(typ_sym_info) -> dict[str, dict]:
         elif v["kind"] == "alias-sym" and v["alias"] in norm:
             tex_to_typ[k] = norm[v["alias"]]
 
-    extra_map = csv.reader(open("assets/tex_to_typ_extra.csv"))
-    tex_to_typ |= {k[1:]: norm[v] for k, v in extra_map}
+    tex_to_typ["bowtie"] = norm["join"]
+    tex_to_typ["MVAt"] = norm["at"]
 
     return {k: tex_to_typ[v] for k, v in key_to_tex.items() if v in tex_to_typ}
 
@@ -92,7 +108,7 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
 def main():
     os.makedirs("migrate-out", exist_ok=True)
 
-    typ_sym_info = parse_typ_sym_page()
+    typ_sym_info = get_typ_sym_info()
     key_to_typ = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x["names"]))
 

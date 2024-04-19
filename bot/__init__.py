@@ -4,8 +4,7 @@ import shutil
 import orjson
 from PIL import Image, ImageDraw, ImageFont
 
-from migrate import draw_to_img
-from migrate import normalize, parse_typ_sym_page
+from migrate import draw_to_img, get_typ_sym_info, normalize
 
 REF_SIZE = 100  # px
 
@@ -20,7 +19,7 @@ def main():
     shutil.rmtree("bot-out", ignore_errors=True)
     os.mkdir("bot-out")
 
-    sym_to_uni = {x["name"]: chr(x["codepoint"]) for x in parse_typ_sym_page()}
+    sym_to_uni = {x["name"]: chr(x["codepoint"]) for x in get_typ_sym_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
         img = draw_to_img(normalize(orjson.loads(strokes)))

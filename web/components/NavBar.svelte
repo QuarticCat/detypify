@@ -66,8 +66,7 @@
         You can click <FireSolid class="inline align-text-top" /> to contribute your drawings to the dataset.
     </P>
     <P>
-        If Detexify supports a symbol but Detypify doesn't, PR to
-        <A href="https://github.com/QuarticCat/detypify/blob/main/assets/tex_to_typ_extra.csv">tex_to_typ_extra.csv</A>.
+        If Detexify supports a symbol but Detypify doesn't, please file an issue.
     </P>
 
     <Heading tag="h4">Want to use it offline?</Heading>

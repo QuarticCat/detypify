@@ -2,13 +2,13 @@ import os
 
 from fontTools import subset
 
-from migrate import parse_typ_sym_page
+from migrate import get_typ_sym_info
 
 
 def main():
     os.makedirs("migrate-out", exist_ok=True)
 
-    typ_sym_info = parse_typ_sym_page()
+    typ_sym_info = get_typ_sym_info()
     text = "".join([chr(x["codepoint"]) for x in typ_sym_info])
 
     subset.main(
