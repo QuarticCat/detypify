@@ -15,7 +15,8 @@
 
 <Card class="relative flex justify-center">
     <Avatar rounded size="lg" class="font-[NewCMMath-Detypify] text-5xl">
-        {logo}
+        <!-- Workaround Safari font rendering issues. -->
+        <span class="m-[-20px] p-[20px]">{logo}</span>
     </Avatar>
     <Hr classHr="w-12 h-1 rounded" />
     <Avatar rounded size="lg" src={imgUrl} />
