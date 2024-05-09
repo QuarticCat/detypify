@@ -1,0 +1,26 @@
+{
+    "name": "detypify-service",
+    "version": "0.2.3-beta.2",
+    "description": "Typst symbol classifier",
+    "license": "MIT",
+    "repository": "github:QuarticCat/detypify",
+    "homepage": "https://detypify.quarticcat.com/",
+    "author": "QuarticCat <QuarticCat@pm.me> (https://github.com/QuarticCat)",
+    "keywords": [
+        "js",
+        "typst",
+        "detypify",
+        "onnxruntime"
+    ],
+    "files": [
+        "train-out",
+        "*.js"
+    ],
+    "type": "module",
+    "scripts": {
+        "copy": "cp -R ../train-out ."
+    },
+    "dependencies": {
+        "onnxruntime-web": "=1.17.1"
+    }
+}

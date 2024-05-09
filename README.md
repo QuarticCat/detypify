@@ -22,6 +22,14 @@
 - [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contributions on the website finally go here)
 - [detypify-external](https://github.com/QuarticCat/detypify-external): Necessary external data to bootstrap Detypify
 
+## Integrate Into Your Project
+
+See [service/README.md](service/README.md).
+
+## Self Deployment
+
+Download `web-out.zip` from releases and host them using any HTTP server.
+
 ## Development
 
 If you want to build `migrate` or `train`, you need to pull submodules. ([Git LFS](https://git-lfs.com/) is required)
@@ -30,7 +38,7 @@ If you want to build `migrate` or `train`, you need to pull submodules. ([Git LF
 $ git submodule update --init --recursive
 ```
 
-If you just want to build `web`, you can download `train-out.zip` from releases and extract it to project folder.
+If you just want to build `web`, you can download `train-out.zip` from releases and extract it to project root.
 
 ### Migrating
 
@@ -50,9 +58,10 @@ $ rye run train  # train
 ### Web Page
 
 ```console
-$ bun install    # install dependencies
-$ bun run dev    # start dev server
-$ bun run build  # build for production
+$ bun run --cwd=service copy  # copy train-out folder
+$ bun install                 # install dependencies
+$ bun run dev                 # start dev server
+$ bun run build               # build for production
 ```
 
 ### Logo & Favicons (Optional)

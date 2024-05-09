@@ -1,16 +1,16 @@
 {
-    "name": "detypify",
+    "name": "detypify-web",
+    "private": true,
     "version": "0.2.3",
     "type": "module",
     "workspaces": [
-        "worker"
+        "worker",
+        "service"
     ],
     "scripts": {
         "dev": "vite dev",
         "build": "vite build",
         "preview": "vite preview",
-        "worker:dev": "bun run --cwd worker dev",
-        "worker:deploy": "bun run --cwd worker deploy",
         "lint": "prettier --check .",
         "format": "prettier --write ."
     },
@@ -21,7 +21,6 @@
         "flowbite": "^2.3.0",
         "flowbite-svelte": "^0.44.24",
         "flowbite-svelte-icons": "^1.5.0",
-        "onnxruntime-web": "=1.17.1",
         "postcss": "^8.4.38",
         "postcss-load-config": "^5.0.3",
         "prettier": "^3.2.5",
@@ -30,7 +29,8 @@
         "svelte": "^4.2.12",
         "tailwindcss": "^3.4.3",
         "vite": "^5.2.7",
-        "vite-plugin-pwa": "^0.19.7"
+        "vite-plugin-pwa": "^0.19.7",
+        "detypify-service": "workspace:*"
     },
     "prettier": {
         "tabWidth": 4,
