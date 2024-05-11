@@ -1,6 +1,6 @@
 {
     "name": "detypify-service",
-    "version": "0.2.3-beta.6",
+    "version": "0.2.4",
     "description": "Typst symbol classifier",
     "license": "MIT",
     "repository": "github:QuarticCat/detypify",
