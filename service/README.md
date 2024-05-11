@@ -12,15 +12,15 @@ Let you integrate Detypify into your own projects easily.
 
 1. This javascript module has only 2 exports:
 
-  - `ortEnv`: Re-export of [`onnxruntime-web.env`](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html). Used to configureonnxruntime.
+    - `ortEnv`: Re-export of [`onnxruntime-web.env`](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html). Used to configure onnxruntime.
 
-    Note: ONNX Runtime Web will request wasm files on the fly. That often causes problems. You might need to configure `ortEnv.wasm.wasmPaths` to a right value.
+      Note: ONNX Runtime Web will request wasm files on the fly. Default URLs are unlikely to match yours. You might need to configure `ortEnv.wasm.wasmPaths`.
 
-  - `Detypify`: The main object.
+    - `Detypify`: The main type.
 
-    - Use `Detypify.load()` to create a session.
+      - Use `Detypify.create()` to create an instance.
 
-    - Use `session.candidates(strokes, k)` to inference top K candidates.
+      - Use `instance.candidates(strokes, k)` to inference top `k` candidates.
 
 
 [Vite](https://vitejs.dev/) is recommended. I'm not sure whether other build tools can resolve bundled assets or not.

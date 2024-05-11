@@ -28,7 +28,7 @@ See [service/README.md](service/README.md).
 
 ## Self Deployment
 
-Download `web-out.zip` from releases and host them using any HTTP server.
+Download files from [gh-pages](https://github.com/QuarticCat/detypify/tree/gh-pages) branch and host them using any HTTP server.
 
 ## Development
 
@@ -38,7 +38,7 @@ If you want to build `migrate` or `train`, you need to pull submodules. ([Git LF
 $ git submodule update --init --recursive
 ```
 
-If you just want to build `web`, you can download `train-out.zip` from releases and extract it to project root.
+If you just want to build `web`, you can download `train-out` from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to project root.
 
 ### Migrating
 

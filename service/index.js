@@ -2,9 +2,21 @@ import inferSyms from "./train-out/infer.json";
 import modelUrl from "./train-out/model.onnx";
 import { InferenceSession, Tensor } from "onnxruntime-web";
 
+// To generate .d.ts:
+//   $ bunx -p typescript *.js --declaration --allowJs --emitDeclarationOnly
+
+/**
+ * @typedef {object} DetypifySymbol
+ * @property {string[]} names
+ * @property {number} codepoint
+ */
+
 export { env as ortEnv } from "onnxruntime-web";
 
 export class Detypify {
+    /**
+     * @param {InferenceSession} sess
+     */
     constructor(sess) {
         this.sess = sess;
 
@@ -18,9 +30,9 @@ export class Detypify {
     /**
      * Load ONNX runtime and the model.
      *
-     * @returns {Detypify}
+     * @returns {Promise<Detypify>}
      */
-    static async load() {
+    static async create() {
         return new Detypify(await InferenceSession.create(modelUrl));
     }
 
@@ -46,16 +58,16 @@ export class Detypify {
         }
 
         // normalize
-        let dstWidth = this.canvas.width;
+        let canvasWidth = this.canvas.width;
         let width = Math.max(maxX - minX, maxY - minY);
         if (width == 0) return;
         width = width * 1.2 + 20;
         let zeroX = (minX + maxX - width) / 2;
         let zeroY = (minY + maxY - width) / 2;
-        let scale = dstWidth / width;
+        let scale = canvasWidth / width;
 
         // draw to inner canvas
-        this.ctx.fillRect(0, 0, dstWidth, dstWidth);
+        this.ctx.fillRect(0, 0, canvasWidth, canvasWidth);
         this.ctx.translate(0.5, 0.5);
         for (let stroke of strokes) {
             this.ctx.beginPath();
@@ -73,15 +85,15 @@ export class Detypify {
      * Inference top `k` candidates.
      *
      * @param {[number, number][][]} strokes
-     * @param {number} [k=5]
-     * @returns {object[]}
+     * @param {number} k
+     * @returns {Promise<DetypifySymbol[]>}
      */
-    async candidates(strokes, k = 5) {
+    async candidates(strokes, k) {
         this.draw(strokes);
 
         // to greyscale
-        let dstWidth = this.canvas.width;
-        let rgba = this.ctx.getImageData(0, 0, dstWidth, dstWidth).data;
+        let canvasWidth = this.canvas.width;
+        let rgba = this.ctx.getImageData(0, 0, canvasWidth, canvasWidth).data;
         let grey = new Float32Array(rgba.length / 4);
         for (let i = 0; i < grey.length; ++i) {
             grey[i] = rgba[i * 4] == 255 ? 1 : 0;
