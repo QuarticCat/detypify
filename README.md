@@ -15,16 +15,16 @@
 
 ## News
 
-- 2024-04-06: This project has been integrated into Tinymist. [🔗](https://github.com/Myriad-Dreamin/tinymist/releases/tag/v0.11.3)
+- 2024-04-06: This project has been integrated into [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
 
 ## Associated Repos
 
 - [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contributions on the website finally go here)
 - [detypify-external](https://github.com/QuarticCat/detypify-external): Necessary external data to bootstrap Detypify
 
-## Integrate Into Your Project
+## Use As A Library
 
-See [service/README.md](service/README.md).
+Use the [detypify-service](https://www.npmjs.com/package/detypify-service) NPM package.
 
 ## Self Deployment
 
@@ -66,9 +66,9 @@ $ bun run build               # build for production
 
 ### Logo & Favicons (Optional)
 
-1. Install *NewComputerModernMath* font ([guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig))
+1. Install *NewComputerModernMath* font ([guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig)).
 
-1. Convert `manuscript.svg`
+1. Convert `manuscript.svg`.
 
     ```console
     $ cd assets
@@ -76,7 +76,9 @@ $ bun run build               # build for production
     $ bunx svgo --multipass logo.svg
     ```
 
-1. Generate favicons by [Favicon InBrowser.App](https://favicon.inbrowser.app/tools/favicon-generator) using `logo.svg`
+1. Generate favicons by [Favicon InBrowser.App](https://favicon.inbrowser.app/tools/favicon-generator) using `logo.svg`.
+
+1. Move them to [web/public/icons](web/public/icons).
 
 ## License
 
