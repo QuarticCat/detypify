@@ -43,16 +43,16 @@ If you just want to build `web`, you can download `train-out` from [NPM](https:/
 ### Migrating
 
 ```console
-$ rye sync              # install venv and denpendencies
-$ rye run migrate       # migrate
-$ rye run migrate-font  # strip font (optional)
+$ uv sync              # install venv and denpendencies
+$ uv run migrate       # migrate
+$ uv run migrate-font  # strip font (optional)
 ```
 
 ### Training
 
 ```console
-$ rye sync       # install venv and denpendencies
-$ rye run train  # train
+$ uv sync       # install venv and denpendencies
+$ uv run train  # train
 ```
 
 ### Web Page
