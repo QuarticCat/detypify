@@ -13,6 +13,9 @@
 - **Tiny model**: 1.3 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
+> [!WARNING]
+> For some unknown reason, the webpage doesn't function properly on Brave.
+
 ## News
 
 - 2024-04-06: This project has been integrated into [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
@@ -64,7 +67,16 @@ $ bun run dev                 # start dev server
 $ bun run build               # build for production
 ```
 
-### Logo & Favicons (Optional)
+### Cloudflare Worker
+
+It collects contributions from the website.
+
+```console
+$ bun run worker:dev     # start dev server
+$ bun run worker:deploy  # deploy to cloudflare
+```
+
+### Logo & Favicons
 
 1. Install *NewComputerModernMath* font ([guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig)).
 
