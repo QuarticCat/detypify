@@ -46,16 +46,16 @@ If you just want to build `web`, you can download `train-out` from [NPM](https:/
 ### Migrating
 
 ```console
-$ uv sync              # install venv and denpendencies
-$ uv run migrate       # migrate
-$ uv run migrate-font  # strip font (optional)
+$ uv sync                        # install venv and dependencies
+$ uv run python/migrate.py       # migrate
+$ uv run python/migrate-font.py  # strip font (optional)
 ```
 
 ### Training
 
 ```console
-$ uv sync       # install venv and denpendencies
-$ uv run train  # train
+$ uv sync                 # install venv and dependencies
+$ uv run python/train.py  # train
 ```
 
 ### Web Page

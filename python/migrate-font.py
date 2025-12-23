@@ -5,7 +5,7 @@ from fontTools import subset
 from migrate import get_typ_sym_info
 
 
-def main():
+if __name__ == "__main__":
     os.makedirs("migrate-out", exist_ok=True)
 
     typ_sym_info = get_typ_sym_info()

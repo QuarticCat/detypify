@@ -9,7 +9,7 @@ from migrate import draw_to_img, get_typ_sym_info, normalize
 REF_SIZE = 100  # px
 
 
-def main():
+if __name__ == "__main__":
     # bunx wrangler d1 execute detypify --remote --command='SELECT * FROM samples' --json > raw.json
 
     samples = orjson.loads(open("raw.json", "rb").read())[0]["results"]

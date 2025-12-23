@@ -44,7 +44,7 @@ def test_loop(dataloader, model, loss_fn):
     print(f"Test>  acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
 
 
-def main():
+if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.set_default_device(device)
 

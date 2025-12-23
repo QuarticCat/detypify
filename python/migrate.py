@@ -1,5 +1,6 @@
 import os
 import re
+
 # import string
 from typing import Any, Optional
 
@@ -105,7 +106,7 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
     return image
 
 
-def main():
+if __name__ == "__main__":
     os.makedirs("migrate-out", exist_ok=True)
 
     typ_sym_info = get_typ_sym_info()
