@@ -1,6 +1,6 @@
 <script>
     import { Hr, Spinner } from "flowbite-svelte";
-    import contribSyms from "../train-out/contrib.json";
+    import contribSyms from "../build/train/contrib.json";
     import "./app.pcss";
     import Alert from "./components/Alert.svelte";
     import Candidate from "./components/Candidate.svelte";

@@ -35,13 +35,13 @@ Download files from [gh-pages](https://github.com/QuarticCat/detypify/tree/gh-pa
 
 ## Development
 
-If you want to build `migrate` or `train`, you need to pull submodules. ([Git LFS](https://git-lfs.com/) is required)
+If you want to train the model, you need to pull submodules. ([Git LFS](https://git-lfs.com/) is required)
 
 ```console
 $ git submodule update --init --recursive
 ```
 
-If you just want to build `web`, you can download `train-out` from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to project root.
+Otherwise, if you just want to develop the webpage, you can download `train` folder from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to `./build/train`.
 
 ### Preprocessing
 
@@ -61,7 +61,7 @@ $ uv run python/train.py  # train
 ### Web Page
 
 ```console
-$ bun run --cwd=service copy  # copy train-out folder
+$ bun run --cwd=service copy  # copy train folder
 $ bun install                 # install dependencies
 $ bun run dev                 # start dev server
 $ bun run build               # build for production

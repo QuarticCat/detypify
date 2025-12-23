@@ -5,7 +5,7 @@ import { VitePWA } from "vite-plugin-pwa";
 export default {
     root: "web",
     build: {
-        outDir: "../web-out",
+        outDir: "../build/web",
         emptyOutDir: true,
     },
     assetsInclude: ["**/*.onnx"],

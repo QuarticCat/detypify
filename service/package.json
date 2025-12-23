@@ -13,13 +13,13 @@
         "onnxruntime"
     ],
     "files": [
-        "train-out",
+        "train",
         "*.js",
         "*.ts"
     ],
     "type": "module",
     "scripts": {
-        "copy": "cp -R ../train-out ."
+        "copy": "cp -R ../build/train ."
     },
     "dependencies": {
         "onnxruntime-web": "=1.17.1"

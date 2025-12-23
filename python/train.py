@@ -10,6 +10,10 @@ from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
 
+from proc_data import OUT_DIR as DATA_DIR
+
+OUT_DIR = "build/train"
+
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     size = len(dataloader.dataset)
@@ -43,7 +47,7 @@ def test_loop(dataloader, model, loss_fn):
 
     test_loss /= num_batches
     correct /= size
-    print(f"Test>  acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
+    print(f" Test> acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
 
 
 if __name__ == "__main__":
@@ -57,7 +61,7 @@ if __name__ == "__main__":
             v2.ToDtype(torch.float32, scale=True),
         ]
     )
-    orig_data = ImageFolder("migrate-out/data", transform)
+    orig_data = ImageFolder(f"{DATA_DIR}/img", transform)
     train_data, test_data = random_split(orig_data, [0.9, 0.1], Generator(device))
     train_loader = DataLoader(train_data, batch_size=64)
     test_loader = DataLoader(test_data, batch_size=64)
@@ -83,11 +87,11 @@ if __name__ == "__main__":
         test_loop(test_loader, model, loss_fn)
         print("-------------------------------------")
 
-    os.makedirs("train-out", exist_ok=True)
+    os.makedirs(OUT_DIR, exist_ok=True)
     prog = onnx.export(model, (torch.randn(1, 1, 32, 32),), dynamo=True)
-    prog.save("train-out/model.onnx")
+    prog.save(f"{OUT_DIR}/model.onnx")
 
-    symbols = orjson.loads(open("migrate-out/symbols.json", "rb").read())
+    symbols = orjson.loads(open(f"{DATA_DIR}/symbols.json", "rb").read())
     code_to_sym = {s["codepoint"]: s for s in symbols}
     infer = []
     for c in orig_data.classes:
@@ -100,7 +104,7 @@ if __name__ == "__main__":
         elif sym["math-shorthand"]:
             info["mathShorthand"] = sym["math-shorthand"]
         infer.append(info)
-    open("train-out/infer.json", "wb").write(orjson.dumps(infer))
+    open(f"{OUT_DIR}/infer.json", "wb").write(orjson.dumps(infer))
 
     contrib = {n: chr(s["codepoint"]) for s in symbols for n in s["names"]}
-    open("train-out/contrib.json", "wb").write(orjson.dumps(contrib))
+    open(f"{OUT_DIR}/contrib.json", "wb").write(orjson.dumps(contrib))

@@ -1,14 +1,11 @@
-bot-out
-migrate-out
-train-out
-web-out
-
 .venv/
 __pycache__/
 
 node_modules/
 .wrangler/
 
+build/
+contrib.json
 /*.zsh
 /*.zip
 

@@ -1,5 +1,5 @@
-import inferSyms from "./train-out/infer.json";
-import modelUrl from "./train-out/model.onnx";
+import inferSyms from "./train/infer.json";
+import modelUrl from "./train/model.onnx";
 import { InferenceSession, Tensor } from "onnxruntime-web";
 
 // To generate .d.ts:

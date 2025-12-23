@@ -6,9 +6,10 @@ from fontTools import subset
 
 from proc_data import get_typ_sym_info
 
+OUT_DIR = "build/font"
 
 if __name__ == "__main__":
-    os.makedirs("migrate-out", exist_ok=True)
+    os.makedirs(OUT_DIR, exist_ok=True)
 
     typ_sym_info = get_typ_sym_info()
     text = "".join([chr(x["codepoint"]) for x in typ_sym_info])
@@ -18,6 +19,6 @@ if __name__ == "__main__":
             "external/NewCMMath-Regular.otf",
             "--text=" + text,
             "--flavor=woff2",
-            "--output-file=migrate-out/NewCMMath-Detypify.woff2",
+            f"--output-file={OUT_DIR}/NewCMMath-Detypify.woff2",
         ]
     )

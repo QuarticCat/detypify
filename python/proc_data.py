@@ -13,6 +13,7 @@ from unicodeit.data import REPLACEMENTS
 
 type Strokes = list[list[tuple[float, float]]]
 
+OUT_DIR = "build/data"
 IMG_SIZE = 32  # px
 
 
@@ -109,13 +110,13 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
 
 
 if __name__ == "__main__":
-    os.makedirs("migrate-out", exist_ok=True)
+    os.makedirs(OUT_DIR, exist_ok=True)
 
     typ_sym_info = get_typ_sym_info()
     key_to_typ = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x["names"]))
 
-    open("migrate-out/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
+    open(f"{OUT_DIR}/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
     detexify_data = orjson.loads(open("external/detexify.json", "rb").read())
@@ -129,5 +130,5 @@ if __name__ == "__main__":
         strokes = normalize(strokes)
         if strokes is None:
             continue
-        os.makedirs(f"migrate-out/data/{typ['codepoint']}", exist_ok=True)
-        draw_to_img(strokes).save(f"migrate-out/data/{typ['codepoint']}/{i}.png")
+        os.makedirs(f"{OUT_DIR}/img/{typ['codepoint']}", exist_ok=True)
+        draw_to_img(strokes).save(f"{OUT_DIR}/img/{typ['codepoint']}/{i}.png")
