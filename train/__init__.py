@@ -41,7 +41,7 @@ def test_loop(dataloader, model, loss_fn):
 
     test_loss /= num_batches
     correct /= size
-    print(f"Test>  acc: {(100*correct):>0.1f}%, avg loss: {test_loss:>8f}")
+    print(f"Test>  acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
 
 
 def main():
@@ -82,7 +82,8 @@ def main():
         print("-------------------------------------")
 
     os.makedirs("train-out", exist_ok=True)
-    onnx.export(model, torch.randn(1, 1, 32, 32), "train-out/model.onnx")
+    prog = onnx.export(model, (torch.randn(1, 1, 32, 32),), dynamo=True)
+    prog.save("train-out/model.onnx")
 
     symbols = orjson.loads(open("migrate-out/symbols.json", "rb").read())
     code_to_sym = {s["codepoint"]: s for s in symbols}

@@ -1,21 +1,22 @@
 [project]
 name = "detypify"
 version = "0.2.4"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
     # common
-    "orjson>=3.10.0",
+    "orjson>=3.11.5",
     # migrate
     "unicodeit>=0.7.5",
-    "beautifulsoup4>=4.12.3",
-    "pillow>=10.2.0",
-    "fonttools[woff]>=4.50.0",
+    "beautifulsoup4>=4.14.3",
+    "pillow>=12.0.0",
+    "fonttools[woff]>=4.61.0",
     # train
-    "torch>=2.2.1",
-    "torchvision>=0.17.1",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
     "torchinfo>=1.8.0",
-    "onnx>=1.16.0",
+    "onnx>=1.20.0",
+    "onnxscript>=0.5.7",
 ]
 
 [project.scripts]
