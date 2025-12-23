@@ -5,7 +5,6 @@ node_modules/
 .wrangler/
 
 build/
-contrib.json
 /*.zsh
 /*.zip
 

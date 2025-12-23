@@ -11,16 +11,23 @@ from proc_data import draw_to_img, get_typ_sym_info, normalize
 OUT_DIR = "build/contrib"
 REF_SIZE = 100  # px
 
+
+def bold(s: str) -> str:
+    return "\033[1m" + s + "\033[0m"
+
+
 if __name__ == "__main__":
-    # bunx wrangler d1 execute detypify --remote --command='SELECT * FROM samples' --json > contrib.json
-
-    samples = orjson.loads(open("contrib.json", "rb").read())[0]["results"]
-
-    print("\n### Generating images...")
-
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
 
+    cmd = "bunx wrangler d1 execute detypify --remote --command='SELECT * FROM samples' --json > build/contrib.json"
+    print("### Run this command to fetch data:")
+    print(f"### $ {bold(cmd)}")
+    while input(">>> Input 'done' to proceed: ") != "done":
+        pass
+    samples = orjson.loads(open("build/contrib.json", "rb").read())[0]["results"]
+
+    print("\n### Generating images...")
     sym_to_uni = {x["names"][0]: chr(x["codepoint"]) for x in get_typ_sym_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
@@ -36,7 +43,7 @@ if __name__ == "__main__":
             draw.text(((REF_SIZE - w) / 2, (REF_SIZE - h) / 2), text, font=font)
             img.save(f"{OUT_DIR}/{sym}-0-0.png")
 
-    print(f"\n### Go through {OUT_DIR} folder and delete unwanted images")
+    print(f"\n### Go through {bold(OUT_DIR)} and delete unwanted images")
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
 
@@ -48,4 +55,6 @@ if __name__ == "__main__":
             strokes = id_to_strokes[int(id_)]
             open(f"data/dataset/{sym}.txt", "a").write(strokes + "\n")
 
-    # bunx wrangler d1 execute detypify --remote --command='DELETE FROM samples WHERE id <= n'
+    cmd = "bunx wrangler d1 execute detypify --remote --command='DELETE FROM samples WHERE id <= n'"
+    print("\n### Run this command to clean data:")
+    print(f"### $ {bold(cmd)}")  # fmt: skip
