@@ -1,8 +1,10 @@
+"""Preprocess font for the webpage."""
+
 import os
 
 from fontTools import subset
 
-from migrate import get_typ_sym_info
+from proc_data import get_typ_sym_info
 
 
 if __name__ == "__main__":

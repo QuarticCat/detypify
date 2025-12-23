@@ -1,10 +1,12 @@
+"""Preprocess contribution from the webpage."""
+
 import os
 import shutil
 
 import orjson
 from PIL import Image, ImageDraw, ImageFont
 
-from migrate import draw_to_img, get_typ_sym_info, normalize
+from proc_data import draw_to_img, get_typ_sym_info, normalize
 
 REF_SIZE = 100  # px
 

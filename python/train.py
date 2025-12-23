@@ -1,3 +1,5 @@
+"""Train the model."""
+
 import os
 
 import orjson

@@ -43,12 +43,12 @@ $ git submodule update --init --recursive
 
 If you just want to build `web`, you can download `train-out` from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to project root.
 
-### Migrating
+### Preprocessing
 
 ```console
-$ uv sync                        # install venv and dependencies
-$ uv run python/migrate.py       # migrate
-$ uv run python/migrate-font.py  # strip font (optional)
+$ uv sync                     # install venv and dependencies
+$ uv run python/proc_data.py  # preprocess data
+$ uv run python/proc_font.py  # preprocess font
 ```
 
 ### Training

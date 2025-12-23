@@ -1,3 +1,5 @@
+"""Preprocess training dataset."""
+
 import os
 import re
 
