@@ -11,7 +11,9 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
 from unicodeit.data import REPLACEMENTS
 
-type Strokes = list[list[tuple[float, float]]]
+type Point = tuple[float, float]
+type Stroke = list[Point]
+type Strokes = list[Stroke]
 
 OUT_DIR = "build/data"
 IMG_SIZE = 32  # px

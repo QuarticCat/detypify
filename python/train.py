@@ -1,21 +1,29 @@
 """Train the model."""
 
 import os
+from typing import Callable
 
 import orjson
 import torch
 import torchinfo
-from torch import Generator, nn, onnx, optim
+from torch import Generator, Tensor, nn, onnx, optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
 
 from proc_data import OUT_DIR as DATA_DIR
 
+type LossFn = Callable[[Tensor, Tensor], Tensor]
+
 OUT_DIR = "build/train"
 
 
-def train_loop(dataloader, model, loss_fn, optimizer):
+def train_loop(
+    dataloader: DataLoader,
+    model: nn.Module,
+    loss_fn: LossFn,
+    optimizer: optim.Optimizer,
+):
     size = len(dataloader.dataset)
     current = 0
     model.train()
@@ -33,7 +41,11 @@ def train_loop(dataloader, model, loss_fn, optimizer):
             print(f"Train> loss: {loss.item():>7f} [{current:>6d}/{size:>6d}]")
 
 
-def test_loop(dataloader, model, loss_fn):
+def test_loop(
+    dataloader: DataLoader,
+    model: nn.Module,
+    loss_fn: LossFn,
+):
     model.eval()
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
@@ -43,11 +55,11 @@ def test_loop(dataloader, model, loss_fn):
         for X, y in dataloader:
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            correct += (pred.argmax(1) == y).float().sum().item()
 
     test_loss /= num_batches
     correct /= size
-    print(f" Test> acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
+    print(f"Test > acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
 
 
 if __name__ == "__main__":
