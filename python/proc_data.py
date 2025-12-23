@@ -3,9 +3,7 @@
 import os
 import re
 
-# import string
-from typing import Any, Optional
-
+import msgspec
 import orjson
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
@@ -19,55 +17,63 @@ OUT_DIR = "build/data"
 IMG_SIZE = 32  # px
 
 
+class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+    names: list[str]
+    codepoint: int
+    markup_shorthand: str | None = None
+    math_shorthand: str | None = None
+    accent: bool = False
+    alternates: list[str] = []
+
+
+class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+    command: str
+    # package: str | None = None
+    # mathmode: bool
+    # textmode: bool
+    id: str
+    # css_class: str
+
+
 def is_space(c: str) -> bool:
     return c.isspace() or c in "\u2060\u200b\u200c\u200d\u200e\u200f"
 
 
-def get_typ_sym_info() -> list[dict[str, Any]]:
+def get_typst_symbol_info() -> list[TypstSymInfo]:
+    """Parse Typst symbol page to get information."""
+
     soup = BeautifulSoup(open("external/typ_sym.html").read(), "html.parser")
-
     sym_info = {}
-
-    # tex_to_uni = {k[1:]: v for k, v in REPLACEMENTS}
-    # for style in ["frak", "bb", "cal"]:
-    #     for c in string.ascii_letters:
-    #         codepoint = ord(tex_to_uni[f"math{style}{{{c}}}"])
-    #         sym_info[codepoint] = {
-    #             "names": [f"{style}({c})"],
-    #             "codepoint": codepoint,
-    #             "markup-shorthand": None,
-    #             "math-shorthand": None,
-    #             "accent": False,
-    #             "alternates": [],
-    #         }
 
     for li in soup.find_all("li", id=re.compile("^symbol-")):
         codepoint = int(li["data-codepoint"])
         if is_space(chr(codepoint)):
+            # We don't care about whitespaces.
             continue
         if codepoint in sym_info:
-            sym_info[codepoint]["names"].append(li["id"][len("symbol-") :])
+            # Repeated symbols. Merge them.
+            sym_info[codepoint].names.append(li["id"][len("symbol-") :])
         else:
-            sym_info[codepoint] = {
-                "names": [li["id"][len("symbol-") :]],
-                "codepoint": codepoint,
-                "markup-shorthand": li.get("data-markup-shorthand"),
-                "math-shorthand": li.get("data-math-shorthand"),
-                "accent": li.get("data-accent") == "true",
-                "alternates": li.get("data-alternates", "").split(),
-            }
+            # New symbols. Add to map.
+            sym_info[codepoint] = TypstSymInfo(
+                names=[li["id"][len("symbol-") :]],
+                codepoint=codepoint,
+                markup_shorthand=li.get("data-markup-shorthand"),
+                math_shorthand=li.get("data-math-shorthand"),
+                accent=li.get("data-accent") == "true",
+                alternates=li.get("data-alternates", "").split(),
+            )
 
     return list(sym_info.values())
 
 
-def map_sym(typ_sym_info) -> dict[str, dict]:
-    label_list = orjson.loads(open("external/symbols.json", "rb").read())
-    key_to_tex = {x["id"]: x["command"][1:] for x in label_list}
+def map_sym(typ_sym_info: list[TypstSymInfo]) -> dict[str, TypstSymInfo]:
+    """Get a mapping from Detexify keys to Typst symbol info."""
 
-    norm = {n: x for x in typ_sym_info for n in x["names"]}
-    norm |= {chr(x["codepoint"]): x for x in typ_sym_info}
-    norm |= {x["markup-shorthand"]: x for x in typ_sym_info}
-    norm |= {x["math-shorthand"]: x for x in typ_sym_info}
+    norm = {n: x for x in typ_sym_info for n in x.names}
+    norm |= {chr(x.codepoint): x for x in typ_sym_info}
+    norm |= {x.markup_shorthand: x for x in typ_sym_info}
+    norm |= {x.math_shorthand: x for x in typ_sym_info}
 
     tex_to_typ = {k[1:]: norm[v] for k, v in REPLACEMENTS if v in norm}
 
@@ -81,10 +87,16 @@ def map_sym(typ_sym_info) -> dict[str, dict]:
     tex_to_typ["bowtie"] = norm["join"]
     tex_to_typ["MVAt"] = norm["at"]
 
-    return {k: tex_to_typ[v] for k, v in key_to_tex.items() if v in tex_to_typ}
+    content = open("external/symbols.json", "rb").read()
+    tex_sym_info = msgspec.json.decode(content, type=list[DetexifySymInfo])
+    return {
+        x.id: tex_to_typ[x.command[1:]]
+        for x in tex_sym_info
+        if x.command[1:] in tex_to_typ
+    }
 
 
-def normalize(strokes: Strokes) -> Optional[Strokes]:
+def normalize(strokes: Strokes) -> Strokes:
     xs = [x for s in strokes for x, _ in s]
     min_x, max_x = min(xs), max(xs)
     ys = [y for s in strokes for _, y in s]
@@ -92,7 +104,7 @@ def normalize(strokes: Strokes) -> Optional[Strokes]:
 
     width = max(max_x - min_x, max_y - min_y)
     if width == 0:
-        return None
+        return []
     width = width * 1.2 + 20  # leave margin to avoid edge cases
     zero_x = (max_x + min_x - width) / 2
     zero_y = (max_y + min_y - width) / 2
@@ -114,11 +126,11 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    typ_sym_info = get_typ_sym_info()
+    typ_sym_info = get_typst_symbol_info()
     key_to_typ = map_sym(typ_sym_info)
-    typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x["names"]))
+    typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x.names))
 
-    open(f"{OUT_DIR}/symbols.json", "wb").write(orjson.dumps(typ_sym_info))
+    open(f"{OUT_DIR}/symbols.json", "wb").write(msgspec.json.encode(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
     detexify_data = orjson.loads(open("external/detexify.json", "rb").read())
@@ -130,7 +142,7 @@ if __name__ == "__main__":
         if len(strokes) == 0:
             continue
         strokes = normalize(strokes)
-        if strokes is None:
+        if len(strokes) == 0:
             continue
-        os.makedirs(f"{OUT_DIR}/img/{typ['codepoint']}", exist_ok=True)
-        draw_to_img(strokes).save(f"{OUT_DIR}/img/{typ['codepoint']}/{i}.png")
+        os.makedirs(f"{OUT_DIR}/img/{typ.codepoint}", exist_ok=True)
+        draw_to_img(strokes).save(f"{OUT_DIR}/img/{typ.codepoint}/{i}.png")

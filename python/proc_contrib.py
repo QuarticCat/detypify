@@ -6,7 +6,7 @@ import shutil
 import orjson
 from PIL import Image, ImageDraw, ImageFont
 
-from proc_data import draw_to_img, get_typ_sym_info, normalize
+from proc_data import draw_to_img, get_typst_symbol_info, normalize
 
 OUT_DIR = "build/contrib"
 REF_SIZE = 100  # px
@@ -28,14 +28,14 @@ if __name__ == "__main__":
     samples = orjson.loads(open("build/contrib.json", "rb").read())[0]["results"]
 
     print("\n### Generating images...")
-    sym_to_uni = {x["names"][0]: chr(x["codepoint"]) for x in get_typ_sym_info()}
+    name_to_chr = {x.names[0]: chr(x.codepoint) for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
         img = draw_to_img(normalize(orjson.loads(strokes)))
         img.save(f"{OUT_DIR}/{sym}-{id_}-{token}.png")
 
         if not os.path.exists(f"{OUT_DIR}/{sym}-0-0.png"):
-            text = sym_to_uni[sym]
+            text = name_to_chr[sym]
             img = Image.new("1", (100, 100), "white")
             draw = ImageDraw.Draw(img)
             font = ImageFont.truetype("external/NewCMMath-Regular.otf", size=80)

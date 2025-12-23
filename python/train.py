@@ -3,6 +3,7 @@
 import os
 from typing import Callable
 
+import msgspec
 import orjson
 import torch
 import torchinfo
@@ -12,6 +13,7 @@ from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
 
 from proc_data import OUT_DIR as DATA_DIR
+from proc_data import TypstSymInfo
 
 type LossFn = Callable[[Tensor, Tensor], Tensor]
 
@@ -103,20 +105,21 @@ if __name__ == "__main__":
     prog = onnx.export(model, (torch.randn(1, 1, 32, 32),), dynamo=True)
     prog.save(f"{OUT_DIR}/model.onnx")
 
-    symbols = orjson.loads(open(f"{DATA_DIR}/symbols.json", "rb").read())
-    code_to_sym = {s["codepoint"]: s for s in symbols}
+    content = open(f"{DATA_DIR}/symbols.json", "rb").read()
+    sym_info = msgspec.json.decode(content, type=list[TypstSymInfo])
+    code_to_sym = {s.codepoint: s for s in sym_info}
     infer = []
     for c in orig_data.classes:
         sym = code_to_sym[int(c)]
-        info = {"names": sym["names"], "codepoint": sym["codepoint"]}
-        if sym["markup-shorthand"] and sym["math-shorthand"]:
-            info["shorthand"] = sym["markup-shorthand"]
-        elif sym["markup-shorthand"]:
-            info["markupShorthand"] = sym["markup-shorthand"]
-        elif sym["math-shorthand"]:
-            info["mathShorthand"] = sym["math-shorthand"]
+        info = {"names": sym.names, "codepoint": sym.codepoint}
+        if sym.markup_shorthand and sym.math_shorthand:
+            info["shorthand"] = sym.markup_shorthand
+        elif sym.markup_shorthand:
+            info["markupShorthand"] = sym.markup_shorthand
+        elif sym.math_shorthand:
+            info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
     open(f"{OUT_DIR}/infer.json", "wb").write(orjson.dumps(infer))
 
-    contrib = {n: chr(s["codepoint"]) for s in symbols for n in s["names"]}
+    contrib = {n: chr(s.codepoint) for s in sym_info for n in s.names}
     open(f"{OUT_DIR}/contrib.json", "wb").write(orjson.dumps(contrib))
