@@ -75,6 +75,7 @@ if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
 
     # Prepare data.
+    num_workers = os.process_cpu_count() or 1
     transforms = [
         v2.Grayscale(),
         v2.PILToTensor(),
@@ -85,13 +86,13 @@ if __name__ == "__main__":
     train_loader = DataLoader(
         train_data,
         batch_size=128,
-        num_workers=8,
+        num_workers=num_workers,
         pin_memory=True,
     )
     test_loader = DataLoader(
         test_data,
         batch_size=128,
-        num_workers=8,
+        num_workers=num_workers,
         pin_memory=True,
     )
 
