@@ -107,11 +107,11 @@ if __name__ == "__main__":
 
     content = open(f"{DATA_DIR}/symbols.json", "rb").read()
     sym_info = msgspec.json.decode(content, type=list[TypstSymInfo])
-    code_to_sym = {s.codepoint: s for s in sym_info}
+    chr_to_sym = {s.char: s for s in sym_info}
     infer = []
     for c in orig_data.classes:
-        sym = code_to_sym[int(c)]
-        info = {"names": sym.names, "codepoint": sym.codepoint}
+        sym = chr_to_sym[chr(int(c))]
+        info = {"char": sym.char, "names": sym.names}
         if sym.markup_shorthand and sym.math_shorthand:
             info["shorthand"] = sym.markup_shorthand
         elif sym.markup_shorthand:
@@ -121,5 +121,5 @@ if __name__ == "__main__":
         infer.append(info)
     open(f"{OUT_DIR}/infer.json", "wb").write(orjson.dumps(infer))
 
-    contrib = {n: chr(s.codepoint) for s in sym_info for n in s.names}
+    contrib = {n: s.char for s in sym_info for n in s.names}
     open(f"{OUT_DIR}/contrib.json", "wb").write(orjson.dumps(contrib))

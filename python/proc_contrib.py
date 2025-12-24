@@ -20,15 +20,15 @@ if __name__ == "__main__":
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    cmd = "bunx wrangler d1 execute detypify --remote --command='SELECT * FROM samples' --json > build/contrib.json"
+    cmd = "bunx wrangler d1 execute detypify --remote --command='SELECT * FROM samples' --json > build/dataset.json"
     print("### Run this command to fetch data:")
     print(f"### $ {bold(cmd)}")
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
-    samples = orjson.loads(open("build/contrib.json", "rb").read())[0]["results"]
+    samples = orjson.loads(open("build/dataset.json", "rb").read())[0]["results"]
 
     print("\n### Generating images...")
-    name_to_chr = {x.names[0]: chr(x.codepoint) for x in get_typst_symbol_info()}
+    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
         img = draw_to_img(normalize(orjson.loads(strokes)))

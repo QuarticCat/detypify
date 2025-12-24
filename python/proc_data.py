@@ -132,9 +132,9 @@ TEX_TO_TYP = {
 
 
 class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+    char: str
     names: list[str]
     latex_name: str | None = None
-    codepoint: int
     markup_shorthand: str | None = None
     math_shorthand: str | None = None
     accent: bool = False
@@ -161,19 +161,20 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     sym_info = {}
 
     for li in soup.find_all("li", id=re.compile("^symbol-")):
-        codepoint = ord(li["data-value"][0])
-        if is_invisible(chr(codepoint)) or li.get("data-deprecation"):
+        name = li["id"][len("symbol-") :]
+        char = li["data-value"][0]
+        if is_invisible(char) or li.get("data-deprecation"):
             # We don't care about invisible chars and deprecated names.
             continue
-        elif codepoint in sym_info:
+        elif char in sym_info:
             # Repeated symbols. Merge names.
-            sym_info[codepoint].names.append(li["id"][len("symbol-") :])
+            sym_info[char].names.append(name)
         else:
             # New symbols. Add to map.
-            sym_info[codepoint] = TypstSymInfo(
-                names=[li["id"][len("symbol-") :]],
+            sym_info[char] = TypstSymInfo(
+                char=char,
+                names=[name],
                 latex_name=li.get("data-latex-name"),
-                codepoint=codepoint,
                 markup_shorthand=li.get("data-markup-shorthand"),
                 math_shorthand=li.get("data-math-shorthand"),
                 accent=li.get("data-accent") == "true",
@@ -246,5 +247,5 @@ if __name__ == "__main__":
         strokes = normalize(strokes)
         if len(strokes) == 0:
             continue
-        os.makedirs(f"{OUT_DIR}/img/{typ.codepoint}", exist_ok=True)
-        draw_to_img(strokes).save(f"{OUT_DIR}/img/{typ.codepoint}/{i}.png")
+        os.makedirs(f"{OUT_DIR}/img/{ord(typ.char)}", exist_ok=True)
+        draw_to_img(strokes).save(f"{OUT_DIR}/img/{ord(typ.char)}/{i}.png")
