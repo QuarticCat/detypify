@@ -8,7 +8,6 @@ dependencies = [
     "orjson>=3.11.5",
     "msgspec>=0.20.0",
     # migrate
-    "unicodeit>=0.7.5",
     "beautifulsoup4>=4.14.3",
     "pillow>=12.0.0",
     "fonttools[woff]>=4.61.0",

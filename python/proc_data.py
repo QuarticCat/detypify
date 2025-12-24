@@ -2,12 +2,12 @@
 
 import os
 import re
+import unicodedata
 
 import msgspec
 import orjson
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
-from unicodeit.data import REPLACEMENTS
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -16,9 +16,124 @@ type Strokes = list[Stroke]
 OUT_DIR = "build/data"
 IMG_SIZE = 32  # px
 
+# Missing mappings in the Typst symbol page.
+TEX_TO_TYP = {
+    # Alphabet
+    "\\mathds{A}": "AA",
+    "\\mathds{B}": "BB",
+    "\\mathds{C}": "CC",
+    "\\mathds{D}": "DD",
+    "\\mathds{E}": "EE",
+    "\\mathds{F}": "FF",
+    "\\mathds{G}": "GG",
+    "\\mathds{H}": "HH",
+    "\\mathds{I}": "II",
+    "\\mathds{J}": "JJ",
+    "\\mathds{K}": "KK",
+    "\\mathds{L}": "LL",
+    "\\mathds{M}": "MM",
+    "\\mathds{N}": "NN",
+    "\\mathds{O}": "OO",
+    "\\mathds{P}": "PP",
+    "\\mathds{Q}": "QQ",
+    "\\mathds{R}": "RR",
+    "\\mathds{S}": "SS",
+    "\\mathds{T}": "TT",
+    "\\mathds{U}": "UU",
+    "\\mathds{V}": "VV",
+    "\\mathds{W}": "WW",
+    "\\mathds{X}": "XX",
+    "\\mathds{Y}": "YY",
+    "\\mathds{Z}": "ZZ",
+    # Greek Alphabet (Uppercases)
+    "\\Alpha": "Alpha",
+    "\\Beta": "Beta",
+    "\\Gamma": "Gamma",
+    "\\Delta": "Delta",
+    "\\Epsilon": "Epsilon",
+    "\\Zeta": "Zeta",
+    "\\Eta": "Eta",
+    "\\Theta": "Theta",
+    "\\Iota": "Iota",
+    "\\Kappa": "Kappa",
+    "\\Lambda": "Lambda",
+    "\\Mu": "Mu",
+    "\\Nu": "Nu",
+    "\\Xi": "Xi",
+    "\\Omicron": "Omicron",
+    "\\Pi": "Pi",
+    "\\Rho": "Rho",
+    "\\Sigma": "Sigma",
+    "\\Tau": "Tau",
+    "\\Upsilon": "Upsilon",
+    "\\Phi": "Phi",
+    "\\Chi": "Chi",
+    "\\Psi": "Psi",
+    "\\Omega": "Omega",
+    # Greek Alphabet (Lowercases)
+    "\\alpha": "alpha",
+    "\\beta": "beta",
+    "\\gamma": "gamma",
+    "\\delta": "delta",
+    "\\varepsilon": "epsilon",
+    "\\epsilon": "epsilon.alt",
+    "\\zeta": "zeta",
+    "\\eta": "eta",
+    "\\theta": "theta",
+    "\\vartheta": "theta.alt",
+    "\\iota": "iota",
+    "\\kappa": "kappa",
+    "\\varkappa": "kappa.alt",
+    "\\lambda": "lambda",
+    "\\mu": "mu",
+    "\\nu": "nu",
+    "\\xi": "xi",
+    "\\omicron": "omicron",
+    "\\pi": "pi",
+    "\\varpi": "pi.alt",
+    "\\rho": "rho",
+    "\\varrho": "rho.alt",
+    "\\sigma": "sigma",
+    "\\varsigma": "sigma.alt",
+    "\\tau": "tau",
+    "\\upsilon": "upsilon",
+    "\\varphi": "phi",
+    "\\phi": "phi.alt",
+    "\\chi": "chi",
+    "\\psi": "psi",
+    "\\omega": "omega",
+    # Others
+    "\\&": "amp",
+    "\\#": "hash",
+    "\\%": "percent",
+    "\\{": "brace.l",
+    "\\}": "brace.r",
+    "\\--": "dash.en",
+    "\\---": "dash.em",
+    "\\colon": "colon",
+    "\\aleph": "aleph",
+    "\\degree": "degree",
+    "\\copyright": "copyright",
+    "\\textcircledP": "copyright.sound",
+    "\\textreferencemark": "refmark",
+    "\\textperthousand": "permille",
+    "\\simeq": "tilde.eq",
+    "\\circlearrowleft": "arrow.ccw",
+    "\\circlearrowright": "arrow.cw",
+    "\\dashleftarrow": "arrow.l.dashed",
+    "\\dashrightarrow": "arrow.r.dashed",
+    "\\lightning": "arrow.zigzag",
+    "\\circ": "compose",
+    "\\bowtie": "join",
+    "\\MVAt": "at",
+    "\\EUR": "euro",
+    "\\blacksquare": "qed",
+}
+
 
 class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     names: list[str]
+    latex_name: str | None = None
     codepoint: int
     markup_shorthand: str | None = None
     math_shorthand: str | None = None
@@ -35,8 +150,8 @@ class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     # css_class: str
 
 
-def is_space(c: str) -> bool:
-    return c.isspace() or c in "\u2060\u200b\u200c\u200d\u200e\u200f"
+def is_invisible(c: str) -> bool:
+    return unicodedata.category(c) in ["Zs", "Cc", "Cf"]
 
 
 def get_typst_symbol_info() -> list[TypstSymInfo]:
@@ -46,17 +161,18 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     sym_info = {}
 
     for li in soup.find_all("li", id=re.compile("^symbol-")):
-        codepoint = int(li["data-codepoint"])
-        if is_space(chr(codepoint)):
-            # We don't care about whitespaces.
+        codepoint = ord(li["data-value"][0])
+        if is_invisible(chr(codepoint)) or li.get("data-deprecation"):
+            # We don't care about invisible chars and deprecated names.
             continue
-        if codepoint in sym_info:
-            # Repeated symbols. Merge them.
+        elif codepoint in sym_info:
+            # Repeated symbols. Merge names.
             sym_info[codepoint].names.append(li["id"][len("symbol-") :])
         else:
             # New symbols. Add to map.
             sym_info[codepoint] = TypstSymInfo(
                 names=[li["id"][len("symbol-") :]],
+                latex_name=li.get("data-latex-name"),
                 codepoint=codepoint,
                 markup_shorthand=li.get("data-markup-shorthand"),
                 math_shorthand=li.get("data-math-shorthand"),
@@ -70,29 +186,14 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
 def map_sym(typ_sym_info: list[TypstSymInfo]) -> dict[str, TypstSymInfo]:
     """Get a mapping from Detexify keys to Typst symbol info."""
 
-    norm = {n: x for x in typ_sym_info for n in x.names}
-    norm |= {chr(x.codepoint): x for x in typ_sym_info}
-    norm |= {x.markup_shorthand: x for x in typ_sym_info}
-    norm |= {x.math_shorthand: x for x in typ_sym_info}
-
-    tex_to_typ = {k[1:]: norm[v] for k, v in REPLACEMENTS if v in norm}
-
-    mitex_map = orjson.loads(open("external/default.json", "rb").read())
-    for k, v in mitex_map["commands"].items():
-        if v["kind"] == "sym" and k in norm:
-            tex_to_typ[k] = norm[k]
-        elif v["kind"] == "alias-sym" and v["alias"] in norm:
-            tex_to_typ[k] = norm[v["alias"]]
-
-    tex_to_typ["bowtie"] = norm["join"]
-    tex_to_typ["MVAt"] = norm["at"]
+    tex_to_typ = {s.latex_name: s for s in typ_sym_info}
+    name_to_typ = {name: s for s in typ_sym_info for name in s.names}
+    tex_to_typ |= {k: name_to_typ[v] for k, v in TEX_TO_TYP.items()}
 
     content = open("external/symbols.json", "rb").read()
     tex_sym_info = msgspec.json.decode(content, type=list[DetexifySymInfo])
     return {
-        x.id: tex_to_typ[x.command[1:]]
-        for x in tex_sym_info
-        if x.command[1:] in tex_to_typ
+        x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
     }
 
 
@@ -133,6 +234,7 @@ if __name__ == "__main__":
     open(f"{OUT_DIR}/symbols.json", "wb").write(msgspec.json.encode(typ_sym_info))
     open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
 
+    # TODO: Use data from contrib.
     detexify_data = orjson.loads(open("external/detexify.json", "rb").read())
     for i, [key, strokes] in enumerate(detexify_data):
         typ = key_to_typ.get(key)
