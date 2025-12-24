@@ -8,7 +8,7 @@ import msgspec
 import orjson
 import torch
 import torchinfo
-from torch import Generator, Tensor, nn, onnx, optim
+from torch import Tensor, nn, onnx, optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
@@ -26,12 +26,14 @@ def train_loop(
     model: nn.Module,
     loss_fn: LossFn,
     optimizer: optim.Optimizer,
+    device: torch.device,
 ):
     size = len(dataloader.dataset)
     current = 0
     model.train()
 
     for batch, (X, y) in enumerate(dataloader):
+        X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = loss_fn(pred, y)
 
@@ -45,9 +47,7 @@ def train_loop(
 
 
 def test_loop(
-    dataloader: DataLoader,
-    model: nn.Module,
-    loss_fn: LossFn,
+    dataloader: DataLoader, model: nn.Module, loss_fn: LossFn, device: torch.device
 ):
     model.eval()
     size = len(dataloader.dataset)
@@ -56,6 +56,7 @@ def test_loop(
 
     with torch.no_grad():
         for X, y in dataloader:
+            X, y = X.to(device), y.to(device)
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
             correct += (pred.argmax(1) == y).float().sum().item()
@@ -69,11 +70,8 @@ if __name__ == "__main__":
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    # Set default device.
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.set_default_device(device)
-
     # Prepare data.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transform = v2.Compose(
         [
             v2.Grayscale(),
@@ -82,9 +80,9 @@ if __name__ == "__main__":
         ]
     )
     orig_data = ImageFolder(f"{DATA_DIR}/img", transform)
-    train_data, test_data = random_split(orig_data, [0.9, 0.1], Generator(device))
-    train_loader = DataLoader(train_data, batch_size=64)
-    test_loader = DataLoader(test_data, batch_size=64)
+    train_data, test_data = random_split(orig_data, [0.9, 0.1])
+    train_loader = DataLoader(train_data, batch_size=128, num_workers=8, pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=128, num_workers=8, pin_memory=True)
 
     # Define model.
     model = nn.Sequential(
@@ -96,7 +94,7 @@ if __name__ == "__main__":
         nn.MaxPool2d(2),
         nn.Flatten(),
         nn.Linear(32 * 5 * 5, len(orig_data.classes)),
-    )
+    ).to(device)
     torchinfo.summary(model)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.00025)
@@ -104,12 +102,13 @@ if __name__ == "__main__":
     # Train model.
     for epoch in range(10):
         print(f"\n### Epoch {epoch}")
-        train_loop(train_loader, model, loss_fn, optimizer)
-        test_loop(test_loader, model, loss_fn)
+        train_loop(train_loader, model, loss_fn, optimizer, device)
+        test_loop(test_loader, model, loss_fn, device)
         print("-------------------------------------")
 
     # Export ONNX model.
-    prog = onnx.export(model, (torch.randn(1, 1, 32, 32),), dynamo=True)
+    inputs = (torch.randn(1, 1, 32, 32).to(device),)
+    prog = onnx.export(model, inputs, dynamo=True)
     prog.save(f"{OUT_DIR}/model.onnx")
 
     # Generate JSON for the infer page.
