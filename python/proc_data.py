@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import unicodedata
 
 import msgspec
@@ -157,7 +158,8 @@ def is_invisible(c: str) -> bool:
 def get_typst_symbol_info() -> list[TypstSymInfo]:
     """Parse Typst symbol page to get information."""
 
-    soup = BeautifulSoup(open("external/typ_sym.html").read(), "html.parser")
+    with open("external/typ_sym.html") as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
     sym_info = {}
 
     for li in soup.find_all("li", id=re.compile("^symbol-")):
@@ -191,8 +193,8 @@ def map_sym(typ_sym_info: list[TypstSymInfo]) -> dict[str, TypstSymInfo]:
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
     tex_to_typ |= {k: name_to_typ[v] for k, v in TEX_TO_TYP.items()}
 
-    content = open("external/symbols.json", "rb").read()
-    tex_sym_info = msgspec.json.decode(content, type=list[DetexifySymInfo])
+    with open("external/symbols.json", "rb") as f:
+        tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     return {
         x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
     }
@@ -226,17 +228,23 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
 
 
 if __name__ == "__main__":
+    shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
 
+    # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
     key_to_typ = map_sym(typ_sym_info)
     typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x.names))
+    with open(f"{OUT_DIR}/symbols.json", "wb") as f:
+        f.write(msgspec.json.encode(typ_sym_info))
+    with open("assets/supported-symbols.txt", "w") as f:
+        f.write("\n".join(typ_sym_names) + "\n")
 
-    open(f"{OUT_DIR}/symbols.json", "wb").write(msgspec.json.encode(typ_sym_info))
-    open("assets/supported-symbols.txt", "w").write("\n".join(typ_sym_names) + "\n")
+    # TODO: Include data from contrib.
 
-    # TODO: Use data from contrib.
-    detexify_data = orjson.loads(open("external/detexify.json", "rb").read())
+    # Convert strokes into images and label them.
+    with open("external/detexify.json", "rb") as f:
+        detexify_data = orjson.loads(f.read())
     for i, [key, strokes] in enumerate(detexify_data):
         typ = key_to_typ.get(key)
         if typ is None:

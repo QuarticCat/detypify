@@ -1,6 +1,7 @@
 """Train the model."""
 
 import os
+import shutil
 from typing import Callable
 
 import msgspec
@@ -65,9 +66,14 @@ def test_loop(
 
 
 if __name__ == "__main__":
+    shutil.rmtree(OUT_DIR, ignore_errors=True)
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+    # Set default device.
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.set_default_device(device)
 
+    # Prepare data.
     transform = v2.Compose(
         [
             v2.Grayscale(),
@@ -80,6 +86,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_data, batch_size=64)
     test_loader = DataLoader(test_data, batch_size=64)
 
+    # Define model.
     model = nn.Sequential(
         nn.Conv2d(1, 16, 5),
         nn.ReLU(),
@@ -91,22 +98,23 @@ if __name__ == "__main__":
         nn.Linear(32 * 5 * 5, len(orig_data.classes)),
     )
     torchinfo.summary(model)
-
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.00025)
 
+    # Train model.
     for epoch in range(10):
         print(f"\n### Epoch {epoch}")
         train_loop(train_loader, model, loss_fn, optimizer)
         test_loop(test_loader, model, loss_fn)
         print("-------------------------------------")
 
-    os.makedirs(OUT_DIR, exist_ok=True)
+    # Export ONNX model.
     prog = onnx.export(model, (torch.randn(1, 1, 32, 32),), dynamo=True)
     prog.save(f"{OUT_DIR}/model.onnx")
 
-    content = open(f"{DATA_DIR}/symbols.json", "rb").read()
-    sym_info = msgspec.json.decode(content, type=list[TypstSymInfo])
+    # Generate JSON for the infer page.
+    with open(f"{DATA_DIR}/symbols.json", "rb") as f:
+        sym_info = msgspec.json.decode(f.read(), type=list[TypstSymInfo])
     chr_to_sym = {s.char: s for s in sym_info}
     infer = []
     for c in orig_data.classes:
@@ -119,7 +127,10 @@ if __name__ == "__main__":
         elif sym.math_shorthand:
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
-    open(f"{OUT_DIR}/infer.json", "wb").write(orjson.dumps(infer))
+    with open(f"{OUT_DIR}/infer.json", "wb") as f:
+        f.write(orjson.dumps(infer))
 
+    # Generate JSON for the contrib page.
     contrib = {n: s.char for s in sym_info for n in s.names}
-    open(f"{OUT_DIR}/contrib.json", "wb").write(orjson.dumps(contrib))
+    with open(f"{OUT_DIR}/contrib.json", "wb") as f:
+        f.write(orjson.dumps(contrib))

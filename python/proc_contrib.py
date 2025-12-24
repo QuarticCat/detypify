@@ -25,7 +25,8 @@ if __name__ == "__main__":
     print(f"### $ {bold(cmd)}")
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
-    samples = orjson.loads(open("build/dataset.json", "rb").read())[0]["results"]
+    with open("build/dataset.json", "rb") as f:
+        samples = orjson.loads(f.read())[0]["results"]
 
     print("\n### Generating images...")
     name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
@@ -49,12 +50,13 @@ if __name__ == "__main__":
 
     print("\n### Collecting wanted samples...")
     id_to_strokes = {s["id"]: s["strokes"] for s in samples}
-    for f in os.listdir(OUT_DIR):
-        sym, id_, _ = f.rsplit(".", 1)[0].split("-")
+    for filename in os.listdir(OUT_DIR):
+        sym, id_, _ = filename.rsplit(".", 1)[0].split("-")
         if id_ != "0":
             strokes = id_to_strokes[int(id_)]
-            open(f"data/dataset/{sym}.txt", "a").write(strokes + "\n")
+            with open(f"data/dataset/{sym}.txt", "a") as f:
+                f.write(strokes + "\n")
 
     cmd = "bunx wrangler d1 execute detypify --remote --command='DELETE FROM samples WHERE id <= n'"
     print("\n### Run this command to clean data:")
-    print(f"### $ {bold(cmd)}")  # fmt: skip
+    print(f"### $ {bold(cmd)}")
