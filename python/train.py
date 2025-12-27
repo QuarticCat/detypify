@@ -2,13 +2,12 @@
 
 import os
 import shutil
-from typing import Callable
 
+import lightning as L
 import msgspec
 import orjson
 import torch
-import torchinfo
-from torch import Tensor, nn, onnx, optim
+from torch import nn, optim
 from torch.utils.data import DataLoader, random_split
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
@@ -16,58 +15,53 @@ from torchvision.transforms import v2
 from proc_data import OUT_DIR as DATA_DIR
 from proc_data import TypstSymInfo
 
-type LossFn = Callable[[Tensor, Tensor], Tensor]
-
 OUT_DIR = "build/train"
 
 
-def train_loop(
-    dataloader: DataLoader,
-    model: nn.Module,
-    loss_fn: LossFn,
-    optimizer: optim.Optimizer,
-    device: torch.device,
-):
-    size = len(dataloader.dataset)
-    current = 0
-    model.train()
+class TypstSymbolClassifier(L.LightningModule):
+    def __init__(self, num_classes: int):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Conv2d(1, 16, 5),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, 5),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Flatten(),
+            nn.Linear(32 * 5 * 5, num_classes),
+        )
+        self.criterion = nn.CrossEntropyLoss()
 
-    for batch, (X, y) in enumerate(dataloader):
-        X, y = X.to(device), y.to(device)
-        pred = model(X)
-        loss = loss_fn(pred, y)
+    def forward(self, x):
+        return self.model(x)
 
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+    def training_step(self, batch, batch_idx):
+        x, y = batch
+        pred = self(x)
+        loss = self.criterion(pred, y)
+        self.log("train_loss", loss, prog_bar=True)
+        return loss
 
-        current += len(X)
-        if batch % 100 == 0:
-            print(f"Train> loss: {loss.item():>7f} [{current:>6d}/{size:>6d}]")
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        pred = self(x)
+        loss = self.criterion(pred, y)
+        acc = (pred.argmax(1) == y).float().mean()
+        self.log("val_loss", loss, prog_bar=True)
+        self.log("val_acc", acc, prog_bar=True)
+        return loss
 
-
-def test_loop(
-    dataloader: DataLoader,
-    model: nn.Module,
-    loss_fn: LossFn,
-    device: torch.device,
-) -> float:
-    model.eval()
-    size = len(dataloader.dataset)
-    num_batches = len(dataloader)
-    test_loss, correct = 0, 0
-
-    with torch.no_grad():
-        for X, y in dataloader:
-            X, y = X.to(device), y.to(device)
-            pred = model(X)
-            test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).float().sum().item()
-
-    test_loss /= num_batches
-    correct /= size
-    print(f"Test > acc: {(100 * correct):>0.1f}%, avg loss: {test_loss:>8f}")
-    return test_loss
+    def configure_optimizers(self):
+        optimizer = optim.AdamW(self.parameters())
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss",
+            },
+        }
 
 
 if __name__ == "__main__":
@@ -75,7 +69,6 @@ if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
 
     # Prepare data.
-    num_workers = os.process_cpu_count() or 1
     transforms = [
         v2.Grayscale(),
         v2.PILToTensor(),
@@ -83,48 +76,34 @@ if __name__ == "__main__":
     ]
     orig_data = ImageFolder(f"{DATA_DIR}/img", v2.Compose(transforms))
     train_data, test_data = random_split(orig_data, [0.9, 0.1])
-    train_loader = DataLoader(
-        train_data,
-        batch_size=128,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-    test_loader = DataLoader(
-        test_data,
-        batch_size=128,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-
-    # Define model.
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = nn.Sequential(
-        nn.Conv2d(1, 16, 5),
-        nn.ReLU(),
-        nn.MaxPool2d(2),
-        nn.Conv2d(16, 32, 5),
-        nn.ReLU(),
-        nn.MaxPool2d(2),
-        nn.Flatten(),
-        nn.Linear(32 * 5 * 5, len(orig_data.classes)),
-    ).to(device)
-    torchinfo.summary(model)
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters())
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
 
     # Train model.
-    for epoch in range(20):
-        print(f"\n### Epoch {epoch}")
-        train_loop(train_loader, model, loss_fn, optimizer, device)
-        test_loss = test_loop(test_loader, model, loss_fn, device)
-        scheduler.step(test_loss)
-        print("-------------------------------------")
+    model = TypstSymbolClassifier(num_classes=len(orig_data.classes))
+    num_workers = os.process_cpu_count() or 1
+    trainer = L.Trainer(max_epochs=20, default_root_dir=OUT_DIR)
+    trainer.fit(
+        model,
+        train_dataloaders=DataLoader(
+            train_data,
+            batch_size=128,
+            num_workers=num_workers,
+            pin_memory=True,
+        ),
+        val_dataloaders=DataLoader(
+            test_data,
+            batch_size=128,
+            num_workers=num_workers,
+            pin_memory=True,
+        ),
+    )
 
-    # Export ONNX model.
-    inputs = (torch.randn(1, 1, 32, 32).to(device),)
-    prog = onnx.export(model, inputs, dynamo=True)
-    prog.save(f"{OUT_DIR}/model.onnx")
+    # Export ONNX.
+    model.to_onnx(
+        f"{OUT_DIR}/model.onnx",
+        torch.randn(1, 1, 32, 32),
+        dynamo=True,
+        external_data=False,
+    )
 
     # Generate JSON for the infer page.
     with open(f"{DATA_DIR}/symbols.json", "rb") as f:

@@ -14,7 +14,7 @@ dependencies = [
     # train
     "torch>=2.9.1",
     "torchvision>=0.24.1",
-    "torchinfo>=1.8.0",
+    "lightning>=2.6.0",
     "onnx>=1.20.0",
     "onnxscript>=0.5.7",
 ]
