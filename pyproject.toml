@@ -31,9 +31,6 @@ dev = [
   "zuban"
 ]
 
-[tool.ruff.lint.isort]
-known-local-folder = ["proc_*"]
-
 # use cuda 13.0
 [tool.uv.sources]
 torch = { index = "torch-cu130" }

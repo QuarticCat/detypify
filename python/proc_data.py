@@ -6,7 +6,6 @@ import shutil
 import unicodedata
 
 import msgspec
-import orjson
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw
 
@@ -242,7 +241,7 @@ if __name__ == "__main__":
 
     # Convert strokes into images and label them.
     with open("external/detexify.json", "rb") as f:
-        detexify_data = orjson.loads(f.read())
+        detexify_data = msgspec.json.decode(f.read())
     for i, [key, strokes] in enumerate(detexify_data):
         typ = key_to_typ.get(key)
         if typ is None:

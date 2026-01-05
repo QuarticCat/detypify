@@ -4,7 +4,6 @@ import os
 
 import lightning as L
 import msgspec
-import orjson
 import timm
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -178,9 +177,9 @@ if __name__ == "__main__":
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
     with open(f"{OUT_DIR}/infer.json", "wb") as f:
-        f.write(orjson.dumps(infer))
+        f.write(msgspec.json.encode(infer))
 
     # Generate JSON for the contrib page.
     contrib = {n: s.char for s in sym_info for n in s.names}
     with open(f"{OUT_DIR}/contrib.json", "wb") as f:
-        f.write(orjson.dumps(contrib))
+        f.write(msgspec.json.encode(contrib))
