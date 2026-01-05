@@ -3,7 +3,7 @@
 import os
 import shutil
 
-import orjson
+import msgspec
 from PIL import Image, ImageDraw, ImageFont
 
 from proc_data import draw_to_img, get_typst_symbol_info, normalize
@@ -26,13 +26,13 @@ if __name__ == "__main__":
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
     with open("build/dataset.json", "rb") as f:
-        samples = orjson.loads(f.read())[0]["results"]
+        samples = msgspec.json.decode(f.read())[0]["results"]
 
     print("\n### Generating images...")
     name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
-        img = draw_to_img(normalize(orjson.loads(strokes)))
+        img = draw_to_img(normalize(msgspec.json.decode(strokes)))
         img.save(f"{OUT_DIR}/{sym}-{id_}-{token}.png")
 
         if not os.path.exists(f"{OUT_DIR}/{sym}-0-0.png"):
