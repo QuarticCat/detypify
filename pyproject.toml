@@ -31,7 +31,9 @@ dev = [
   "zuban"
 ]
 
-# use cuda 13.0
+[tool.ruff.lint.isort]
+known-local-folder = ["proc_*"]
+
 [tool.uv.sources]
 torch = { index = "torch-cu130" }
 torchvision = { index = "torch-cu130" }
@@ -41,5 +43,6 @@ name = "torch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
+# zuban sys.path finding
 [tool.zuban]
 mypy_path = ["python"]
