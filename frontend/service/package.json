@@ -18,9 +18,7 @@
         "*.ts"
     ],
     "type": "module",
-    "scripts": {
-        "copy": "cp -R ../build/train ."
-    },
+    "scripts": {},
     "dependencies": {
         "onnxruntime-web": "=1.17.1"
     }

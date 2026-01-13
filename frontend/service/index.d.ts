@@ -1,3 +1,5 @@
+import { InferenceSession } from "onnxruntime-web";
+
 export { env as ortEnv } from "onnxruntime-web";
 export class Detypify {
     /**
@@ -33,4 +35,3 @@ export type DetypifySymbol = {
     names: string[];
     codepoint: number;
 };
-import { InferenceSession } from "onnxruntime-web";

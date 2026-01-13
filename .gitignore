@@ -5,6 +5,7 @@ node_modules/
 .wrangler/
 
 build/
+train/
 /*.zsh
 /*.zip
 

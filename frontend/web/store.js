@@ -27,6 +27,6 @@ export const candidates = derived(strokes, async ($strokes, set) => {
 export const imgUrl = derived(strokes, ($strokes) => {
     let sess = get(session);
     // not loaded or clear
-    if (!get(isContribMode) || !sess|| $strokes.length === 0) return;
+    if (!get(isContribMode) || !sess || $strokes.length === 0) return;
     return sess.draw($strokes).toDataURL();
 });

@@ -41,12 +41,12 @@ If you want to train the model, you need to pull submodules. ([Git LFS](https://
 $ git submodule update --init --recursive
 ```
 
-Otherwise, if you just want to develop the webpage, you can download `train` folder from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to `./build/train`.
+Otherwise, if you just want to develop the webpage, you can download `train` folder from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code) to `frontend/service/train`.
 
 ### Preprocessing
 
 ```console
-$ uv sync                     # install venv and dependencies
+$ uv sync                     # install dependencies
 $ uv run python/proc_data.py  # preprocess data
 $ uv run python/proc_font.py  # preprocess font
 ```
@@ -54,17 +54,17 @@ $ uv run python/proc_font.py  # preprocess font
 ### Training
 
 ```console
-$ uv sync                 # install venv and dependencies
-$ uv run python/train.py  # train
+$ uv sync                 # install dependencies
+$ uv run python/train.py  # train model
 ```
 
 ### Web Page
 
 ```console
-$ bun run --cwd=service copy  # copy train folder
-$ bun install                 # install dependencies
-$ bun run dev                 # start dev server
-$ bun run build               # build for production
+$ cd frontend/web
+$ bun install      # install dependencies
+$ bun run dev      # start dev server
+$ bun run build    # build for production
 ```
 
 ### Cloudflare Worker
@@ -72,8 +72,9 @@ $ bun run build               # build for production
 It collects contributions from the website.
 
 ```console
-$ bun run worker:dev     # start dev server
-$ bun run worker:deploy  # deploy to cloudflare
+$ cd frontend/web
+$ bun run dev     # start dev server
+$ bun run deploy  # deploy to cloudflare
 ```
 
 ### Logo & Favicons

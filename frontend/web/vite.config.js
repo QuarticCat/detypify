@@ -3,9 +3,8 @@ import { VitePWA } from "vite-plugin-pwa";
 
 /** @type {import('vite').UserConfig} */
 export default {
-    root: "web",
     build: {
-        outDir: "../build/web",
+        outDir: "../../build/web",
         emptyOutDir: true,
     },
     assetsInclude: ["**/*.onnx"],

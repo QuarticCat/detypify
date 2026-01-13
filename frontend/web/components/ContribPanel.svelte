@@ -1,7 +1,7 @@
 <script>
     import { Button, Input, Modal, Spinner } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
-    import contribSyms from "../../build/train/contrib.json";
+    import contribSyms from "../../service/train/contrib.json";
     import { imgUrl, inputText, savedSamples, strokes } from "../store";
     import MyButton from "../utils/Button.svelte";
 
