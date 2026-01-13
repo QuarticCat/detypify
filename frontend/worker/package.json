@@ -4,12 +4,13 @@
     "private": true,
     "scripts": {
         "dev": "wrangler dev",
-        "deploy": "wrangler deploy"
+        "deploy": "wrangler deploy --minify",
+        "cf-typegen": "wrangler types --env-interface CloudflareBindings"
     },
     "dependencies": {
-        "hono": "^4.2.2"
+        "hono": "^4.11.4"
     },
     "devDependencies": {
-        "wrangler": "^3.48.0"
+        "wrangler": "^4.4.0"
     }
 }

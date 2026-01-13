@@ -69,13 +69,7 @@ $ bun run build    # build for production
 
 ### Cloudflare Worker
 
-It collects contributions from the website.
-
-```console
-$ cd frontend/web
-$ bun run dev     # start dev server
-$ bun run deploy  # deploy to cloudflare
-```
+See [frontend/worker](./frontend/worker).
 
 ### Logo & Favicons
 
