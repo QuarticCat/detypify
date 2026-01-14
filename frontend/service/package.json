@@ -1,5 +1,6 @@
 {
     "name": "detypify-service",
+    "type": "module",
     "version": "0.2.4",
     "description": "Typst symbol classifier",
     "license": "MIT",
@@ -12,14 +13,27 @@
         "detypify",
         "onnxruntime"
     ],
+    "exports": {
+        ".": "./dist/index.mjs",
+        "./package.json": "./package.json"
+    },
+    "main": "./dist/index.mjs",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
     "files": [
-        "train",
-        "*.js",
-        "*.ts"
+        "dist",
+        "train/*.json",
+        "train/*.onnx"
     ],
-    "type": "module",
-    "scripts": {},
+    "scripts": {
+        "dev": "tsdown --watch",
+        "build": "tsdown"
+    },
     "dependencies": {
-        "onnxruntime-web": "=1.17.1"
+        "onnxruntime-web": "=1.23.2"
+    },
+    "devDependencies": {
+        "tsdown": "^0.19.0",
+        "typescript": "^5.9.3"
     }
 }

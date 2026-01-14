@@ -2,7 +2,7 @@ import { Detypify, ortEnv } from "detypify-service";
 import { writable, derived, get } from "svelte/store";
 
 ortEnv.wasm.numThreads = 1;
-ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
+ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
 
 export const session = writable();
 

@@ -3,9 +3,13 @@ import { VitePWA } from "vite-plugin-pwa";
 
 /** @type {import('vite').UserConfig} */
 export default {
-    build: {
-        outDir: "../../build/web",
-        emptyOutDir: true,
+    resolve: {
+        conditions: ["onnxruntime-web-use-extern-wasm"],
+    },
+    optimizeDeps: {
+        esbuildOptions: {
+            conditions: ["onnxruntime-web-use-extern-wasm"],
+        },
     },
     assetsInclude: ["**/*.onnx"],
     plugins: [
@@ -16,11 +20,9 @@ export default {
                 globPatterns: ["**/*.{js,css,html,ico,png,svg,onnx,woff2}"],
                 runtimeCaching: [
                     {
-                        urlPattern: ({ url }) => url.origin === "https://cdn.jsdelivr.net",
+                        urlPattern: ({ url }) => url.pathname.endsWith(".wasm"),
                         handler: "CacheFirst",
-                        options: {
-                            cacheName: "jsdelivr",
-                        },
+                        options: { cacheName: "wasm-cache" },
                     },
                 ],
             },
