@@ -6,6 +6,11 @@
         "useDefineForClassFields": true,
         "module": "ESNext",
         "types": ["svelte", "vite/client"],
+        "baseUrl": ".",
+        "paths": {
+            "detypify-service": ["../service/dist/index.d.mts"]
+        },
+        "resolveJsonModule": true,
         "noEmit": true,
         /**
          * Typecheck JS in `.svelte` and `.js` files by default.

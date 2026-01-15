@@ -2,5 +2,15 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
-// https://vite.dev/config/
-export default defineConfig({ plugins: [tailwindcss(), svelte()] });
+export default defineConfig({
+    resolve: {
+        conditions: ["module", "browser", "onnxruntime-web-use-extern-wasm"],
+    },
+    assetsInclude: ["**/*.onnx"],
+    server: {
+        fs: {
+            allow: [".."],
+        },
+    },
+    plugins: [tailwindcss(), svelte()],
+});

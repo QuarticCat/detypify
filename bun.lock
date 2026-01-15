@@ -25,6 +25,9 @@
     "frontend/ui": {
       "name": "detypify-ui",
       "version": "0.0.0",
+      "dependencies": {
+        "detypify-service": "workspace:*",
+      },
       "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^6.2.4",
         "@tailwindcss/vite": "^4.1.17",

@@ -1,82 +1,52 @@
 @import "tailwindcss";
 
-:root {
-    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
-    font-weight: 400;
-    color-scheme: light dark;
-    color: rgba(255, 255, 255, 0.87);
-    background-color: #242424;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+@plugin 'flowbite/plugin';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary-50: #fff5f2;
+  --color-primary-100: #fff1ee;
+  --color-primary-200: #ffe4de;
+  --color-primary-300: #ffd5cc;
+  --color-primary-400: #ffbcad;
+  --color-primary-500: #fe795d;
+  --color-primary-600: #ef562f;
+  --color-primary-700: #eb4f27;
+  --color-primary-800: #cc4522;
+  --color-primary-900: #a5371b;
+
+  --color-secondary-50: #f0f9ff;
+  --color-secondary-100: #e0f2fe;
+  --color-secondary-200: #bae6fd;
+  --color-secondary-300: #7dd3fc;
+  --color-secondary-400: #38bdf8;
+  --color-secondary-500: #0ea5e9;
+  --color-secondary-600: #0284c7;
+  --color-secondary-700: #0369a1;
+  --color-secondary-800: #075985;
+  --color-secondary-900: #0c4a6e;
 }
 
-a {
-    font-weight: 500;
-    color: #646cff;
-    text-decoration: inherit;
-}
+@source "../node_modules/flowbite-svelte/dist";
+@source "../node_modules/flowbite-svelte-icons/dist";
 
-a:hover {
-    color: #535bf2;
-}
-
-body {
-    margin: 0;
-    display: flex;
-    place-items: center;
-    min-width: 320px;
-    min-height: 100vh;
-}
-
-h1 {
-    font-size: 3.2em;
-    line-height: 1.1;
-}
-
-.card {
-    padding: 2em;
-}
-
-#app {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
-}
-
-button {
-    border-radius: 8px;
-    border: 1px solid transparent;
-    padding: 0.6em 1.2em;
-    font-size: 1em;
-    font-weight: 500;
-    font-family: inherit;
-    background-color: #1a1a1a;
-    cursor: pointer;
-    transition: border-color 0.25s;
-}
-
-button:hover {
-    border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-    outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-    :root {
-        color: #213547;
-        background-color: #ffffff;
+@layer base {
+    @font-face {
+        font-family: NewCMMath-Detypify;
+        font-weight: 400;
+        font-display: swap;
+        src:
+            local(NewComputerModernMath-Regular),
+            local(NewComputerModernMath),
+            url(/NewCMMath-Detypify.woff2) format("woff2");
     }
-    a:hover {
-        color: #747bff;
+
+    body {
+        @apply bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100;
     }
-    button {
-        background-color: #f9f9f9;
+
+    #app {
+        @apply min-h-screen;
     }
 }
