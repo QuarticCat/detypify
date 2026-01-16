@@ -1,13 +1,13 @@
 <script lang="ts">
+    import Alert from "./components/Alert.svelte";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
     import ContribPanel from "./components/ContribPanel.svelte";
     import NavBar from "./components/NavBar.svelte";
     import Preview from "./components/Preview.svelte";
-    import { strokes, input, isContribMode, samples, session } from "./store";
-    import type { Strokes, SymbolInfo } from "detypify-service";
-    import { Alert, Hr, Spinner } from "flowbite-svelte";
-    import { FireSolid } from "flowbite-svelte-icons";
+    import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
+    import { contribSyms } from "detypify-service";
+    import { Hr, Spinner } from "flowbite-svelte";
 
     async function candidates(strokes: Strokes): Promise<SymbolInfo[] | undefined> {
         if (strokes.length === 0) return;
@@ -46,7 +46,7 @@
                 {/each}
             {/await}
         {:else}
-            <Preview name={$input} img={draw($strokes)} />
+            <Preview logo={contribSyms[$inputText] ?? ""} imgUrl={$imgUrl ?? BLANK} />
             <Hr class="mx-auto h-2 w-60 rounded" />
             {#each $samples as { id, name, strokes } (id)}
                 <Preview {name} img={draw(strokes)} ondelete={() => ($samples = $samples.filter((s) => s.id !== id))} />

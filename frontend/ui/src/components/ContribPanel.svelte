@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { input, samples, strokes } from "../store";
+    import { imgUrl, inputText, savedSamples, strokes } from "../store";
+    import MyButton from "../utils/Button.svelte";
     import { contribSyms } from "detypify-service";
     import { Button, Input, Modal, Spinner } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
@@ -10,17 +11,21 @@
     let modalOk = $state(false);
     let modalText = $state("");
 
-    const hasSym = $derived(Boolean(contribSyms[$input]));
+    const inputColor = $derived<"green" | "red">(contribSyms[$inputText] ? "green" : "red");
+    const disableSave = $derived(inputColor !== "green" || $strokes.length === 0);
+    const disableSubmit = $derived(isSubmitting || $savedSamples.length === 0);
 
     function refreshInput() {
-        const old = $input;
-        while (($input = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
+        const old = $inputText;
+        while (($inputText = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
         $strokes = [];
     }
 
     function save() {
-        if (!hasSym) return;
-        $samples = [
+        const name = $inputText;
+        const logo = contribSyms[name];
+        if (!logo) return;
+        $savedSamples = [
             {
                 id: crypto.randomUUID(),
                 name: $input,

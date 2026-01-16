@@ -32,7 +32,7 @@
             Escape:
             <CopyButton text={escape}>
                 <code class="text-base font-medium">
-                    {escape}
+                    \u{info.char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}
                 </code>
             </CopyButton>
         </P>

@@ -4,8 +4,12 @@
     import { Avatar, Hr, Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
 
-    const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAP7//wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
-    const { name, img = BLANK, ondelete }: { name: string; img?: string; ondelete?: () => void } = $props();
+    const { id, logo, imgUrl }: { id?: number; logo: string; imgUrl?: string; } = $props();
+
+    function deleteSelf() {
+        if (id === undefined) return;
+        $savedSamples = $savedSamples.filter((s) => s.id !== id);
+    }
 </script>
 
 <Card class="relative flex justify-center">
@@ -16,10 +20,8 @@
     <Hr class="h-1 w-12 rounded" />
     <Avatar cornerStyle="rounded" size="lg" src={img} />
 
-    {#if ondelete}
-        <button type="button" class="ui-hover-btn ui-close-btn" onclick={ondelete}>
-            <CloseOutline class="size-6" />
-            <Tooltip class="dark:bg-gray-900">Delete</Tooltip>
-        </button>
-    {/if}
+    <Button class={`absolute right-1 top-1 p-2 ${id === undefined ? "hidden" : ""}`} onclick={deleteSelf}>
+        <CloseOutline class="size-6" />
+        <Tooltip class="dark:bg-gray-900">Delete</Tooltip>
+    </Button>
 </Card>

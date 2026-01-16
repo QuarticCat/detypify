@@ -17,22 +17,26 @@ You can also use it in [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
 
 ## Development
 
-### File Structure
-
-```text
-- python     # training scripts
-- frontend
-  - service  # inference lib
-  - ui       # web UI
-  - worker   # Cloudflare worker
-```
-
-Check corresponding folders for more information.
-
 Before you build frontend projects, make sure you have the `train` folder in [frontend/service](./frontend/service) by either:
 
 - Train your own one, or
 - Download from [NPM](https://www.npmjs.com/package/detypify-service?activeTab=code).
+
+### Model
+
+See [python](./python).
+
+### Inference
+
+See [frontend/service](./frontend/service/).
+
+### Web UI
+
+See [frontend/ui](./frontend/ui).
+
+### Cloudflare Worker
+
+See [frontend/worker](./frontend/worker).
 
 ### Logo
 
