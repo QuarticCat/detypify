@@ -15,9 +15,7 @@
     const { info } = $props<{ info: CandidateInfo }>();
 
     const symbolChar = $derived(info.char ?? (info.codepoint ? String.fromCodePoint(info.codepoint) : ""));
-    const codepoint = $derived(
-        info.codepoint ?? (symbolChar ? (symbolChar.codePointAt(0) ?? undefined) : undefined),
-    );
+    const codepoint = $derived(info.codepoint ?? (symbolChar ? (symbolChar.codePointAt(0) ?? undefined) : undefined));
     const escapeCode = $derived(
         codepoint !== undefined ? `\\u{${codepoint.toString(16).toUpperCase().padStart(4, "0")}}` : "",
     );

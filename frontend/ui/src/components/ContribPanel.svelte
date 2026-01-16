@@ -11,9 +11,7 @@
     let modalOk = $state(false);
     let modalText = $state("");
 
-    const inputColor = $derived<"green" | "red">(
-        contribSyms[$inputText as keyof typeof contribSyms] ? "green" : "red",
-    );
+    const inputColor = $derived<"green" | "red">(contribSyms[$inputText as keyof typeof contribSyms] ? "green" : "red");
     const disableSave = $derived(inputColor !== "green" || $strokes.length === 0);
     const disableSubmit = $derived(isSubmitting || $savedSamples.length === 0);
 
@@ -77,7 +75,6 @@
 
         isSubmitting = false;
     }
-
 </script>
 
 <Input type="text" placeholder="symbol" color={inputColor} bind:value={$inputText}>
