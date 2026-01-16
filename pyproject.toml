@@ -1,5 +1,5 @@
 [project]
-name = "detypify"
+name = "detypify-model"
 version = "0.2.4"
 requires-python = ">=3.13, <3.14"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]

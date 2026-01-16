@@ -1,11 +1,12 @@
-import inferSyms from "../train/infer.json";
+import inferSymsRaw from "../train/infer.json";
+import contribSymsRaw from "../train/contrib.json";
 import { InferenceSession, Tensor } from "onnxruntime-web";
 
 export { env as ortEnv } from "onnxruntime-web";
 
 const modelUrl = new URL("../train/model.onnx", import.meta.url).href;
 
-export interface DetypifySymbol {
+export interface SymbolInfo {
     char: string;
     names: string[];
     shorthand?: string;
@@ -17,6 +18,19 @@ export type Point = [number, number];
 export type Stroke = Point[];
 export type Strokes = Stroke[];
 
+/**
+ * Symbol metadata used by the model.
+ */
+export const inferSyms = inferSymsRaw as SymbolInfo[];
+
+/**
+ * Mapping from Typst symbol names to characters.
+ */
+export const contribSyms = contribSymsRaw as Record<string, string>;
+
+/**
+ * Typst symbol classifier.
+ */
 export class Detypify {
     private sess: InferenceSession;
     private canvas: HTMLCanvasElement;
@@ -88,7 +102,7 @@ export class Detypify {
     /**
      * Inference top `k` candidates.
      */
-    async candidates(strokes: Strokes, k: number): Promise<DetypifySymbol[]> {
+    async candidates(strokes: Strokes, k: number): Promise<SymbolInfo[]> {
         this.draw(strokes);
 
         // To greyscale.

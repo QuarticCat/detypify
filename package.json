@@ -1,5 +1,5 @@
 {
-    "name": "detypify",
+    "name": "detypify-frontend",
     "workspaces": [
         "frontend/*"
     ],

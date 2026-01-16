@@ -1,30 +1,16 @@
 <script lang="ts">
     import Card from "../utils/Card.svelte";
     import CopyButton from "../utils/CopyButton.svelte";
+    import type { SymbolInfo } from "detypify-service";
     import { Avatar, P } from "flowbite-svelte";
 
-    type CandidateInfo = {
-        char?: string;
-        codepoint?: number;
-        names: string[];
-        shorthand?: string;
-        markupShorthand?: string;
-        mathShorthand?: string;
-    };
-
-    const { info } = $props<{ info: CandidateInfo }>();
-
-    const symbolChar = $derived(info.char ?? (info.codepoint ? String.fromCodePoint(info.codepoint) : ""));
-    const codepoint = $derived(info.codepoint ?? (symbolChar ? (symbolChar.codePointAt(0) ?? undefined) : undefined));
-    const escapeCode = $derived(
-        codepoint !== undefined ? `\\u{${codepoint.toString(16).toUpperCase().padStart(4, "0")}}` : "",
-    );
+    const { info }: { info: SymbolInfo } = $props();
 </script>
 
 <Card>
     <CopyButton>
         <Avatar cornerStyle="rounded" size="lg" class="font-[NewCMMath-Detypify] text-5xl">
-            {symbolChar}
+            {info.char}
         </Avatar>
     </CopyButton>
     <div class="space-y-1">
@@ -43,7 +29,7 @@
             Escape:
             <CopyButton>
                 <code class="text-base font-medium">
-                    {escapeCode}
+                    \u{info.char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}
                 </code>
             </CopyButton>
         </P>

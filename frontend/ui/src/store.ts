@@ -1,4 +1,4 @@
-import { Detypify, ortEnv, type DetypifySymbol, type Strokes } from "detypify-service";
+import { Detypify, ortEnv, type SymbolInfo, type Strokes } from "detypify-service";
 import { derived, get, writable } from "svelte/store";
 
 ortEnv.wasm.numThreads = 1;
@@ -35,7 +35,7 @@ export const candidates = derived(
         }
         sess.candidates($strokes, 5).then((result) => set(result));
     },
-    [] as DetypifySymbol[],
+    [] as SymbolInfo[],
 );
 
 export const imgUrl = derived(strokes, ($strokes) => {

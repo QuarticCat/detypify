@@ -8,11 +8,6 @@ export default defineConfig({
         conditions: ["module", "browser", "onnxruntime-web-use-extern-wasm"],
     },
     assetsInclude: ["**/*.onnx"],
-    server: {
-        fs: {
-            allow: [".."],
-        },
-    },
     plugins: [
         tailwindcss(),
         svelte(),
