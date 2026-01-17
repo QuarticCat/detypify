@@ -6,14 +6,21 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import cache, partial
+from os import process_cpu_count
 from pathlib import Path
 from typing import Any, Callable
 
-import lmdb
 import msgspec
 from bs4 import BeautifulSoup
 from lxml import etree
 from PIL import Image, ImageDraw
+from rocksdict import (
+    DBCompressionType,
+    Options,
+    Rdict,
+    WriteBatch,
+    WriteOptions,
+)
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -362,19 +369,36 @@ def get_msgpack_encoder():
     return msgspec.msgpack.Encoder()
 
 
-def create_lmdb_dataset(
+def create_dataset(
     parse_func: Callable[[Any], MathSymbolSample | None],
     data: Any,
     dataset_name: str,
 ) -> None:
-    """Create an LMDB dataset from raw data using a parse function."""
+    """Create an dataset database file from raw data using a parse function."""
     dataset_path = Path(OUT_DIR, dataset_name)
-    lmdb_path = Path(dataset_path, "lmdb")
-    lmdb_path.mkdir(exist_ok=True, parents=True)
-    env = lmdb.open(str(lmdb_path), writemap=True)
+    db_path = Path(dataset_path, "db")
+    db_path.mkdir(exist_ok=True, parents=True)
     class_counters: dict[str, int] = defaultdict(int)
-    total_written = 0
     write_frequency = 1000
+    total_length = 0
+
+    def _get_opts() -> Options:
+        opts = Options()
+        opts.increase_parallelism(process_cpu_count())
+        # zstd
+        opts.set_compression_type(DBCompressionType.zstd())
+        opts.set_compression_options(0, 0, 0, 32768)
+        opts.set_zstd_max_train_bytes(32768 * 100)
+        opts.set_bottommost_compression_type(DBCompressionType.zstd())
+        opts.set_bottommost_compression_options(0, 0, 0, 32768, True)
+        opts.set_bottommost_zstd_max_train_bytes(32768 * 100, True)
+        # disable auto-compact, compact later
+        opts.prepare_for_bulk_load()
+        # increase buffer size and count
+        opts.set_write_buffer_size(128 * 1024 * 1024)
+        opts.set_max_write_buffer_number(process_cpu_count())
+        opts.set_min_write_buffer_number_to_merge(2)
+        return opts
 
     def _worker_func(
         parse_func: Callable[[Any], MathSymbolSample | None], data_item: Any
@@ -388,29 +412,38 @@ def create_lmdb_dataset(
 
         return parsed_data.label, encoded
 
-    with env.begin(write=True) as txn:
-        with ProcessPoolExecutor() as exec:
-            results_iter = exec.map(_worker_func, data, chunksize=1000)
-
-            # write to lmdb
-            for label, encoded_data in results_iter:
-                if not label or len(encoded_data) == 0:
-                    continue
-                current_idx = class_counters.get(label, 0)
-                key = f"{ord(label):06d}_{current_idx:09d}".encode("ascii")
-                txn.put(key, encoded_data)
-                current_idx += 1
-                total_written += 1
-
-            # batch write
-            if total_written % write_frequency == 0:
-                txn.commit()
-                txn = env.begin(write=True)
-
-        txn.commit()
-    # save class sample count map
-    with open(Path(dataset_path, "class_count.json"), "wb") as f:
-        f.write(msgspec.json.encode(class_counters))
+    db = Rdict(str(db_path), _get_opts())
+    with ProcessPoolExecutor() as exec:
+        results_iter = exec.map(_worker_func, data, chunksize=1000)
+        w_opts = WriteOptions()
+        w_opts.disable_wal(True)
+        wb = WriteBatch()
+        # write to lmdb
+        for label, encoded_data in results_iter:
+            if not label or len(encoded_data) == 0:
+                continue
+            current_idx = class_counters.get(label, 0)
+            key = f"{ord(label):06d}_{current_idx:09d}"
+            class_counters[label] += 1
+            total_length += 1
+            wb.put(key, encoded_data)
+            if len(wb) > write_frequency:
+                db.write(wb, w_opts)
+                wb.clear()
+        # write remaining items
+        if len(wb) > 0:
+            db.write(wb, w_opts)
+        # compact database and close
+    db.compact_range(None, None)
+    db.close()
+    # save dataset information
+    with open(Path(dataset_path, "dataset_info.json"), "wb") as f:
+        dataset_info: dict[str, Any] = {
+            "name": dataset_name,
+            "total_count": total_length,
+            "class_count": class_counters,
+        }
+        f.write(msgspec.json.encode(dataset_info))
 
 
 if __name__ == "__main__":
@@ -428,18 +461,18 @@ if __name__ == "__main__":
     with open("external/detexify.json", "rb") as f:
         detexify_raw_data = msgspec.json.decode(f.read())
 
-    create_lmdb_dataset(
+    create_dataset(
         parse_func=partial(parse_detexify_symbol, key_to_typ),
         data=detexify_raw_data,
         dataset_name="detexify",
     )
-    create_lmdb_dataset(
+    create_dataset(
         parse_func=partial(parse_sole_symbol, key_to_typ),
         data=MATH_WRITING_DATASET_PATH.iterdir(),
         dataset_name="math_writing_sole",
     )
     seg_annos = read_symbol_seg_anno()
-    create_lmdb_dataset(
+    create_dataset(
         parse_func=partial(extract_symbol, tex_to_typ),
         data=seg_annos,
         dataset_name="math_wrting_extracted",
