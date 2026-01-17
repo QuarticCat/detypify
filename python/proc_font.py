@@ -4,7 +4,6 @@ import os
 import shutil
 
 from fontTools import subset
-
 from proc_data import get_typst_symbol_info
 
 OUT_DIR = "build/font"
@@ -20,4 +19,4 @@ if __name__ == "__main__":
         "--flavor=woff2",
         f"--output-file={OUT_DIR}/NewCMMath-Detypify.woff2",
     ]
-    subset.main(args) # type: ignore
+    subset.main(args)  # type: ignore
