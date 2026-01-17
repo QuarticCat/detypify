@@ -15,7 +15,7 @@ type Stroke = list[Point]
 type Strokes = list[Stroke]
 
 OUT_DIR = "build/data"
-IMG_SIZE = 32  # px
+IMG_SIZE = 256  # px
 
 # Missing mappings in the Typst symbol page.
 TEX_TO_TYP = {
