@@ -1,5 +1,5 @@
-import inferSymsRaw from "../train/infer.json";
 import contribSymsRaw from "../train/contrib.json";
+import inferSymsRaw from "../train/infer.json";
 import { InferenceSession, Tensor } from "onnxruntime-web";
 
 export { env as ortEnv } from "onnxruntime-web";

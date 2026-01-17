@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { isContribMode, strokes } from "../store";
+    import { isContribMode } from "../store";
     import { A, DarkMode, Heading, Modal, NavBrand, Navbar, P, ToolbarButton, Tooltip } from "flowbite-svelte";
     import { FireOutline, FireSolid, GithubSolid, QuestionCircleSolid } from "flowbite-svelte-icons";
 
@@ -7,52 +7,34 @@
 
     function toggleContribMode() {
         $isContribMode = !$isContribMode;
-        $strokes = [];
     }
 </script>
 
 <Navbar>
-    {#snippet children()}
-        <NavBrand>
-            <span class="self-center whitespace-nowrap text-2xl font-semibold dark:text-white">Detypify</span>
-        </NavBrand>
+    <NavBrand class="self-center whitespace-nowrap text-2xl font-semibold dark:text-white">Detypify</NavBrand>
+    <div class="ms-auto flex items-center">
+        <ToolbarButton size="lg" class="ui-toolbar-btn" onclick={() => (openHelpModal = true)}>
+            <QuestionCircleSolid size="lg" />
+        </ToolbarButton>
+        <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Help</Tooltip>
 
-        <div class="ms-auto flex items-center">
-            <ToolbarButton
-                size="lg"
-                class="inline-block hover:text-gray-900 dark:hover:text-white"
-                onclick={() => (openHelpModal = true)}
-            >
-                <QuestionCircleSolid size="lg" />
-            </ToolbarButton>
-            <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Help</Tooltip>
+        <ToolbarButton size="lg" class="ui-toolbar-btn" href="https://github.com/QuarticCat/detypify">
+            <GithubSolid size="lg" />
+        </ToolbarButton>
+        <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">View on GitHub</Tooltip>
 
-            <ToolbarButton
-                size="lg"
-                class="inline-block hover:text-gray-900 dark:hover:text-white"
-                href="https://github.com/QuarticCat/detypify"
-            >
-                <GithubSolid size="lg" />
-            </ToolbarButton>
-            <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">View on GitHub</Tooltip>
+        <ToolbarButton size="lg" class="ui-toolbar-btn" onclick={toggleContribMode}>
+            {#if $isContribMode}
+                <FireOutline size="lg" />
+            {:else}
+                <FireSolid size="lg" />
+            {/if}
+        </ToolbarButton>
+        <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle contrib mode</Tooltip>
 
-            <ToolbarButton
-                size="lg"
-                class="inline-block hover:text-gray-900 dark:hover:text-white"
-                onclick={toggleContribMode}
-            >
-                {#if $isContribMode}
-                    <FireOutline size="lg" />
-                {:else}
-                    <FireSolid size="lg" />
-                {/if}
-            </ToolbarButton>
-            <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle contrib mode</Tooltip>
-
-            <DarkMode size="lg" class="inline-block hover:text-gray-900 dark:hover:text-white" />
-            <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle dark mode</Tooltip>
-        </div>
-    {/snippet}
+        <DarkMode size="lg" class="ui-toolbar-btn" />
+        <Tooltip class="z-10 dark:bg-gray-900" placement="bottom">Toggle dark mode</Tooltip>
+    </div>
 </Navbar>
 
 <Modal bind:open={openHelpModal} dismissable>

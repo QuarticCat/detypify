@@ -1,43 +1,68 @@
 <script lang="ts">
-    import Alert from "./components/Alert.svelte";
     import Candidate from "./components/Candidate.svelte";
     import Canvas from "./components/Canvas.svelte";
     import ContribPanel from "./components/ContribPanel.svelte";
     import NavBar from "./components/NavBar.svelte";
     import Preview from "./components/Preview.svelte";
-    import { candidates, imgUrl, inputText, isContribMode, savedSamples, session } from "./store";
-    import { contribSyms } from "detypify-service";
-    import { Hr, Spinner } from "flowbite-svelte";
+    import { strokes, isContribMode, samples } from "./store";
+    import type { Strokes, SymbolInfo } from "detypify-service";
+    import { Detypify, ortEnv } from "detypify-service";
+    import { Alert, Hr, Spinner } from "flowbite-svelte";
+    import { FireSolid } from "flowbite-svelte-icons";
 
-    const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAP7//wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
+    ortEnv.wasm.numThreads = 1;
+    ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+
+    let contribSymName = $state("");
+
+    async function candidates(session: Detypify, strokes: Strokes): Promise<SymbolInfo[]> {
+        if (strokes.length === 0) return [];
+        return await session.candidates(strokes, 5);
+    }
+
+    function draw(session: Detypify, strokes: Strokes): string | undefined {
+        if (strokes.length === 0) return;
+        return session.draw(strokes)?.toDataURL();
+    }
+
+    function deletePreview(id: string) {
+        $samples = $samples.filter((s) => s.id !== id);
+    }
 </script>
 
 <NavBar />
 
-<div class="flex flex-wrap justify-evenly space-y-4 pb-8 md:pt-8">
-    <div class="hidden md:block"></div>
-    <div class="w-80 space-y-4">
+<div class="flex flex-wrap justify-center gap-x-16 gap-y-4 p-[2vw]">
+    <div class="flex flex-col gap-4 w-80">
         <Canvas />
         {#if !$isContribMode}
-            <Alert />
+            <Alert color="blue" border dismissable>
+                Cannot identify your symbol? Click <FireSolid class="inline size-4 align-[-3px]" /> to help us improve our
+                dataset!
+            </Alert>
         {:else}
-            <ContribPanel />
+            <ContribPanel bind:value={contribSymName} />
         {/if}
     </div>
-    <div class="w-90 space-y-4 text-center">
-        {#if !$session}
-            <Spinner size="12" />
-        {:else if !$isContribMode}
-            {#each $candidates as info}
-                <Candidate {info} />
-            {/each}
-        {:else}
-            <Preview logo={contribSyms[$inputText] ?? ""} imgUrl={$imgUrl ?? BLANK} />
-            <Hr class="mx-auto h-2 w-60 rounded" />
-            {#each $savedSamples as { id, logo, imgUrl } (id)}
-                <Preview {id} {logo} {imgUrl} />
-            {/each}
-        {/if}
+    <div class="flex flex-col gap-4 w-100">
+        {#await Detypify.create()}
+            <Spinner size="12" class="self-center" />
+        {:then session}
+            {#if !$isContribMode}
+                {#await candidates(session, $strokes)}
+                    <Spinner size="12" class="self-center" />
+                {:then infoList}
+                    {#each infoList as info}
+                        <Candidate {info} />
+                    {/each}
+                {/await}
+            {:else}
+                <Preview name={contribSymName} img={draw(session, $strokes)} />
+                <Hr class="mx-auto h-2 w-60 rounded" />
+                {#each $samples as { id, name, strokes } (id)}
+                    <Preview {name} img={draw(session, strokes)} ondelete={() => deletePreview(id)} />
+                {/each}
+            {/if}
+        {/await}
     </div>
-    <div class="hidden md:block"></div>
 </div>

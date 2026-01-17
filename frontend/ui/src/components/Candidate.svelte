@@ -8,17 +8,20 @@
 </script>
 
 <Card>
-    <CopyButton>
+    {@const escape = `\\u{${info.char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}}`}
+    {@const shorthand = info.shorthand ?? info.markupShorthand ?? info.mathShorthand}
+    {@const shorthandKind = info.markupShorthand ? "markup" : info.mathShorthand ? "math" : ""}
+    <CopyButton text={info.char}>
         <Avatar cornerStyle="rounded" size="lg" class="font-[NewCMMath-Detypify] text-5xl">
             {info.char}
         </Avatar>
     </CopyButton>
-    <div class="space-y-1">
+    <div class="flex flex-col gap-y-1">
         <P>
             Name:
             {#each info.names as name, i}
                 {i === 0 ? "" : " | "}
-                <CopyButton>
+                <CopyButton text={name}>
                     <code class="text-base font-medium">
                         {name}
                     </code>
@@ -27,40 +30,23 @@
         </P>
         <P>
             Escape:
-            <CopyButton>
+            <CopyButton text={escape}>
                 <code class="text-base font-medium">
-                    \u{info.char.codePointAt(0)?.toString(16).toUpperCase().padStart(4, "0")}
+                    {escape}
                 </code>
             </CopyButton>
         </P>
-        {#if info.shorthand}
+        {#if shorthand}
             <P>
                 Shorthand:
-                <CopyButton>
+                <CopyButton text={shorthand}>
                     <code class="text-base font-medium">
-                        {info.shorthand}
+                        {shorthand}
                     </code>
                 </CopyButton>
-            </P>
-        {:else if info.markupShorthand}
-            <P>
-                Shorthand:
-                <CopyButton>
-                    <code class="text-base font-medium">
-                        {info.markupShorthand}
-                    </code>
-                </CopyButton>
-                <span class="text-sm text-gray-500">(markup)</span>
-            </P>
-        {:else if info.mathShorthand}
-            <P>
-                Shorthand:
-                <CopyButton>
-                    <code class="text-base font-medium">
-                        {info.mathShorthand}
-                    </code>
-                </CopyButton>
-                <span class="text-sm text-gray-500">(math)</span>
+                {#if shorthandKind}
+                    <span class="text-sm text-gray-500">({shorthandKind})</span>
+                {/if}
             </P>
         {/if}
     </div>

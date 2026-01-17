@@ -1,102 +1,79 @@
 <script lang="ts">
-    import { imgUrl, inputText, savedSamples, strokes } from "../store";
-    import MyButton from "../utils/Button.svelte";
+    import { samples, strokes } from "../store";
     import { contribSyms } from "detypify-service";
-    import { Button, Input, Modal, Spinner } from "flowbite-svelte";
+    import { Button, Input } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
 
+    const contribUrl = import.meta.env.DEV
+        ? "http://localhost:8787/contrib"
+        : "https://detypify.quarticcat.workers.dev/contrib";
+
+    let { value = $bindable() }: { value: string } = $props();
+
     const symKeys = Object.keys(contribSyms);
-    let isSubmitting = $state(false);
-    let modalOpen = $state(false);
-    let modalOk = $state(false);
-    let modalText = $state("");
+    let submitting = $state(false);
 
-    const inputColor = $derived<"green" | "red">(contribSyms[$inputText] ? "green" : "red");
-    const disableSave = $derived(inputColor !== "green" || $strokes.length === 0);
-    const disableSubmit = $derived(isSubmitting || $savedSamples.length === 0);
+    const isValid = $derived(Boolean(contribSyms[value]));
 
-    function refreshInput() {
-        const old = $inputText;
-        while (($inputText = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
+    function refresh() {
+        const old = value;
+        while ((value = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
         $strokes = [];
     }
 
-    let sampleId = 0;
     function save() {
-        const name = $inputText;
-        const logo = contribSyms[name];
-        if (!logo) return;
-        $savedSamples = [
-            {
-                id: sampleId,
-                name,
-                logo,
-                strokes: $strokes,
-                imgUrl: $imgUrl,
-            },
-            ...$savedSamples,
-        ];
-        sampleId += 1;
+        if (!isValid) return;
+        const sample = {
+            id: crypto.randomUUID(),
+            name: value,
+            strokes: $strokes,
+        };
+        $samples = [sample, ...$samples];
         $strokes = [];
     }
 
-    if (!localStorage.getItem("token")) {
-        localStorage.setItem("token", window.crypto.getRandomValues(new Uint32Array(1))[0].toString());
+    function getToken(): number {
+        const existing = localStorage.getItem("token");
+        if (existing) return Number(existing);
+
+        const token = crypto.getRandomValues(new Uint32Array(1))[0].toString();
+        localStorage.setItem("token", token);
+        return Number(token);
     }
 
     async function submit() {
-        isSubmitting = true;
-
-        const payload = {
-            ver: 3,
-            token: Number(localStorage.getItem("token")),
-            samples: $savedSamples.map(({ name, strokes }) => [name, strokes]),
-        };
-        $savedSamples = [];
-
+        submitting = true;
         try {
-            const response = await fetch("https://detypify.quarticcat.workers.dev/contrib", {
+            const response = await fetch(contribUrl, {
                 method: "POST",
                 headers: {
                     Accept: "application/json",
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify({
+                    ver: 3,
+                    token: getToken(),
+                    samples: $samples.map(({ name, strokes }) => [name, strokes]),
+                }),
             });
-            modalOk = response.ok;
-            modalText = await response.text();
+            $samples = []; // clear samples only if success
+            window.alert(await response.text());
         } catch (err) {
-            modalOk = false;
-            modalText = err instanceof Error ? err.message : String(err);
+            window.alert(err instanceof Error ? err.message : String(err));
         }
-        modalOpen = true;
-
-        isSubmitting = false;
+        submitting = false;
     }
 </script>
 
-<Input type="text" placeholder="symbol" color={inputColor} bind:value={$inputText}>
+<Input type="text" placeholder="symbol" color={isValid ? "green" : "red"} bind:value>
     {#snippet right()}
-        <MyButton onclick={refreshInput}><RefreshOutline /></MyButton>
+        <button type="button" class="ui-hover-btn" onclick={refresh}>
+            <RefreshOutline />
+        </button>
     {/snippet}
 </Input>
 
 <div class="flex justify-around gap-4">
-    <Button class="w-full" disabled={disableSave} onclick={save}>Save</Button>
-    <Button class="w-full" disabled={disableSubmit} onclick={submit}>
-        {#if isSubmitting}
-            <Spinner size="5" />
-        {:else}
-            Submit
-        {/if}
-    </Button>
+    <Button class="w-full" disabled={!isValid || $strokes.length === 0} onclick={save}>Save</Button>
+    <Button class="w-full" disabled={$samples.length === 0} onclick={submit} loading={submitting}>Submit</Button>
 </div>
-
-<Modal size="xs" bind:open={modalOpen} dismissable>
-    {#snippet header()}
-        <h3>Result</h3>
-    {/snippet}
-    <div class={`text-center text-xl ${modalOk ? "text-green-600" : "text-red-600"}`}>
-        {modalText}
-    </div>
-</Modal>
