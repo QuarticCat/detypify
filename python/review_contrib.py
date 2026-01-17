@@ -5,7 +5,6 @@ import shutil
 
 import msgspec
 from PIL import Image, ImageDraw, ImageFont
-
 from proc_data import draw_to_img, get_typst_symbol_info, normalize
 
 OUT_DIR = "build/contrib"
