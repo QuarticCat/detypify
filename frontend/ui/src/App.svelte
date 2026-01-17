@@ -1,70 +1,56 @@
 <script lang="ts">
-    import Contrib from "./routes/Contrib.svelte";
-    import FAQ from "./routes/FAQ.svelte";
-    import Home from "./routes/Home.svelte";
-    import { Detypify, ortEnv } from "detypify-service";
-    import { Navbar, NavBrand, NavLi, NavUl, NavHamburger } from "flowbite-svelte";
-    import { Spinner, DarkMode, Tooltip, ToolbarButton, Heading } from "flowbite-svelte";
-    import { GithubSolid } from "flowbite-svelte-icons";
-    import { onMount } from "svelte";
-    import { fade } from "svelte/transition";
+    import Candidate from "./components/Candidate.svelte";
+    import Canvas from "./components/Canvas.svelte";
+    import ContribPanel from "./components/ContribPanel.svelte";
+    import NavBar from "./components/NavBar.svelte";
+    import Preview from "./components/Preview.svelte";
+    import { strokes, input, isContribMode, samples, session } from "./store";
+    import type { Strokes, SymbolInfo } from "detypify-service";
+    import { Alert, Hr, Spinner } from "flowbite-svelte";
+    import { FireSolid } from "flowbite-svelte-icons";
 
-    ortEnv.wasm.numThreads = 1;
-    ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+    async function candidates(strokes: Strokes): Promise<SymbolInfo[] | undefined> {
+        if (strokes.length === 0) return;
+        return await $session?.candidates(strokes, 5);
+    }
 
-    let activeHash = $state("#");
-
-    onMount(() => {
-        const updateHash = () => {
-            activeHash = window.location.hash || "#";
-        };
-
-        updateHash();
-        window.addEventListener("hashchange", updateHash);
-        return () => window.removeEventListener("hashchange", updateHash);
-    });
+    function draw(strokes: Strokes): string | undefined {
+        if (strokes.length === 0) return;
+        return $session?.draw(strokes)?.toDataURL();
+    }
 </script>
 
-<Navbar>
-    <NavBrand href="/">
-        <!--  TODO: logo -->
-        <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Detypify</span>
-    </NavBrand>
-    <div class="flex">
-        <NavUl activeUrl={activeHash}>
-            <NavLi href="#">Home</NavLi>
-            <NavLi href="#contrib">Contrib</NavLi>
-            <NavLi href="#faq">FAQ</NavLi>
-        </NavUl>
+<NavBar />
 
-        <ToolbarButton size="lg" class="my-auto" href="https://github.com/QuarticCat/detypify">
-            <GithubSolid size="lg" />
-        </ToolbarButton>
-        <Tooltip class="dark:bg-gray-900" placement="bottom">View on GitHub</Tooltip>
-
-        <DarkMode size="lg" class="my-auto" />
-        <Tooltip class="dark:bg-gray-900" placement="bottom">Toggle dark mode</Tooltip>
-
-        <NavHamburger />
+<div class="flex flex-wrap justify-center gap-x-16 gap-y-4 px-[4vw] py-[1vw]">
+    <div class="flex flex-col gap-4 w-80">
+        <Canvas />
+        {#if !$isContribMode}
+            <Alert color="blue" border dismissable>
+                Cannot identify your symbol? Click <FireSolid class="inline size-4 align-[-3px]" /> to help us improve our
+                dataset!
+            </Alert>
+        {:else}
+            <ContribPanel />
+        {/if}
     </div>
-</Navbar>
-
-{#await Detypify.create()}
-    <div class="ui-container min-h-80">
-        <Spinner size="16" class="self-center" />
+    <div class="flex flex-col gap-4 w-100">
+        {#if !$session}
+            <Spinner size="12" class="self-center" />
+        {:else if !$isContribMode}
+            {#await candidates($strokes)}
+                <Spinner size="12" class="self-center" />
+            {:then infoList}
+                {#each infoList as info}
+                    <Candidate {info} />
+                {/each}
+            {/await}
+        {:else}
+            <Preview name={$input} img={draw($strokes)} />
+            <Hr class="mx-auto h-2 w-60 rounded" />
+            {#each $samples as { id, name, strokes } (id)}
+                <Preview {name} img={draw(strokes)} ondelete={() => ($samples = $samples.filter((s) => s.id !== id))} />
+            {/each}
+        {/if}
     </div>
-{:then session}
-    {#key activeHash}
-        <div class="ui-container" out:fade={{ duration: 50 }} in:fade={{ duration: 50, delay: 50 }}>
-            {#if activeHash === "#"}
-                <Home {session} />
-            {:else if activeHash === "#contrib"}
-                <Contrib {session} />
-            {:else if activeHash === "#faq"}
-                <FAQ />
-            {:else}
-                <Heading>Not Found</Heading>
-            {/if}
-        </div>
-    {/key}
-{/await}
+</div>

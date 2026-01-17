@@ -41,26 +41,18 @@
             local(NewComputerModernMath),
             url(/NewCMMath-Detypify.woff2) format("woff2");
     }
-
-    html {
-        scrollbar-width: none;
-    }
 }
 
 @layer components {
-    .ui-container {
-        @apply m-[2vw] flex flex-wrap justify-center gap-x-16 gap-y-4;
-    }
-
-    .ui-sub-container {
-        @apply flex flex-col gap-4;
-    }
-
     .ui-hover-btn {
         @apply text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white;
     }
 
     .ui-close-btn {
         @apply absolute top-1 right-1 p-2;
+    }
+
+    .ui-toolbar-btn {
+        @apply inline-block hover:text-gray-900 dark:hover:text-white;
     }
 }
