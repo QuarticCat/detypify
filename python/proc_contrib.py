@@ -53,7 +53,7 @@ if __name__ == "__main__":
     for filename in os.listdir(OUT_DIR):
         sym, id_, _ = filename.rsplit(".", 1)[0].split("-")
         if id_ != "0":
-            strokes = id_to_strokes[int(id_)]
+            strokes = id_to_strokes[str(id_)]
             with open(f"data/dataset/{sym}.txt", "a") as f:
                 f.write(strokes + "\n")
 

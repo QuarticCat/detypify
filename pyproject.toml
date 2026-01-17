@@ -2,12 +2,18 @@
 name = "detypify-model"
 version = "0.2.4"
 requires-python = ">=3.13, <3.14"
-authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
+authors = [
+  { name = "QuarticCat", email = "QuarticCat@pm.me" },
+  { name = "Cloud0310", email = "gh@touchingfish.day" }
+]
 dependencies = [
   # migrate
   "beautifulsoup4>=4.14.3",
   "fonttools[woff]>=4.61.0",
   "lightning>=2.6.0",
+  # common
+  "lmdb>=1.7.5",
+  "lxml>=6.0.2",
   "msgspec>=0.20.0",
   "onnx>=1.20.0",
   "onnxscript>=0.5.7",
@@ -23,26 +29,49 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "pyrefly",
+  "ipython>=9.9.0",
   # tensorboard logging faciliity
+  "lxml-stubs>=0.5.1",
+  "pyrefly",
   "tensorboard>=2.20.0",
   "tensorboardx>=2.6.4",
+  "torch-tb-profiler",
   "torch-tb-profiler>=0.4.3",
-  "zuban"
+  "zuban",
+  "zuban>=0.4.1"
 ]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["proc_*"]
 
+[tool.uv]
+conflicts = [
+  [
+    { extra = "cpu" },
+    { extra = "gpu" },
+  ]
+]
+
 [tool.uv.sources]
-torch = { index = "torch-cu130" }
-torchvision = { index = "torch-cu130" }
+torch = [
+  { index = "torch-cpu", extra = "cpu" },
+  { index = "torch-cu130", extra = "gpu" }
+]
+torchvision = [
+  { index = "torch-cpu", extra = "cpu" },
+  { index = "torch-cu130", extra = "gpu" }
+]
 
 [[tool.uv.index]]
 name = "torch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
-# zuban sys.path finding
+[[tool.uv.index]]
+name = "torch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+# zuban sys.path finding, for zuban lsp
 [tool.zuban]
 mypy_path = ["python"]
