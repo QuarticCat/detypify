@@ -20,4 +20,4 @@ if __name__ == "__main__":
         "--flavor=woff2",
         f"--output-file={OUT_DIR}/NewCMMath-Detypify.woff2",
     ]
-    subset.main(args)
+    subset.main(args) # type: ignore

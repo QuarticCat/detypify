@@ -1,6 +1,7 @@
 """Train the model."""
 
-import os
+from os import process_cpu_count
+from typing import Literal
 
 import lightning as L
 import msgspec
@@ -9,6 +10,7 @@ import torch
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch import nn, optim
 from torch.utils.data import DataLoader, random_split
+from torchmetrics import Accuracy
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import v2
 
@@ -16,17 +18,40 @@ from proc_data import OUT_DIR as DATA_DIR
 from proc_data import TypstSymInfo
 
 OUT_DIR = "build/train"
+FINE_TUNING = False
+USE_TRANSFORMER = False
+type model_size = Literal["small", "medium", "large"]
 
 
-class MobileNetV4Classifier(L.LightningModule):
-    def __init__(self, num_classes):
+class MobileNetV4(L.LightningModule):
+    def __init__(
+        self,
+        num_classes: int,
+        use_transformer=False,
+        fine_tune=False,
+        model_size: model_size = "small",
+    ):
         super().__init__()
-        self.model = timm.create_model(
-            "mobilenetv4_conv_medium.e500_r256_in1k",
-            pretrained=True,
-            num_classes=num_classes,
-        )
+        is_hybrid = "hybrid" if use_transformer else "conv"
+        model_name = f"mobilenetv4_{is_hybrid}_{model_size}"
+        if fine_tune:
+            self.model = timm.create_model(
+                "mobilenetv4_conv_medium.e500_r256_in1k",
+                pretrained=True,
+                num_classes=num_classes,
+            )
+        else:
+            self.model = timm.create_model(
+                model_name,
+                num_classes=num_classes,
+                in_chans=1,
+            )
         self.criterion = nn.CrossEntropyLoss()
+
+        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.val_acc_top5 = Accuracy(
+            task="multiclass", num_classes=num_classes, top_k=5
+        )
 
     def forward(self, x):
         return self.model(x)
@@ -35,16 +60,17 @@ class MobileNetV4Classifier(L.LightningModule):
         x, y = batch
         pred = self.model(x)
         loss = self.criterion(pred, y)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch):
         x, y = batch
         pred = self.model(x)
         loss = self.criterion(pred, y)
-        acc = (pred.argmax(1) == y).float().mean()
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", acc, prog_bar=True)
+        self.log("val_loss", loss)
+        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
+        self.log("val_top5", self.val_acc_top5(pred, y))
+
         return loss
 
     def configure_optimizers(self):
@@ -82,7 +108,7 @@ class TypstSymbolClassifier(L.LightningModule):
         x, y = batch
         pred = self.model(x)
         loss = self.criterion(pred, y)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -90,7 +116,7 @@ class TypstSymbolClassifier(L.LightningModule):
         pred = self.model(x)
         loss = self.criterion(pred, y)
         acc = (pred.argmax(1) == y).float().mean()
-        self.log("val_loss", loss, prog_bar=True)
+        self.log("val_loss", loss)
         self.log("val_acc", acc, prog_bar=True)
         return loss
 
@@ -107,17 +133,12 @@ class TypstSymbolClassifier(L.LightningModule):
 
 
 if __name__ == "__main__":
-    # shutil.rmtree(OUT_DIR, ignore_errors=True)
-    # os.makedirs(OUT_DIR, exist_ok=True)
-
     # Prepare data.
     transforms = [
-        # TODO: modify model arch to use single channel grayscale images
-        # 3 channels, as mobile net is trained on RGB images
-        v2.Grayscale(num_output_channels=3),
+        v2.Grayscale(num_output_channels=3 if FINE_TUNING else 1),
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        v2.functional.invert,
+        # v2.functional.invert,
         # Argumantaion
         # rotate & shift
         v2.RandomRotation(15),  # type: ignore
@@ -127,16 +148,18 @@ if __name__ == "__main__":
     ]
 
     orig_data = ImageFolder(f"{DATA_DIR}/img", v2.Compose(transforms))
+    # TODO: as the data is imbalanced by class, use a better strategy to split
     train_data, test_data = random_split(orig_data, [0.9, 0.1])
 
-    model = MobileNetV4Classifier(len(orig_data.classes))
-    num_workers = os.process_cpu_count() or 1
+    model = MobileNetV4(num_classes=len(orig_data.classes))
+    compiled_model = torch.compile(model)
+    num_workers = process_cpu_count() or 1
 
     logger = TensorBoardLogger(OUT_DIR + "/tb_logs", name="mobilenet-v4")  # type: ignore
     trainer = L.Trainer(max_epochs=20, default_root_dir=OUT_DIR, logger=logger)
     # TODO: if fine-tuning on existing model, freeze decoder weights on initial rounds
     trainer.fit(
-        model,
+        compiled_model,  # type: ignore
         train_dataloaders=DataLoader(
             train_data,
             batch_size=32,
@@ -153,13 +176,13 @@ if __name__ == "__main__":
     )
 
     # Export ONNX.
-    model.to_onnx(
-        f"{OUT_DIR}/model.onnx",
-        # 1 image , 3 color channels, 256x256 resolution
-        torch.randn(1, 3, 256, 256),
-        dynamo=True,
-        external_data=False,
-    )
+    # model.to_onnx(
+    #     f"{OUT_DIR}/model.onnx",
+    #     # 1 image , 3 color channels, 256x256 resolution
+    #     torch.randn(1, 3, 256, 256),
+    #     dynamo=True,
+    #     external_data=False,
+    # )
 
     # Generate JSON for the infer page.
     with open(f"{DATA_DIR}/symbols.json", "rb") as f:
@@ -167,7 +190,7 @@ if __name__ == "__main__":
     chr_to_sym = {s.char: s for s in sym_info}
     infer = []
     for c in orig_data.classes:
-        sym = chr_to_sym[chr(int(c))]
+        sym = chr_to_sym[c]
         info = {"char": sym.char, "names": sym.names}
         if sym.markup_shorthand and sym.math_shorthand:
             info["shorthand"] = sym.markup_shorthand
