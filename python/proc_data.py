@@ -1,4 +1,4 @@
-"""Preprocess training dataset."""
+"""Preprocess training datasets."""
 
 import re
 import unicodedata
@@ -28,7 +28,9 @@ type Strokes = list[Stroke]
 
 OUT_DIR = Path("build/data")
 MATH_WRITING_DATASET_PATH = Path("external/mathwriting")
+CONTRIB_DATA_PATH = Path("build/dataset.json")
 IMG_SIZE = 64  # px
+USE_CONTRIB = False
 
 # Missing mappings in the Typst symbol page.
 TEX_TO_TYP = {
@@ -156,6 +158,12 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     alternates: list[str] = []
 
 
+class DataSetInfo(msgspec.Struct, kw_only=True):
+    name: str
+    total_count: int
+    class_count: dict[str, int]
+
+
 class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     command: str
     # package: str | None = None
@@ -181,14 +189,6 @@ class MathSymbolSample:
     symbol: MathSymbol
 
 
-def read_symbol_seg_anno() -> list[SymbolSegInfo]:
-    """loads symbol extraction annotation of MathWrting Dataset"""
-    decoder = msgspec.json.Decoder(SymbolSegInfo)
-    with open(Path(OUT_DIR, "mathwriting", "symbols.jsonl"), "rb") as f:
-        symbol_annos = decoder.decode_lines(f.read())
-    return symbol_annos
-
-
 def parse_detexify_symbol(
     key_to_typ: dict[str, TypstSymInfo],
     key: str,
@@ -207,8 +207,13 @@ def parse_detexify_symbol(
     return MathSymbolSample(typ.char, MathSymbol(strokes))
 
 
+@cache
+def get_xml_parser():
+    return etree.XMLParser()
+
+
 def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> MathSymbol:
-    tree = etree.parse(filepath)
+    tree = etree.parse(filepath, get_xml_parser())
     root = tree.getroot()
 
     def _trace_to_stroke(trace: str) -> Stroke:
@@ -217,10 +222,10 @@ def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> MathSymbol:
         e.g. trace text:597.79 77.05 1841.0,596.41 80.84 1897.0 (a list of point(x,y,time) seperated by commas)
         """
         return [
-            (float(point[0]), float(point[1]))
+            (float(parts[0]), float(parts[1]))
             for point_str in trace.split(",")
-            for point in point_str.split(" ")
-            if len(point) >= 2
+            for parts in point_str.strip().split()
+            if len(parts) >= 2
         ]
 
     def _is_valid_trace(
@@ -257,7 +262,7 @@ def parse_sole_symbol(
     tree = etree.parse(filepath)
     root = tree.getroot()
     tex_label = root.findtext('.//annotation[@type="label"]')
-    if tex_label and isinstance(tex_label, str):
+    if isinstance(tex_label, str):
         typ = tex_to_typ.get(tex_label)
         if typ is not None:
             label = typ.char
@@ -267,6 +272,14 @@ def parse_sole_symbol(
         label,
         parse_inkml(filepath, None),
     )
+
+
+def read_symbol_seg_anno() -> list[SymbolSegInfo]:
+    """loads symbol extraction annotation of MathWrting Dataset"""
+    decoder = msgspec.json.Decoder(SymbolSegInfo)
+    with open(Path(OUT_DIR, "mathwriting", "symbols.jsonl"), "rb") as f:
+        symbol_annos = decoder.decode_lines(f.read())
+    return symbol_annos
 
 
 def extract_symbol(
@@ -312,7 +325,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
             # New symbols. Add to map.
             sym_info[char] = TypstSymInfo(
                 char=char,
-                names=list(name),
+                names=[*name],
                 latex_name=li.get("data-latex-name"),  # type: ignore
                 markup_shorthand=li.get("data-markup-shorthand"),  # type: ignore
                 math_shorthand=li.get("data-math-shorthand"),  # type: ignore
@@ -362,6 +375,17 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
     for stroke in strokes:
         draw.line(stroke)
     return image
+
+
+def parse_contrib(sample: dict[str, Any]) -> MathSymbolSample:
+    sym, _strokes = (
+        sample["sym"],
+        sample["strokes"],
+    )
+    strokes: Strokes = msgspec.json.decode(_strokes)
+    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
+    label = name_to_chr[sym]
+    return MathSymbolSample(label, MathSymbol(strokes))
 
 
 @cache
@@ -414,7 +438,9 @@ def create_dataset(
 
     db = Rdict(str(db_path), _get_opts())
     with ProcessPoolExecutor() as exec:
-        results_iter = exec.map(_worker_func, data, chunksize=1000)
+        results_iter = exec.map(
+            partial(_worker_func, parse_func), data, chunksize=1000
+        )
         w_opts = WriteOptions()
         w_opts.disable_wal(True)
         wb = WriteBatch()
@@ -423,7 +449,7 @@ def create_dataset(
             if not label or len(encoded_data) == 0:
                 continue
             current_idx = class_counters.get(label, 0)
-            key = f"{ord(label):06d}_{current_idx:09d}"
+            key = f"{ord(label):08d}_{current_idx:09d}"
             class_counters[label] += 1
             total_length += 1
             wb.put(key, encoded_data)
@@ -436,20 +462,19 @@ def create_dataset(
         # compact database and close
     db.compact_range(None, None)
     db.close()
+
     # save dataset information
     with open(Path(dataset_path, "dataset_info.json"), "wb") as f:
-        dataset_info: dict[str, Any] = {
-            "name": dataset_name,
-            "total_count": total_length,
-            "class_count": class_counters,
-        }
+        dataset_info = DataSetInfo(
+            name=dataset_name,
+            total_count=total_length,
+            class_count=class_counters,
+        )
         f.write(msgspec.json.encode(dataset_info))
 
 
 if __name__ == "__main__":
-    if OUT_DIR.exists():
-        OUT_DIR.rmdir()
-    OUT_DIR.mkdir()
+    OUT_DIR.mkdir(exist_ok=True)
 
     # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
@@ -460,20 +485,30 @@ if __name__ == "__main__":
     # Parse math symbols from detexify dataset
     with open("external/detexify.json", "rb") as f:
         detexify_raw_data = msgspec.json.decode(f.read())
+        create_dataset(
+            parse_func=partial(parse_detexify_symbol, key_to_typ),
+            data=detexify_raw_data,
+            dataset_name="detexify",
+        )
 
-    create_dataset(
-        parse_func=partial(parse_detexify_symbol, key_to_typ),
-        data=detexify_raw_data,
-        dataset_name="detexify",
-    )
+    # Parse MathWrting Dataset sole symboles
     create_dataset(
         parse_func=partial(parse_sole_symbol, key_to_typ),
-        data=MATH_WRITING_DATASET_PATH.iterdir(),
+        data=Path(MATH_WRITING_DATASET_PATH, "symbols").glob("*.inkml"),
         dataset_name="math_writing_sole",
     )
+    # Parse extracted symbols from MathWrting Dataset
     seg_annos = read_symbol_seg_anno()
     create_dataset(
         parse_func=partial(extract_symbol, tex_to_typ),
         data=seg_annos,
-        dataset_name="math_wrting_extracted",
+        dataset_name="math_writing_extracted",
     )
+
+    # Parse contributed data
+    if USE_CONTRIB:
+        with open(CONTRIB_DATA_PATH, "rb") as f:
+            samples = msgspec.json.decode(f.read())[0]["results"]
+            create_dataset(
+                parse_func=parse_contrib, data=samples, dataset_name="contrib"
+            )
