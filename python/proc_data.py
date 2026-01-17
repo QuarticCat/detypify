@@ -198,9 +198,7 @@ def parse_detexify_symbol(
     if typ is None:
         return
     strokes = [
-        [(float(x), float(y)) for x, y, _ in s]
-        for s in raw_strokes
-        if len(s) > 1
+        [(float(x), float(y)) for x, y, _ in s] for s in raw_strokes if len(s) > 2
     ]
     if len(strokes) == 0:
         return
@@ -228,9 +226,7 @@ def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> MathSymbol:
             if len(parts) >= 2
         ]
 
-    def _is_valid_trace(
-        allowed_ids: set[int] | None, element: etree._Element
-    ) -> bool:
+    def _is_valid_trace(allowed_ids: set[int] | None, element: etree._Element) -> bool:
         """
         Predicate function to determine if a trace should be included.
         """
@@ -343,9 +339,7 @@ def map_sym(
     with open("external/symbols.json", "rb") as f:
         tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     return {
-        x.id: tex_to_typ[x.command]
-        for x in tex_sym_info
-        if x.command in tex_to_typ
+        x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
     }
 
 
@@ -364,8 +358,7 @@ def normalize(strokes: Strokes) -> Strokes:
     scale = IMG_SIZE / width
 
     return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s]
-        for s in strokes
+        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
     ]
 
 
@@ -438,9 +431,7 @@ def create_dataset(
 
     db = Rdict(str(db_path), _get_opts())
     with ProcessPoolExecutor() as exec:
-        results_iter = exec.map(
-            partial(_worker_func, parse_func), data, chunksize=1000
-        )
+        results_iter = exec.map(partial(_worker_func, parse_func), data, chunksize=1000)
         w_opts = WriteOptions()
         w_opts.disable_wal(True)
         wb = WriteBatch()

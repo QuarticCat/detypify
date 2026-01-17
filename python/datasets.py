@@ -1,9 +1,7 @@
 from pathlib import Path
 
-import lightning as L
 import msgspec
-import numpy as np
-from proc_data import DataSetInfo, MathSymbol, draw_to_img
+from proc_data import DataSetInfo, MathSymbol, draw_to_img, normalize
 from rocksdict import (
     AccessType,
     BlockBasedOptions,
@@ -12,8 +10,6 @@ from rocksdict import (
     Rdict,
     ReadOptions,
 )
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets import VisionDataset
 
 
@@ -28,9 +24,7 @@ class RocksDBDataset(VisionDataset):
         # 1. Load Metadata
         info_path = self.dataset_path / "dataset_info.json"
         if not info_path.exists():
-            raise FileNotFoundError(
-                f"Could not find dataset info at {info_path}"
-            )
+            raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
         with open(info_path, "rb") as f:
             self.info = msgspec.json.decode(f.read(), type=DataSetInfo)
@@ -38,9 +32,7 @@ class RocksDBDataset(VisionDataset):
         # 2. Setup Class Mappings (CRITICAL FOR PYTORCH)
         # Sort labels to ensure Class 0 is always the same class
         self.classes = sorted(self.info.class_count.keys())
-        self.class_to_idx = {
-            cls_name: i for i, cls_name in enumerate(self.classes)
-        }
+        self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
 
         # 3. Reconstruct Keys & Build Targets List
         self.keys = []
@@ -111,7 +103,7 @@ class RocksDBDataset(VisionDataset):
 
         # Decode
         symbol_bytes = self.decoder.decode(raw_data).symbol
-        image = draw_to_img(symbol_bytes)
+        image = draw_to_img(normalize(symbol_bytes))
 
         # Get Label Integer (Fast lookup from RAM)
         label_idx = self.targets[idx]
@@ -121,69 +113,3 @@ class RocksDBDataset(VisionDataset):
 
         # Return IMAGE and INT (not string)
         return image, label_idx
-
-
-# for dataset split reuse logic
-class RocksDBDataModule(L.LightningDataModule):
-    def __init__(self, dataset_path, batch_size=32):
-        super().__init__()
-        self.dataset_path = dataset_path
-        self.batch_size = batch_size
-        self.save_hyperparameters()
-
-    def setup(self, stage=None):
-        # 1. Instantiate Dataset
-        # This loads the metadata and keys into memory (~seconds)
-        full_dataset = RocksDBDataset(self.dataset_path)
-
-        # 2. Stratified Split
-        # We access full_dataset.targets (which we built in __init__)
-        train_idx, val_idx = train_test_split(
-            np.arange(len(full_dataset)),
-            test_size=0.2,
-            stratify=full_dataset.targets,
-            shuffle=True,
-        )
-
-        self.train_ds = Subset(full_dataset, train_idx)
-        self.val_ds = Subset(full_dataset, val_idx)
-
-        # 3. Calculate Weights
-
-        # Get counts for the classes
-
-        train_targets = [full_dataset.targets[i] for i in train_idx]
-
-        # We can use numpy unique for speed since we have ints
-        unique, counts = np.unique(train_targets, return_counts=True)
-        class_counts = dict(zip(unique, counts))
-
-        # Weight = 1.0 / count
-        weight_per_class = {
-            cls: 1.0 / count for cls, count in class_counts.items()
-        }
-
-        # Assign weights to samples
-        sample_weights = [weight_per_class[t] for t in train_targets]
-
-        self.train_sampler = WeightedRandomSampler(
-            sample_weights, len(sample_weights), replacement=True
-        )
-
-    def train_dataloader(self):
-        return DataLoader(
-            self.train_ds,
-            batch_size=self.batch_size,
-            sampler=self.train_sampler,  # Handles Imbalance
-            num_workers=4,
-            pin_memory=True,
-        )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.val_ds,
-            batch_size=self.batch_size,
-            shuffle=False,  # Validation is raw
-            num_workers=4,
-            pin_memory=True,
-        )
