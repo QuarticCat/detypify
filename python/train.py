@@ -1,21 +1,17 @@
 """Train the model."""
 
 from os import process_cpu_count
-from typing import Literal
 
 import lightning as L
 import msgspec
-import timm
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
-from torch import nn, optim
-from torch.utils.data import DataLoader, random_split
-from torchmetrics import Accuracy
-from torchvision.datasets import ImageFolder
-from torchvision.transforms import v2
-
+from model import MobileNetV4
 from proc_data import OUT_DIR as DATA_DIR
 from proc_data import TypstSymInfo
+from torch.utils.data import DataLoader, random_split
+from torchvision.datasets import ImageFolder
+from torchvision.transforms import v2
 
 OUT_DIR = "build/train"
 FINE_TUNING = False
@@ -176,13 +172,13 @@ if __name__ == "__main__":
     )
 
     # Export ONNX.
-    # model.to_onnx(
-    #     f"{OUT_DIR}/model.onnx",
-    #     # 1 image , 3 color channels, 256x256 resolution
-    #     torch.randn(1, 3, 256, 256),
-    #     dynamo=True,
-    #     external_data=False,
-    # )
+    model.to_onnx(
+        f"{OUT_DIR}/model.onnx",
+        # 1 image , 3 color channels, 256x256 resolution
+        torch.randn(1, 3, 256, 256),
+        dynamo=True,
+        external_data=False,
+    )
 
     # Generate JSON for the infer page.
     with open(f"{DATA_DIR}/symbols.json", "rb") as f:
