@@ -4,20 +4,45 @@ version = "0.2.4"
 requires-python = ">=3.13, <3.14"
 authors = [{ name = "QuarticCat", email = "QuarticCat@pm.me" }]
 dependencies = [
-    # common
-    "orjson>=3.11.5",
-    "msgspec>=0.20.0",
-    # migrate
-    "beautifulsoup4>=4.14.3",
-    "pillow>=12.0.0",
-    "fonttools[woff]>=4.61.0",
-    # train
-    "torch>=2.9.1",
-    "torchvision>=0.24.1",
-    "lightning>=2.6.0",
-    "onnx>=1.20.0",
-    "onnxscript>=0.5.7",
+  # migrate
+  "beautifulsoup4>=4.14.3",
+  "fonttools[woff]>=4.61.0",
+  "lightning>=2.6.0",
+  "msgspec>=0.20.0",
+  "onnx>=1.20.0",
+  "onnxscript>=0.5.7",
+  # common
+  "orjson>=3.11.5",
+  "pillow>=12.0.0",
+  # for pre-trained models
+  "timm>=1.0.22",
+  # train
+  "torch>=2.9.1",
+  "torchvision>=0.24.1",
+]
+
+[dependency-groups]
+dev = [
+  "pyrefly",
+  # tensorboard logging faciliity
+  "tensorboard>=2.20.0",
+  "tensorboardx>=2.6.4",
+  "torch-tb-profiler>=0.4.3",
+  "zuban"
 ]
 
 [tool.ruff.lint.isort]
 known-local-folder = ["proc_*"]
+
+# use cuda 13.0
+[tool.uv.sources]
+torch = { index = "torch-cu130" }
+torchvision = { index = "torch-cu130" }
+
+[[tool.uv.index]]
+name = "torch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.zuban]
+mypy_path = ["python"]
