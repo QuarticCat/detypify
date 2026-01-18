@@ -5,7 +5,7 @@
     import Preview from "../lib/Preview.svelte";
     import type { Strokes } from "detypify-service";
     import { Detypify } from "detypify-service";
-    import { Hr } from "flowbite-svelte";
+    import { Hr, Alert } from "flowbite-svelte";
 
     const { session }: { session: Detypify } = $props();
 
@@ -26,6 +26,9 @@
 <div class="ui-sub-container w-80">
     <Canvas bind:strokes />
     <ContribPanel bind:input bind:strokes bind:samples />
+    <Alert color="blue" border dismissable>
+        Select a symbol, draw it, submit your contribution and make Detypify better!
+    </Alert>
 </div>
 
 <div class="ui-sub-container w-100">
