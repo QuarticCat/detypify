@@ -41,6 +41,10 @@
             local(NewComputerModernMath),
             url(/NewCMMath-Detypify.woff2) format("woff2");
     }
+
+    html {
+        scrollbar-width: none;
+    }
 }
 
 @layer components {
@@ -50,9 +54,5 @@
 
     .ui-close-btn {
         @apply absolute top-1 right-1 p-2;
-    }
-
-    .ui-toolbar-btn {
-        @apply inline-block hover:text-gray-900 dark:hover:text-white;
     }
 }

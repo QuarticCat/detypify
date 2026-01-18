@@ -7,6 +7,5 @@ export type Sample = {
     strokes: Strokes;
 };
 
-export const isContribMode = writable(false);
 export const strokes = writable<Strokes>([]);
 export const samples = writable<Sample[]>([]);
