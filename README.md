@@ -13,9 +13,6 @@
 - **Tiny model**: 1.3 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
-> [!WARNING]
-> If you are using Brave browser, please turn off Shields for this site, or it won't function properly.
-
 ## News
 
 - 2024-04-06: This project has been integrated into [Tinymist](https://github.com/Myriad-Dreamin/tinymist).

@@ -3,6 +3,7 @@
     import Canvas from "../lib/Canvas.svelte";
     import type { Strokes, SymbolInfo } from "detypify-service";
     import { Detypify } from "detypify-service";
+    import { Alert } from "flowbite-svelte";
 
     const { session }: { session: Detypify } = $props();
 
@@ -21,7 +22,11 @@
 
 <div class="ui-sub-container w-80">
     <Canvas bind:strokes />
-    <!-- TODO: Brave alert here. -->
+    {#if "brave" in navigator}
+        <Alert color="yellow" border dismissable>
+            If you are using Brave, please turn off Shields for this site, or it won't work properly.
+        </Alert>
+    {/if}
 </div>
 
 <div class="ui-sub-container w-100">
