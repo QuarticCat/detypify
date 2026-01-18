@@ -234,11 +234,8 @@ if __name__ == "__main__":
     # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
     key_to_typ = map_sym(typ_sym_info)
-    typ_sym_names = sorted(set(n for x in key_to_typ.values() for n in x.names))
     with open(f"{OUT_DIR}/symbols.json", "wb") as f:
         f.write(msgspec.json.encode(typ_sym_info))
-    with open("assets/supported-symbols.txt", "w") as f:
-        f.write("\n".join(typ_sym_names) + "\n")
 
     # TODO: Include data from contrib.
 
