@@ -5,7 +5,7 @@
     import { RefreshOutline } from "flowbite-svelte-icons";
 
     export type Sample = {
-        id: string;
+        id: Uint32Array;
         name: string;
         strokes: Strokes;
     };
@@ -36,7 +36,7 @@
 
     function save() {
         const sample = {
-            id: crypto.randomUUID(),
+            id: crypto.getRandomValues(new Uint32Array(4)),
             name: input,
             strokes,
         };

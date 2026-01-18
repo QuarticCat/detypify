@@ -17,10 +17,6 @@
         if (strokes.length === 0) return;
         return session.draw(strokes)?.toDataURL();
     }
-
-    function deletePreview(id: string) {
-        samples = samples.filter((s) => s.id !== id);
-    }
 </script>
 
 <div class="ui-sub-container w-80">
@@ -34,7 +30,7 @@
 <div class="ui-sub-container w-100">
     <Preview name={input} img={draw(strokes)} />
     <Hr class="mx-auto h-2 w-60 rounded" />
-    {#each samples as { id, name, strokes } (id)}
-        <Preview {name} img={draw(strokes)} ondelete={() => deletePreview(id)} />
+    {#each samples as { id, name, strokes }, idx (id)}
+        <Preview {name} img={draw(strokes)} ondelete={() => samples.splice(idx, 1)} />
     {/each}
 </div>
