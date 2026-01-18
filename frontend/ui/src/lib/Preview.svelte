@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Card from "../utils/Card.svelte";
+    import Card from "./Card.svelte";
     import { contribSyms } from "detypify-service";
     import { Avatar, Hr, Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";

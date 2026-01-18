@@ -1,9 +1,9 @@
 <script lang="ts">
-    import Candidate from "./components/Candidate.svelte";
-    import Canvas from "./components/Canvas.svelte";
-    import ContribPanel from "./components/ContribPanel.svelte";
-    import NavBar from "./components/NavBar.svelte";
-    import Preview from "./components/Preview.svelte";
+    import Candidate from "./lib/Candidate.svelte";
+    import Canvas from "./lib/Canvas.svelte";
+    import ContribPanel from "./lib/ContribPanel.svelte";
+    import NavBar from "./lib/NavBar.svelte";
+    import Preview from "./lib/Preview.svelte";
     import { strokes, isContribMode, samples } from "./store";
     import type { Strokes, SymbolInfo } from "detypify-service";
     import { Detypify, ortEnv } from "detypify-service";

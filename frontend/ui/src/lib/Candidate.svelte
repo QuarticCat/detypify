@@ -1,6 +1,6 @@
 <script lang="ts">
-    import Card from "../utils/Card.svelte";
-    import CopyButton from "../utils/CopyButton.svelte";
+    import Card from "./Card.svelte";
+    import CopyButton from "./CopyButton.svelte";
     import type { SymbolInfo } from "detypify-service";
     import { Avatar, P } from "flowbite-svelte";
 
