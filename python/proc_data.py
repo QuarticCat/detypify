@@ -27,7 +27,8 @@ type Stroke = list[Point]
 type Strokes = list[Stroke]
 
 OUT_DIR = Path("build/data")
-MATH_WRITING_DATASET_PATH = Path("external/mathwriting")
+MATH_WRITING_DATA_PATH = Path("external/dataset/mathwriting-2024")
+DETEXIFY_DATA_PATH = Path("external/dataset/detexify/detexify.json")
 CONTRIB_DATA_PATH = Path("build/dataset.json")
 IMG_SIZE = 64  # px
 USE_CONTRIB = False
@@ -155,7 +156,7 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     markup_shorthand: str | None = None
     math_shorthand: str | None = None
     accent: bool = False
-    alternates: list[str] = []
+    alternates: list[str] | None = None
 
 
 class DataSetInfo(msgspec.Struct, kw_only=True):
@@ -287,7 +288,7 @@ def extract_symbol(
     if not typ:
         return
     filepath = Path(
-        MATH_WRITING_DATASET_PATH,
+        MATH_WRITING_DATA_PATH,
         "train",
         f"{symbol_seg_anno.sourceSampleId}.inkml",
     )
@@ -305,7 +306,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     """Parse Typst symbol page to get information."""
 
     with open("external/typ_sym.html") as f:
-        soup = BeautifulSoup(f.read(), "html.parser")
+        soup = BeautifulSoup(f.read(), "lxml")
     sym_info = {}
 
     for li in soup.find_all("li", id=re.compile("^symbol-")):
@@ -318,15 +319,30 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
             # Repeated symbols. Merge names.
             sym_info[char].names.append(name)
         else:
+            latex_name, markup_shorthand, math_shorthand, alternates = (
+                li.get("data-latex-name"),
+                li.get("data-markup-shorthand"),
+                li.get("data-math-shorthand"),
+                li.get("data-alternates"),
+            )
+
+            # cursed type guards
+            assert isinstance(name, str)
+            assert isinstance(latex_name, str | None)
+            assert isinstance(math_shorthand, str | None)
+            assert isinstance(markup_shorthand, str | None)
+            if isinstance(alternates, str):
+                alternates = [alternates]
+
             # New symbols. Add to map.
             sym_info[char] = TypstSymInfo(
                 char=char,
-                names=[*name],
-                latex_name=li.get("data-latex-name"),  # type: ignore
-                markup_shorthand=li.get("data-markup-shorthand"),  # type: ignore
-                math_shorthand=li.get("data-math-shorthand"),  # type: ignore
-                accent=li.get("data-accent") == "true",  # type: ignore
-                alternates=li.get("data-alternates", "").split(),  # type: ignore
+                names=[name],
+                latex_name=latex_name,
+                markup_shorthand=markup_shorthand,
+                math_shorthand=math_shorthand,
+                accent=li.get("accent") == "true",
+                alternates=alternates,
             )
 
     return list(sym_info.values())
@@ -336,7 +352,7 @@ def map_sym(
     typ_sym_info: list[TypstSymInfo], tex_to_typ: dict[str, TypstSymInfo]
 ) -> dict[str, TypstSymInfo]:
     """Get a mapping from Detexify keys to Typst symbol info."""
-    with open("external/symbols.json", "rb") as f:
+    with open(Path(DETEXIFY_DATA_PATH, "symbols.json"), "rb") as f:
         tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     return {
         x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
@@ -474,7 +490,7 @@ if __name__ == "__main__":
         f.write(msgspec.json.encode(typ_sym_info))
 
     # Parse math symbols from detexify dataset
-    with open("external/detexify.json", "rb") as f:
+    with open(Path(DETEXIFY_DATA_PATH, "detexify.json"), "rb") as f:
         detexify_raw_data = msgspec.json.decode(f.read())
         create_dataset(
             parse_func=partial(parse_detexify_symbol, key_to_typ),
@@ -485,7 +501,7 @@ if __name__ == "__main__":
     # Parse MathWrting Dataset sole symboles
     create_dataset(
         parse_func=partial(parse_sole_symbol, key_to_typ),
-        data=Path(MATH_WRITING_DATASET_PATH, "symbols").glob("*.inkml"),
+        data=Path(MATH_WRITING_DATA_PATH, "symbols").glob("*.inkml"),
         dataset_name="math_writing_sole",
     )
     # Parse extracted symbols from MathWrting Dataset
