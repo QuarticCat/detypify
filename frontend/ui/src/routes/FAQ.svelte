@@ -2,7 +2,7 @@
     import { A, Heading, P } from "flowbite-svelte";
 </script>
 
-<div class="flex flex-col gap-4 w-180">
+<div class="ui-sub-container w-180">
     <!-- TODO: List supported symbols. -->
 
     <Heading tag="h4">Want to use it offline?</Heading>

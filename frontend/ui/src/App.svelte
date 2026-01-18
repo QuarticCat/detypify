@@ -50,16 +50,12 @@
 </Navbar>
 
 {#await Detypify.create()}
-    <div class="flex flex-wrap justify-center gap-x-16 gap-y-4 p-[2vw] min-h-[70vh]">
+    <div class="ui-container min-h-80">
         <Spinner size="16" class="self-center" />
     </div>
 {:then session}
     {#key activeHash}
-        <div
-            class="flex flex-wrap justify-center gap-x-16 gap-y-4 p-[2vw] min-h-[70vh]"
-            out:fade={{ duration: 50 }}
-            in:fade={{ duration: 50, delay: 50 }}
-        >
+        <div class="ui-container" out:fade={{ duration: 50 }} in:fade={{ duration: 50, delay: 50 }}>
             {#if activeHash === "#"}
                 <Home {session} />
             {:else if activeHash === "#contrib"}

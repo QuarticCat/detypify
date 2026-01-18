@@ -1,35 +1,47 @@
 <script lang="ts">
-    import { samples, strokes } from "../store";
     import { contribSyms } from "detypify-service";
+    import type { Strokes } from "detypify-service";
     import { Button, Input } from "flowbite-svelte";
     import { RefreshOutline } from "flowbite-svelte-icons";
 
+    export type Sample = {
+        id: string;
+        name: string;
+        strokes: Strokes;
+    };
+
+    const symKeys = Object.keys(contribSyms);
     const contribUrl = import.meta.env.DEV
         ? "http://localhost:8787/contrib"
         : "https://detypify.quarticcat.workers.dev/contrib";
 
-    let { value = $bindable() }: { value: string } = $props();
+    let {
+        input = $bindable(),
+        strokes = $bindable(),
+        samples = $bindable(),
+    }: {
+        input: string;
+        strokes: Strokes;
+        samples: Sample[];
+    } = $props();
 
-    const symKeys = Object.keys(contribSyms);
     let submitting = $state(false);
-
-    const isValid = $derived(Boolean(contribSyms[value]));
+    const isValid = $derived(Boolean(contribSyms[input]));
 
     function refresh() {
-        const old = value;
-        while ((value = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
-        $strokes = [];
+        const old = input;
+        while ((input = symKeys[Math.floor(symKeys.length * Math.random())]) === old);
+        strokes = [];
     }
 
     function save() {
-        if (!isValid) return;
         const sample = {
             id: crypto.randomUUID(),
-            name: value,
-            strokes: $strokes,
+            name: input,
+            strokes,
         };
-        $samples = [sample, ...$samples];
-        $strokes = [];
+        samples = [sample, ...samples];
+        strokes = [];
     }
 
     function getToken(): number {
@@ -53,10 +65,10 @@
                 body: JSON.stringify({
                     ver: 3,
                     token: getToken(),
-                    samples: $samples.map(({ name, strokes }) => [name, strokes]),
+                    samples: samples.map(({ name, strokes }) => [name, strokes]),
                 }),
             });
-            $samples = []; // clear samples only if success
+            samples = []; // clear samples only if success
             window.alert(await response.text());
         } catch (err) {
             window.alert(err instanceof Error ? err.message : String(err));
@@ -65,7 +77,7 @@
     }
 </script>
 
-<Input type="text" placeholder="symbol" color={isValid ? "green" : "red"} bind:value>
+<Input type="text" placeholder="symbol" color={isValid ? "green" : "red"} bind:value={input}>
     {#snippet right()}
         <button type="button" class="ui-hover-btn" onclick={refresh}>
             <RefreshOutline />
@@ -74,6 +86,6 @@
 </Input>
 
 <div class="flex justify-around gap-4">
-    <Button class="w-full" disabled={!isValid || $strokes.length === 0} onclick={save}>Save</Button>
-    <Button class="w-full" disabled={$samples.length === 0} onclick={submit} loading={submitting}>Submit</Button>
+    <Button class="w-full" disabled={!isValid || strokes.length === 0} onclick={save}>Save</Button>
+    <Button class="w-full" disabled={samples.length === 0} onclick={submit} loading={submitting}>Submit</Button>
 </div>

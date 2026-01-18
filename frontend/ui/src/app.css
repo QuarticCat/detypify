@@ -48,6 +48,14 @@
 }
 
 @layer components {
+    .ui-container {
+        @apply flex flex-wrap justify-center gap-x-16 gap-y-4 m-[2vw];
+    }
+
+    .ui-sub-container {
+        @apply flex flex-col gap-4;
+    }
+
     .ui-hover-btn {
         @apply text-gray-600 hover:text-black dark:text-gray-400 dark:hover:text-white;
     }

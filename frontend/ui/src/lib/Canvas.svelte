@@ -1,15 +1,16 @@
 <script lang="ts">
-    import { strokes } from "../store";
-    import type { Stroke } from "detypify-service";
+    import type { Stroke, Strokes } from "detypify-service";
     import { Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
+    import { onMount } from "svelte";
+
+    let { strokes = $bindable() }: { strokes: Strokes } = $props();
 
     let canvas: HTMLCanvasElement | undefined;
     let ctx: CanvasRenderingContext2D | null | undefined;
     let stroke: Stroke = [];
 
-    // Initialize canvas context on mount.
-    $effect(() => {
+    onMount(() => {
         if (!canvas) return;
         ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -18,9 +19,9 @@
         ctx.lineCap = "round";
     });
 
-    // Every time stroke clears (refresh contrib, change mode), clear canvas.
+    // Every time stroke clears (e.g. refresh), clear canvas.
     $effect(() => {
-        if ($strokes.length > 0 || !ctx) return;
+        if (strokes.length > 0 || !ctx) return;
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     });
 
@@ -53,12 +54,12 @@
 
     function drawEnd() {
         if (stroke.length === 0) return;
-        $strokes = [...$strokes, stroke];
+        strokes = [...strokes, stroke];
         stroke = [];
     }
 
     function drawClear() {
-        $strokes = [];
+        strokes = [];
     }
 </script>
 
