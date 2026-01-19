@@ -7,7 +7,7 @@ from typing import Literal
 import lightning as L
 import msgspec
 import torch
-from datasets import MathSymbolDataModule
+from dataset import MathSymbolDataModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from model import MobileNetV4, TypstSymbolClassifier
 from proc_data import DATASET_PATH, IMG_SIZE, TypstSymInfo, get_dataset_info

@@ -3,9 +3,9 @@
 import math
 import re
 import unicodedata
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import cache, partial
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Callable
 
@@ -328,7 +328,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
                 li.get("data-latex-name"),
                 li.get("data-markup-shorthand"),
                 li.get("data-math-shorthand"),
-                li.get("data-alternates"),
+                li.get("data-alternates", ""),
             )
 
             # cursed type guards
@@ -336,8 +336,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
             assert isinstance(latex_name, str | None)
             assert isinstance(math_shorthand, str | None)
             assert isinstance(markup_shorthand, str | None)
-            if isinstance(alternates, str):
-                alternates = [alternates]
+            assert isinstance(alternates, str)
 
             # New symbols. Add to map.
             sym_info[char] = TypstSymInfo(
@@ -347,7 +346,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
                 markup_shorthand=markup_shorthand,
                 math_shorthand=math_shorthand,
                 accent=li.get("accent") == "true",
-                alternates=alternates,
+                alternates=alternates.split(),
             )
 
     return list(sym_info.values())
@@ -454,10 +453,11 @@ def create_dataset(
     labels_acc: list[str] = []
     data_acc: list[Strokes] = []
     unmapped_latex_symbols: set[str] = set()
+    batch_size = 1000
 
     # 1. Parse Data
-    with Pool() as exec:
-        results = exec.map(parse_func, data)
+    with ProcessPoolExecutor() as exec:
+        results = exec.map(parse_func, data, chunksize=batch_size)
         for result in tqdm(results, desc=f"Processing dataset {dataset_name}."):
             if not result:
                 continue
@@ -514,12 +514,11 @@ def create_dataset(
     )
 
     # 4. Helper to Write Shards
-    def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path):
+    def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path, batch_size: int):
         # We collect the specific split to memory to slice it efficiently.
         # Since input `labels_acc` fits in memory, a subset `df` will also fit.
         df = lazy_frame.collect()
         total_rows = len(df)
-        batch_size = 1000
 
         if total_rows == 0:
             return
@@ -535,9 +534,9 @@ def create_dataset(
             chunk.write_parquet(output_dir / filename, compression="zstd")
 
     # 5. Execute Writes
-    _write_shards(train_lf, train_path)
-    _write_shards(test_lf, test_path)
-    _write_shards(val_lf, val_path)
+    _write_shards(train_lf, train_path, batch_size)
+    _write_shards(test_lf, test_path, batch_size)
+    _write_shards(val_lf, val_path, batch_size)
 
     # 6. Metadata
     stats_df = lf["label"].value_counts()
