@@ -1,115 +1,186 @@
+from os import cpu_count
 from pathlib import Path
+from typing import Literal
 
-import msgspec
-from proc_data import DataSetInfo, MathSymbol, draw_to_img, normalize
-from rocksdict import (
-    AccessType,
-    BlockBasedOptions,
-    Cache,
-    Options,
-    Rdict,
-    ReadOptions,
+import polars as pl
+import pytorch_lightning as L
+import torch
+from proc_data import (
+    DATASET_PATH,
+    draw_to_img,
+    get_dataset_info,
+    normalize,
 )
+from torch.utils.data import DataLoader
 from torchvision.datasets import VisionDataset
+from torchvision.transforms import v2
+from torchvision.transforms.v2 import Compose
 
 
-class RocksDBDataset(VisionDataset):
-    def __init__(self, dataset_path: str | Path, transform=None):
-        self.dataset_path = Path(dataset_path)
-        self.db_path = self.dataset_path / "db"
-        self.transform = transform
-        self.db: Rdict | None = None
-        self.decoder = msgspec.msgpack.Decoder(type=MathSymbol)
+class ParquetDataset(VisionDataset):
+    def __init__(
+        self,
+        dataset_name: str,
+        transform: Compose | None,
+        split: Literal["train", "test", "val"] = "train",
+    ):
+        self.dataset_path = DATASET_PATH / dataset_name
+        self.split_dir = self.dataset_path / split
 
         # 1. Load Metadata
         info_path = self.dataset_path / "dataset_info.json"
         if not info_path.exists():
             raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
-        with open(info_path, "rb") as f:
-            self.info = msgspec.json.decode(f.read(), type=DataSetInfo)
+        self.info = get_dataset_info(dataset_name)
 
-        # 2. Setup Class Mappings (CRITICAL FOR PYTORCH)
-        # Sort labels to ensure Class 0 is always the same class
         self.classes = sorted(self.info.class_count.keys())
         self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
 
-        # 3. Reconstruct Keys & Build Targets List
-        self.keys = []
-        self.targets = []  # This will hold the int label for every sample
+        # 3. Load Data from Shards
+        # Use a glob pattern to match all parquet files in the split directory.
+        # Polars handles the concatenation of shards automatically and efficiently.
+        parquet_glob = str(self.split_dir / "*.parquet")
 
-        for label_name in self.classes:
-            count = self.info.class_count[label_name]
-            label_idx = self.class_to_idx[label_name]
-            prefix = ord(label_name)
+        try:
+            # Check if any files exist before reading to avoid obscure Polars errors
+            if not list(self.split_dir.glob("*.parquet")):
+                raise FileNotFoundError(f"No .parquet files found in {self.split_dir}")
 
-            # Generate Keys
-            self.keys.extend([f"{prefix:08d}_{i:09d}" for i in range(count)])
+            df = pl.read_parquet(parquet_glob)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load parquet shards from {parquet_glob}"
+            ) from e
 
-            # Generate Targets (Much faster than parsing keys later)
-            # This consumes very little RAM (e.g., 1MB for 1M images)
-            self.targets.extend([label_idx] * count)
+        self.samples = df["data"].to_list()
 
-    def _open_db(self):
-        """Lazy initialization to ensure fork-safety with multiprocessing."""
-        # Read-Only mode allows lock-free access by multiple workers
-        #
-        if self.db:
-            return
-        access_type = AccessType.read_only()
+        # Map string labels to integers immediately
+        label_strs = df["label"].to_list()
+        self.targets = [self.class_to_idx[label] for label in label_strs]
 
-        # Configure Caching and Block options
-        opts = Options()
-        block_opts = BlockBasedOptions()
-
-        # 512MB Cache: Keeps index/filters in RAM to avoid disk seeks for metadata
-        #
-        cache = Cache.new_hyper_clock_cache(512 * 1024 * 1024, 0)
-        block_opts.set_block_cache(cache)
-
-        # Pinning blocks prevents cache thrashing
-        block_opts.set_cache_index_and_filter_blocks(True)
-        block_opts.set_pin_l0_filter_and_index_blocks_in_cache(True)
-        opts.set_block_based_table_factory(block_opts)
-
-        self.db = Rdict(str(self.db_path), opts, access_type=access_type)
-
-        # Configure Read Options for high throughput
-        self.read_opts = ReadOptions()
-        # Readahead 4MB: Critical for sequential scanning speed
-        #
-        self.read_opts.set_readahead_size(4 * 1024 * 1024)
+        # Clean up DataFrame to free memory
+        del df
 
     def __len__(self):
-        return len(self.keys)
-
-    def __del__(self):
-        if self.db is not None:
-            self.db.close()
-            self.db = None
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        if self.db is None:
-            self._open_db()
-
-        key = self.keys[idx]
-
-        # Fetch Data
-        raw_data: bytes | None = (
-            self.db.get(key, read_opt=self.read_opts) if self.db else None
-        )
-        if raw_data is None:
-            raise IndexError(f"Key {key} not found")
-
-        # Decode
-        symbol_bytes = self.decoder.decode(raw_data).symbol
-        image = draw_to_img(normalize(symbol_bytes))
-
-        # Get Label Integer (Fast lookup from RAM)
+        strokes = self.samples[idx]
         label_idx = self.targets[idx]
 
-        if self.transform:
-            image = self.transform(image)
+        # 2. Render Image
+        image = draw_to_img(normalize(strokes))
 
-        # Return IMAGE and INT (not string)
+        if self.transforms:
+            image = self.transforms(image)
+
         return image, label_idx
+
+
+class MathSymbolDataModule(L.LightningDataModule):
+    def __init__(
+        self,
+        data_root: Path,
+        dataset_name: str,
+        batch_size: int = 64,
+        num_workers: int = cpu_count() if cpu_count() else 16,  # type: ignore
+        fine_tuning: bool = True,  # Controls 1 vs 3 channels
+    ):
+        super().__init__()
+        self.data_root = data_root
+        self.dataset_name = dataset_name
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.fine_tuning = fine_tuning
+
+        # --- 1. Define Base Normalization ---
+        # ImageNet stats require 3 channels. If 1 channel, use standard 0.5.
+        if self.fine_tuning:
+            norm_mean = [0.485, 0.456, 0.406]
+            norm_std = [0.229, 0.224, 0.225]
+            channels = 3
+        else:
+            norm_mean = [0.5]
+            norm_std = [0.5]
+            channels = 1
+
+        # --- 2. Build Transforms ---
+        # Common steps for all splits
+        base_transforms = [
+            v2.Grayscale(num_output_channels=channels),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+        ]
+
+        # Augmentation (Train only)
+        augmentations = [
+            v2.RandomRotation(15),  # type: ignore
+            v2.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # type: ignore
+        ]
+
+        # Normalization (Last step)
+        normalization = [
+            v2.Normalize(mean=norm_mean, std=norm_std),
+        ]
+
+        # Compose them
+        self.train_transform = v2.Compose(
+            base_transforms + augmentations + normalization
+        )
+
+        # Eval: Same base + normalize, BUT NO ROTATION/SHIFT
+        self.eval_transform = v2.Compose(base_transforms + normalization)
+
+        self.train_dataset: ParquetDataset
+        self.val_dataset: ParquetDataset
+        self.test_dataset: ParquetDataset
+
+    def setup(self, stage: str | None = None):
+        if stage == "fit" or stage is None:
+            self.train_dataset = ParquetDataset(
+                dataset_name=self.dataset_name,
+                split="train",
+                transform=self.train_transform,
+            )
+            self.val_dataset = ParquetDataset(
+                dataset_name=self.dataset_name,
+                split="val",
+                transform=self.eval_transform,  # Note: No augmentation
+            )
+
+        if stage == "test" or stage is None:
+            self.test_dataset = ParquetDataset(
+                dataset_name=self.dataset_name,
+                split="test",
+                transform=self.eval_transform,  # Note: No augmentation
+            )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=True if self.num_workers > 0 else False,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=True if self.num_workers > 0 else False,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
