@@ -20,6 +20,14 @@ jobs:
         with:
           bun-version: "latest"
 
+      - name: Prepare train folder
+        run: |
+          mkdir -p train
+          echo '{}' > train/infer.json
+          echo '[]' > train/contrib.json
+          echo '??' > train/model.onnx
+        working-directory: frontend/service
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
