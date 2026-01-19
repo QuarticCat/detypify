@@ -2,9 +2,9 @@ name: Frontend
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     types: [opened, synchronize]
   workflow_dispatch:
 
