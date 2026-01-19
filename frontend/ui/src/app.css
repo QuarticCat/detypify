@@ -49,7 +49,7 @@
 
 @layer components {
     .ui-container {
-        @apply flex flex-wrap justify-center gap-x-16 gap-y-4 m-[2vw];
+        @apply m-[2vw] flex flex-wrap justify-center gap-x-16 gap-y-4;
     }
 
     .ui-sub-container {
