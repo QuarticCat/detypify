@@ -27,7 +27,8 @@
     ],
     "scripts": {
         "dev": "tsdown --watch",
-        "build": "tsdown"
+        "build": "tsdown",
+        "prepare": "tsdown"
     },
     "dependencies": {
         "onnxruntime-web": "=1.23.2"
