@@ -19,7 +19,7 @@ IMG_SIZE = 32  # px
 
 # Missing mappings in the Typst symbol page.
 TEX_TO_TYP = {
-    # Alphabet
+    # Double Struck Capital Letters
     "\\mathds{A}": "AA",
     "\\mathds{B}": "BB",
     "\\mathds{C}": "CC",
@@ -46,7 +46,7 @@ TEX_TO_TYP = {
     "\\mathds{X}": "XX",
     "\\mathds{Y}": "YY",
     "\\mathds{Z}": "ZZ",
-    # Greek Alphabet (Uppercases)
+    # Greek Capital Letters
     "\\Alpha": "Alpha",
     "\\Beta": "Beta",
     "\\Gamma": "Gamma",
@@ -54,7 +54,7 @@ TEX_TO_TYP = {
     "\\Epsilon": "Epsilon",
     "\\Zeta": "Zeta",
     "\\Eta": "Eta",
-    "\\Theta": "Theta",
+    "\\Theta": "Theta",  # TODO: no Theta.alt
     "\\Iota": "Iota",
     "\\Kappa": "Kappa",
     "\\Lambda": "Lambda",
@@ -71,7 +71,7 @@ TEX_TO_TYP = {
     "\\Chi": "Chi",
     "\\Psi": "Psi",
     "\\Omega": "Omega",
-    # Greek Alphabet (Lowercases)
+    # Greek Small Letters
     "\\alpha": "alpha",
     "\\beta": "beta",
     "\\gamma": "gamma",
@@ -103,6 +103,8 @@ TEX_TO_TYP = {
     "\\chi": "chi",
     "\\psi": "psi",
     "\\omega": "omega",
+    # Hebrew Letters
+    "\\aleph": "aleph",  # TODO: no beth, daleth, gimel
     # Others
     "\\&": "amp",
     "\\#": "hash",
@@ -112,7 +114,6 @@ TEX_TO_TYP = {
     "\\--": "dash.en",
     "\\---": "dash.em",
     "\\colon": "colon",
-    "\\aleph": "aleph",
     "\\degree": "degree",
     "\\copyright": "copyright",
     "\\textcircledP": "copyright.sound",
