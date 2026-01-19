@@ -9,7 +9,7 @@ import msgspec
 import torch
 from datasets import MathSymbolDataModule
 from lightning.pytorch.loggers import TensorBoardLogger
-from model import MobileNetV4
+from model import MobileNetV4, TypstSymbolClassifier
 from proc_data import DATASET_PATH, IMG_SIZE, TypstSymInfo, get_dataset_info
 
 OUT_DIR = Path("build/train")
@@ -27,33 +27,39 @@ if __name__ == "__main__":
         data_info = get_dataset_info(dataset)
         classes.update(data_info.class_count.keys())
 
-    model = MobileNetV4(num_classes=len(classes))
-    compiled_model = torch.compile(model)
-    num_workers = process_cpu_count() or 1
+    models = [
+        TypstSymbolClassifier(num_classes=len(classes)),
+        MobileNetV4(num_classes=len(classes)),
+    ]
 
-    logger = TensorBoardLogger(OUT_DIR + "/tb_logs", name="mobilenet-v4")  # type: ignore
-    trainer = L.Trainer(max_epochs=20, default_root_dir=OUT_DIR, logger=logger)
-    # TODO: add code to freeze decoder weights on initial rounds when fine-tuning
-    for dataset in datasets:
-        dm = MathSymbolDataModule(
-            data_root=DATASET_PATH, dataset_name=dataset, fine_tuning=FINE_TUNING
-        )
-        # training
-        trainer.fit(
-            compiled_model,  # type: ignore
-            datamodule=dm,  # type: ignore
-        )
-        # validate
-        trainer.validate(datamodule=dm)  # type: ignore
+    logger = TensorBoardLogger(OUT_DIR + "/tb_logs")  # type: ignore
 
-    # Export ONNX.
-    model.to_onnx(
-        f"{OUT_DIR}/model.onnx",
-        # 1 image , 3 color channels
-        torch.randn(1, 3, IMG_SIZE, IMG_SIZE),
-        dynamo=True,
-        external_data=False,
-    )
+    for model in models:
+        compiled_model = torch.compile(model)
+        num_workers = process_cpu_count() or 1
+
+        # TODO: add code to freeze decoder weights on initial round for MobileNetV4
+        trainer = L.Trainer(max_epochs=20, default_root_dir=OUT_DIR, logger=logger)
+        for dataset in datasets:
+            dm = MathSymbolDataModule(
+                data_root=DATASET_PATH, dataset_name=dataset, fine_tuning=FINE_TUNING
+            )
+            # training
+            trainer.fit(
+                compiled_model,  # type: ignore
+                datamodule=dm,  # type: ignore
+            )
+            # validate
+            trainer.validate(datamodule=dm)  # type: ignore
+
+        # Export ONNX.
+        model.to_onnx(
+            f"{OUT_DIR}/model.onnx",
+            # 1 image , 3 color channels
+            torch.randn(1, 3, IMG_SIZE, IMG_SIZE),
+            dynamo=True,
+            external_data=False,
+        )
 
     # Generate JSON for the infer page.
     with open(f"{DATA_DIR}/symbols.json", "rb") as f:
