@@ -560,7 +560,8 @@ if __name__ == "__main__":
 
     # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
-    key_to_typ = map_sym(typ_sym_info)
+    tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
+    key_to_typ = map_sym(typ_sym_info, tex_to_typ)
     with open(f"{OUT_DIR}/symbols.json", "wb") as f:
         f.write(msgspec.json.encode(typ_sym_info))
 
