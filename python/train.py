@@ -1,73 +1,56 @@
 """Train the model."""
 
 from os import process_cpu_count
+from pathlib import Path
 from typing import Literal
 
 import lightning as L
 import msgspec
 import torch
+from datasets import MathSymbolDataModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from model import MobileNetV4
-from proc_data import OUT_DIR as DATA_DIR
-from proc_data import TypstSymInfo
-from torch.utils.data import DataLoader, random_split
-from torchvision.datasets import ImageFolder
-from torchvision.transforms import v2
+from proc_data import DATASET_PATH, IMG_SIZE, TypstSymInfo, get_dataset_info
 
-OUT_DIR = "build/train"
+OUT_DIR = Path("build/train")
+DATA_DIR = Path("build/data")
+
 FINE_TUNING = False
 USE_TRANSFORMER = False
 type model_size = Literal["small", "medium", "large"]
 
 
 if __name__ == "__main__":
-    # Prepare data.
-    transforms = [
-        v2.Grayscale(num_output_channels=3 if FINE_TUNING else 1),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        # v2.functional.invert,
-        # Argumantaion
-        # rotate & shift
-        v2.RandomRotation(15),  # type: ignore
-        v2.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # type: ignore
-        # normalize using ImageNet means
-        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
+    datasets = ["detexify", "mathwriting_symbols", "mathwriting_extracted"]
+    classes: set[str] = set()
+    for dataset in datasets:
+        data_info = get_dataset_info(dataset)
+        classes.update(data_info.class_count.keys())
 
-    orig_data = ImageFolder(f"{DATA_DIR}/img", v2.Compose(transforms))
-    # TODO: use torch lightning's LightningDataModule for better split
-    train_data, test_data = random_split(orig_data, [0.9, 0.1])
-
-    model = MobileNetV4(num_classes=len(orig_data.classes))
+    model = MobileNetV4(num_classes=len(classes))
     compiled_model = torch.compile(model)
     num_workers = process_cpu_count() or 1
 
     logger = TensorBoardLogger(OUT_DIR + "/tb_logs", name="mobilenet-v4")  # type: ignore
     trainer = L.Trainer(max_epochs=20, default_root_dir=OUT_DIR, logger=logger)
     # TODO: add code to freeze decoder weights on initial rounds when fine-tuning
-    trainer.fit(
-        compiled_model,  # type: ignore
-        train_dataloaders=DataLoader(
-            train_data,
-            batch_size=32,
-            num_workers=num_workers,
-            pin_memory=True,
-            shuffle=True,
-        ),
-        val_dataloaders=DataLoader(
-            test_data,
-            batch_size=32,
-            num_workers=num_workers,
-            pin_memory=True,
-        ),
-    )
+    for dataset in datasets:
+        dm = MathSymbolDataModule(
+            data_root=DATASET_PATH, dataset_name=dataset, fine_tuning=FINE_TUNING
+        )
+        # training
+        trainer.fit(
+            compiled_model,  # type: ignore
+            datamodule=dm,  # type: ignore
+        )
+        # validate
+        trainer.validate(datamodule=dm)  # type: ignore
 
     # Export ONNX.
     model.to_onnx(
         f"{OUT_DIR}/model.onnx",
-        # 1 image , 3 color channels, 256x256 resolution
-        torch.randn(1, 3, 256, 256),
+        # 1 image , 3 color channels
+        torch.randn(1, 3, IMG_SIZE, IMG_SIZE),
         dynamo=True,
         external_data=False,
     )
@@ -77,7 +60,7 @@ if __name__ == "__main__":
         sym_info = msgspec.json.decode(f.read(), type=list[TypstSymInfo])
     chr_to_sym = {s.char: s for s in sym_info}
     infer = []
-    for c in orig_data.classes:
+    for c in classes:
         sym = chr_to_sym[c]
         info = {"char": sym.char, "names": sym.names}
         if sym.markup_shorthand and sym.math_shorthand:
@@ -87,10 +70,10 @@ if __name__ == "__main__":
         elif sym.math_shorthand:
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
-    with open(f"{OUT_DIR}/infer.json", "wb") as f:
+    with open(OUT_DIR / "infer.json", "wb") as f:
         f.write(msgspec.json.encode(infer))
 
     # Generate JSON for the contrib page.
     contrib = {n: s.char for s in sym_info for n in s.names}
-    with open(f"{OUT_DIR}/contrib.json", "wb") as f:
+    with open(OUT_DIR / "contrib.json", "wb") as f:
         f.write(msgspec.json.encode(contrib))
