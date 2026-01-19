@@ -1,34 +1,36 @@
 """Preprocess training datasets."""
 
+import math
 import re
 import unicodedata
-from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import cache, partial
-from os import process_cpu_count
+from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, Callable
 
 import msgspec
+import polars as pl
 from bs4 import BeautifulSoup
 from lxml import etree
 from PIL import Image, ImageDraw
-from rocksdict import (
-    DBCompressionType,
-    Options,
-    Rdict,
-    WriteBatch,
-    WriteOptions,
-)
+from tqdm import tqdm
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
 
+
+@dataclass
+class MathSymbolSample:
+    label: str
+    symbol: Strokes
+
+
 OUT_DIR = Path("build/data")
-MATH_WRITING_DATA_PATH = Path("external/dataset/mathwriting-2024")
-DETEXIFY_DATA_PATH = Path("external/dataset/detexify/detexify.json")
+DATASET_PATH = Path("external/dataset")
+MATH_WRITING_DATA_PATH = DATASET_PATH / "mathwriting-2024"
+DETEXIFY_DATA_PATH = DATASET_PATH / "detexify"
 CONTRIB_DATA_PATH = Path("build/dataset.json")
 IMG_SIZE = 64  # px
 USE_CONTRIB = False
@@ -159,10 +161,11 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     alternates: list[str] | None = None
 
 
-class DataSetInfo(msgspec.Struct, kw_only=True):
+class DataSetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     name: str
     total_count: int
     class_count: dict[str, int]
+    unmapped_latex_symbols: set[str] | None = None
 
 
 class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
@@ -184,17 +187,11 @@ class MathSymbol(msgspec.Struct, array_like=True):
     symbol: Strokes
 
 
-@dataclass
-class MathSymbolSample:
-    label: str
-    symbol: MathSymbol
-
-
 def parse_detexify_symbol(
-    key_to_typ: dict[str, TypstSymInfo],
     key: str,
     raw_strokes: list[list[tuple[float, float, float]]],
 ) -> MathSymbolSample | None:
+    key_to_typ = map_sym(typ_sym_info, tex_to_typ)
     typ = key_to_typ.get(key)
     if typ is None:
         return
@@ -203,7 +200,7 @@ def parse_detexify_symbol(
     ]
     if len(strokes) == 0:
         return
-    return MathSymbolSample(typ.char, MathSymbol(strokes))
+    return MathSymbolSample(typ.char, strokes)
 
 
 @cache
@@ -211,7 +208,7 @@ def get_xml_parser():
     return etree.XMLParser()
 
 
-def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> MathSymbol:
+def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> Strokes:
     tree = etree.parse(filepath, get_xml_parser())
     root = tree.getroot()
 
@@ -239,24 +236,21 @@ def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> MathSymbol:
             return False
         return int(trace_id) in allowed_ids
 
-    return MathSymbol(
-        [
-            _trace_to_stroke(trace.text)
-            for trace in filter(
-                lambda el: _is_valid_trace(trace_ids, el),
-                root.iterfind("//trace"),
-            )
-            if trace.text
-        ]
-    )
+    return [
+        _trace_to_stroke(trace.text)
+        for trace in filter(
+            lambda el: _is_valid_trace(trace_ids, el),
+            root.iterfind("//trace"),
+        )
+        if trace.text
+    ]
 
 
 def parse_sole_symbol(
     filepath: Path,
     tex_to_typ: dict[str, TypstSymInfo],
-) -> MathSymbolSample | None:
-    """parse math symbol inkml file directly"""
-    tree = etree.parse(filepath)
+) -> MathSymbolSample | str:
+    tree = etree.parse(filepath, get_xml_parser())
     root = tree.getroot()
     tex_label = root.findtext('.//annotation[@type="label"]')
     if isinstance(tex_label, str):
@@ -264,7 +258,7 @@ def parse_sole_symbol(
         if typ is not None:
             label = typ.char
         else:
-            return
+            return tex_label
     return MathSymbolSample(
         label,
         parse_inkml(filepath, None),
@@ -274,7 +268,7 @@ def parse_sole_symbol(
 def read_symbol_seg_anno() -> list[SymbolSegInfo]:
     """loads symbol extraction annotation of MathWrting Dataset"""
     decoder = msgspec.json.Decoder(SymbolSegInfo)
-    with open(Path(OUT_DIR, "mathwriting", "symbols.jsonl"), "rb") as f:
+    with open(OUT_DIR / "mathwriting" / "symbols.jsonl", "rb") as f:
         symbol_annos = decoder.decode_lines(f.read())
     return symbol_annos
 
@@ -282,11 +276,11 @@ def read_symbol_seg_anno() -> list[SymbolSegInfo]:
 def extract_symbol(
     symbol_seg_anno: SymbolSegInfo,
     tex_to_typ: dict[str, TypstSymInfo],
-) -> MathSymbolSample | None:
+) -> MathSymbolSample | str:
     """extract math symbol from math expression"""
     typ = tex_to_typ.get(symbol_seg_anno.label)
     if not typ:
-        return
+        return symbol_seg_anno.label
     filepath = Path(
         MATH_WRITING_DATA_PATH,
         "train",
@@ -296,6 +290,17 @@ def extract_symbol(
         typ.char,
         parse_inkml(filepath, set(symbol_seg_anno.strokeIndices)),
     )
+
+
+def parse_contrib(sample: dict[str, Any]) -> MathSymbolSample:
+    sym, _strokes = (
+        sample["sym"],
+        sample["strokes"],
+    )
+    strokes: Strokes = msgspec.json.decode(_strokes)
+    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
+    label = name_to_chr[sym]
+    return MathSymbolSample(label, strokes)
 
 
 def is_invisible(c: str) -> bool:
@@ -352,7 +357,7 @@ def map_sym(
     typ_sym_info: list[TypstSymInfo], tex_to_typ: dict[str, TypstSymInfo]
 ) -> dict[str, TypstSymInfo]:
     """Get a mapping from Detexify keys to Typst symbol info."""
-    with open(Path(DETEXIFY_DATA_PATH, "symbols.json"), "rb") as f:
+    with open(DETEXIFY_DATA_PATH / "symbols.json", "rb") as f:
         tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     return {
         x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
@@ -386,96 +391,166 @@ def draw_to_img(strokes: Strokes) -> Image.Image:
     return image
 
 
-def parse_contrib(sample: dict[str, Any]) -> MathSymbolSample:
-    sym, _strokes = (
-        sample["sym"],
-        sample["strokes"],
-    )
-    strokes: Strokes = msgspec.json.decode(_strokes)
-    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
-    label = name_to_chr[sym]
-    return MathSymbolSample(label, MathSymbol(strokes))
+def get_dataset_info(dataset_name: str) -> DataSetInfo:
+    """Load dataset metadata from the info JSON file."""
+    dataset_path = DATASET_PATH / dataset_name
+    info_path = dataset_path / "dataset_info.json"
 
+    if not info_path.exists():
+        raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
-@cache
-def get_msgpack_encoder():
-    return msgspec.msgpack.Encoder()
+    with open(info_path, "rb") as f:
+        return msgspec.json.decode(f.read(), type=DataSetInfo)
 
 
 def create_dataset(
-    parse_func: Callable[[Any], MathSymbolSample | None],
+    parse_func: Callable[[Any], MathSymbolSample | str | None],
     data: Any,
     dataset_name: str,
+    split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
 ) -> None:
-    """Create an dataset database file from raw data using a parse function."""
-    dataset_path = Path(OUT_DIR, dataset_name)
-    db_path = Path(dataset_path, "db")
-    db_path.mkdir(exist_ok=True, parents=True)
-    class_counters: dict[str, int] = defaultdict(int)
-    write_frequency = 1000
-    total_length = 0
+    """
+    Parses raw data, performs a stratified train/test/val split, and saves it as sharded Parquet files.
 
-    def _get_opts() -> Options:
-        opts = Options()
-        opts.increase_parallelism(process_cpu_count())
-        # zstd
-        opts.set_compression_type(DBCompressionType.zstd())
-        opts.set_compression_options(0, 0, 0, 32768)
-        opts.set_zstd_max_train_bytes(32768 * 100)
-        opts.set_bottommost_compression_type(DBCompressionType.zstd())
-        opts.set_bottommost_compression_options(0, 0, 0, 32768, True)
-        opts.set_bottommost_zstd_max_train_bytes(32768 * 100, True)
-        # disable auto-compact, compact later
-        opts.prepare_for_bulk_load()
-        # increase buffer size and count
-        opts.set_write_buffer_size(128 * 1024 * 1024)
-        opts.set_max_write_buffer_number(process_cpu_count())
-        opts.set_min_write_buffer_number_to_merge(2)
-        return opts
+    This function processes the input `data` in parallel using `parse_func`.
+    It also does:
+        1. aggregates the results,
+        2. performs a stratified shuffle split based on the labels
+        3. writes the output to disk in chunks to optimize for large datasets.
+        4. save dataset metadata
 
-    def _worker_func(
-        parse_func: Callable[[Any], MathSymbolSample | None], data_item: Any
-    ) -> tuple[str | None, bytes]:
-        encoder = get_msgpack_encoder()
+    Args:
+        parse_func: A function that takes a raw data item and returns a `MathSymbolSample` (success),
+            a `str` (indicating an unmapped LaTeX symbol error), or `None` (skip).
+        data: An iterable of raw data to be processed.
+        dataset_name: The name of the dataset. Output will be saved to `{OUT_DIR}/{dataset_name}`.
+        split_ratio: A tuple representing the fraction of data for (Train, Test, Validation).
+            Must sum to approximately 1.0. Default is (0.8, 0.1, 0.1).
 
-        parsed_data = parse_func(data_item)
-        if parsed_data is None:
-            return None, b""
-        encoded = encoder.encode(parsed_data.symbol)
+    Returns:
+        None
 
-        return parsed_data.label, encoded
+    Directory Structure:
+        OUTPUT_DIR/
+        └── dataset_name/
+            ├── train/
+            │   ├── part_000.parquet
+            │   └── ...
+            ├── test/
+            │   └── ...
+            ├── val/
+            │   └── ...
+            └── dataset_info.json
+    """
+    dataset_path = OUT_DIR / dataset_name
+    train_path = dataset_path / "train"
+    test_path = dataset_path / "test"
+    val_path = dataset_path / "val"
 
-    db = Rdict(str(db_path), _get_opts())
-    with ProcessPoolExecutor() as exec:
-        results_iter = exec.map(partial(_worker_func, parse_func), data, chunksize=1000)
-        w_opts = WriteOptions()
-        w_opts.disable_wal(True)
-        wb = WriteBatch()
-        # write to lmdb
-        for label, encoded_data in results_iter:
-            if not label or len(encoded_data) == 0:
+    for p in [train_path, test_path, val_path]:
+        p.mkdir(parents=True, exist_ok=True)
+
+    # Accumulators
+    labels_acc: list[str] = []
+    data_acc: list[Strokes] = []
+    unmapped_latex_symbols: set[str] = set()
+
+    # 1. Parse Data
+    with Pool() as exec:
+        results = exec.map(parse_func, data)
+        for result in tqdm(results, desc=f"Processing dataset {dataset_name}."):
+            if not result:
                 continue
-            current_idx = class_counters.get(label, 0)
-            key = f"{ord(label):08d}_{current_idx:09d}"
-            class_counters[label] += 1
-            total_length += 1
-            wb.put(key, encoded_data)
-            if len(wb) > write_frequency:
-                db.write(wb, w_opts)
-                wb.clear()
-        # write remaining items
-        if len(wb) > 0:
-            db.write(wb, w_opts)
-        # compact database and close
-    db.compact_range(None, None)
-    db.close()
+            elif isinstance(result, str):
+                unmapped_latex_symbols.add(result)
+            else:
+                labels_acc.append(result.label)
+                data_acc.append(result.symbol)
 
-    # save dataset information
-    with open(Path(dataset_path, "dataset_info.json"), "wb") as f:
+    # 2. Prepare Base LazyFrame with Partitioning Info
+    # We calculate the cumulative thresholds for splitting
+    train_r, test_r, _ = split_ratio
+    # Threshold 1: Boundary between Train and Test
+    t1 = train_r
+    # Threshold 2: Boundary between Test and Val
+    t2 = train_r + test_r
+
+    lf = pl.DataFrame({"label": labels_acc, "data": data_acc})
+
+    #
+    base_lf = (
+        lf.sample(shuffle=True, seed=42)
+        .with_columns(
+            [
+                pl.len().over("label").alias("n"),
+                pl.int_range(0, pl.len()).over("label").alias("idx"),
+            ]
+        )
+        .lazy()
+    )
+
+    # 3. Define Partitions (Lazy)
+    # Train: [0, t1)
+    train_lf = (
+        base_lf.filter(pl.col("idx") < (pl.col("n") * t1))
+        .drop(["n", "idx"])
+        .sort("label")
+    )
+
+    # Test: [t1, t2)
+    test_lf = (
+        base_lf.filter(
+            (pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2))
+        )
+        .drop(["n", "idx"])
+        .sort("label")
+    )
+
+    # Validation: [t2, end]
+    val_lf = (
+        base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
+        .drop(["n", "idx"])
+        .sort("label")
+    )
+
+    # 4. Helper to Write Shards
+    def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path):
+        # We collect the specific split to memory to slice it efficiently.
+        # Since input `labels_acc` fits in memory, a subset `df` will also fit.
+        df = lazy_frame.collect()
+        total_rows = len(df)
+        batch_size = 1000
+
+        if total_rows == 0:
+            return
+
+        # Calculate padding for filenames (e.g., part_001.parquet)
+        num_shards = math.ceil(total_rows / batch_size)
+        pad_width = len(str(num_shards))
+
+        for i, start_idx in enumerate(range(0, total_rows, batch_size)):
+            # Slice is zero-copy in Polars
+            chunk = df.slice(start_idx, batch_size)
+            filename = f"part_{str(i).zfill(pad_width)}.parquet"
+            chunk.write_parquet(output_dir / filename, compression="zstd")
+
+    # 5. Execute Writes
+    _write_shards(train_lf, train_path)
+    _write_shards(test_lf, test_path)
+    _write_shards(val_lf, val_path)
+
+    # 6. Metadata
+    stats_df = lf["label"].value_counts()
+    class_counters = dict(zip(stats_df["label"], stats_df["len"]))
+
+    with open(dataset_path / "dataset_info.json", "wb") as f:
         dataset_info = DataSetInfo(
             name=dataset_name,
-            total_count=total_length,
+            total_count=len(labels_acc),
             class_count=class_counters,
+            unmapped_latex_symbols=unmapped_latex_symbols
+            if unmapped_latex_symbols
+            else None,
         )
         f.write(msgspec.json.encode(dataset_info))
 
@@ -490,7 +565,7 @@ if __name__ == "__main__":
         f.write(msgspec.json.encode(typ_sym_info))
 
     # Parse math symbols from detexify dataset
-    with open(Path(DETEXIFY_DATA_PATH, "detexify.json"), "rb") as f:
+    with open(DETEXIFY_DATA_PATH / "detexify.json", "rb") as f:
         detexify_raw_data = msgspec.json.decode(f.read())
         create_dataset(
             parse_func=partial(parse_detexify_symbol, key_to_typ),
@@ -500,16 +575,16 @@ if __name__ == "__main__":
 
     # Parse MathWrting Dataset sole symboles
     create_dataset(
-        parse_func=partial(parse_sole_symbol, key_to_typ),
+        parse_func=partial(parse_sole_symbol, tex_to_typ),
         data=Path(MATH_WRITING_DATA_PATH, "symbols").glob("*.inkml"),
-        dataset_name="math_writing_sole",
+        dataset_name="mathwriting_symbols",
     )
     # Parse extracted symbols from MathWrting Dataset
     seg_annos = read_symbol_seg_anno()
     create_dataset(
         parse_func=partial(extract_symbol, tex_to_typ),
         data=seg_annos,
-        dataset_name="math_writing_extracted",
+        dataset_name="mathwriting_extracted",
     )
 
     # Parse contributed data
