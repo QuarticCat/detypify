@@ -74,43 +74,53 @@ class SymbolDataset(VisionDataset):
             raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
         self.info = get_dataset_info(dataset_name)
-
         self.classes = sorted(self.info.class_count.keys())
-        class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
 
-        # 3. Load Data from Shards
-        # Use a glob pattern to match all parquet files in the split directory.
-        # Polars handles the concatenation of shards automatically and efficiently.
+        # Create mapping dataframe for joining (more efficient than dict replace for large data)
+        # We make a small LazyFrame for the class mapping
+        class_map_df = pl.DataFrame(
+            {"label": self.classes, "label_idx": range(len(self.classes))}
+        ).lazy()
+
+        # 2. Setup Lazy Loading Pattern
         parquet_glob = str(self.split_dir / "*.parquet")
 
-        try:
-            # Check if any files exist before reading to avoid obscure Polars errors
-            if not list(self.split_dir.glob("*.parquet")):
-                raise FileNotFoundError(f"No .parquet files found in {self.split_dir}")
+        # Check existence cheaply before scanning
+        if not list(self.split_dir.glob("*.parquet")):
+            raise FileNotFoundError(f"No .parquet files found in {self.split_dir}")
 
-            df = pl.read_parquet(parquet_glob)
+        try:
+            q = pl.scan_parquet(parquet_glob)
+
+            # query plan:
+            # 1. Join with class map to get integers
+            # 2. Select only 'data' and 'label_idx'
+            arrow_table = (
+                q.join(class_map_df, on="label", how="left")
+                .select(["data", "label_idx"])
+                .collect()
+                .to_arrow()
+            )
+
         except Exception as e:
             raise RuntimeError(
                 f"Failed to load parquet shards from {parquet_glob}"
             ) from e
-
-        self.samples = df["data"].to_list()
-
-        # Map string labels to integers immediately
-        label_strs = df["label"].to_list()
-        self.targets = [class_to_idx[label] for label in label_strs]
-
-        # Clean up DataFrame to free memory
-        del df
+        # These are zero-copy references to the table created above
+        self.samples = arrow_table["data"]
+        self.targets = arrow_table["label_idx"]
 
     def __len__(self):
-        return self.info.total_count
+        # Return length of the Arrow array
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        strokes = self.samples[idx]
-        label_idx = self.targets[idx]
+        # Access data by index
+        # .as_py() deserializes the C++ binary format to Python objects on-the-fly
+        strokes = self.samples[idx].as_py()
+        label_idx = self.targets[idx].as_py()
 
-        # 2. construct PIL Image
+        # Draw image
         image = draw_to_img(strokes, IMG_SIZE)
 
         if self.transforms:
