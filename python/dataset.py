@@ -2,17 +2,30 @@ from os import process_cpu_count
 from pathlib import Path
 from typing import Literal
 
+import msgspec
 import polars as pl
 import pytorch_lightning as L
 import torch
 from PIL import Image, ImageDraw
-from proc_data import IMG_SIZE, Strokes, get_dataset_info
+from proc_data import IMG_SIZE, DataSetInfo, Strokes
 from torch.utils.data import DataLoader, default_collate
 from torchvision.datasets import VisionDataset
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
 
 DATA_ROOT = Path("build/data")
+
+
+def get_dataset_info(dataset_name: str) -> DataSetInfo:
+    """Load dataset metadata from the info JSON file."""
+    dataset_path = DATA_ROOT / dataset_name
+    info_path = dataset_path / "dataset_info.json"
+
+    if not info_path.exists():
+        raise FileNotFoundError(f"Could not find dataset info at {info_path}")
+
+    with open(info_path, "rb") as f:
+        return msgspec.json.decode(f.read(), type=DataSetInfo)
 
 
 def normalize(strokes: Strokes, target_size: int) -> Strokes:

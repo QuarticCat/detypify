@@ -7,10 +7,10 @@ from typing import Literal
 import lightning as L
 import msgspec
 import torch
-from dataset import MathSymbolDataModule
+from dataset import MathSymbolDataModule, get_dataset_info
 from lightning.pytorch.loggers import TensorBoardLogger
 from model import MobileNetV4, TypstSymbolClassifier
-from proc_data import DETEXIFY_DATA_PATH, IMG_SIZE, TypstSymInfo, get_dataset_info
+from proc_data import DETEXIFY_DATA_PATH, IMG_SIZE, TypstSymInfo
 
 OUT_DIR = Path("build/train")
 DATA_DIR = Path("build/data")
@@ -20,15 +20,17 @@ type model_size = Literal["small", "medium", "large"]
 
 
 if __name__ == "__main__":
-    datasets = ["detexify", "mathwriting_symbols", "mathwriting_extracted"]
+    datasets = ["mathwriting", "detexify"]
     classes: set[str] = set()
     for dataset in datasets:
         data_info = get_dataset_info(dataset)
         classes.update(data_info.class_count.keys())
 
+    # hyper params
     batch_size = 64
     warmup_epochs = 20
     total_epochs = 200
+
     models = [
         TypstSymbolClassifier(num_classes=len(classes)),
         MobileNetV4(

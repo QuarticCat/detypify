@@ -317,18 +317,6 @@ def map_sym(
     }
 
 
-def get_dataset_info(dataset_name: str) -> DataSetInfo:
-    """Load dataset metadata from the info JSON file."""
-    dataset_path = EXTERNAL_DATA_PATH / dataset_name
-    info_path = dataset_path / "dataset_info.json"
-
-    if not info_path.exists():
-        raise FileNotFoundError(f"Could not find dataset info at {info_path}")
-
-    with open(info_path, "rb") as f:
-        return msgspec.json.decode(f.read(), type=DataSetInfo)
-
-
 def create_dataset(
     parse_func: Callable[[Any], MathSymbolSample | str | None],
     data: Any,
