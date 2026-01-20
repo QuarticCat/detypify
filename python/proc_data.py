@@ -7,13 +7,13 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from functools import cache, partial
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import msgspec
 import polars as pl
+import vortex as vx
 from bs4 import BeautifulSoup
 from lxml import etree
-from PIL import Image, ImageDraw
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -27,11 +27,11 @@ class MathSymbolSample:
 
 
 OUT_DIR = Path("build/data")
-DATASET_PATH = Path("external/dataset")
-MATH_WRITING_DATA_PATH = DATASET_PATH / "mathwriting"
-DETEXIFY_DATA_PATH = DATASET_PATH / "detexify"
+EXTERNAL_DATA_PATH = Path("external/dataset")
+MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
+DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 CONTRIB_DATA_PATH = Path("build/dataset.json")
-IMG_SIZE = 64  # px
+IMG_SIZE = 244  # px
 USE_CONTRIB = False
 
 # Missing mappings in the Typst symbol page.
@@ -317,36 +317,9 @@ def map_sym(
     }
 
 
-def normalize(strokes: Strokes, target_size: int) -> Strokes:
-    xs = [x for s in strokes for x, _ in s]
-    min_x, max_x = min(xs), max(xs)
-    ys = [y for s in strokes for _, y in s]
-    min_y, max_y = min(ys), max(ys)
-
-    width = max(max_x - min_x, max_y - min_y)
-    if width == 0:
-        return []
-    width = width * 1.2 + 20  # leave margin to avoid edge cases
-    zero_x = (max_x + min_x - width) / 2
-    zero_y = (max_y + min_y - width) / 2
-    scale = target_size / width
-
-    return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
-    ]
-
-
-def draw_to_img(strokes: Strokes, size: int) -> Image.Image:
-    image = Image.new("1", (size, size), "white")
-    draw = ImageDraw.Draw(image)
-    for stroke in strokes:
-        draw.line(stroke)
-    return image
-
-
 def get_dataset_info(dataset_name: str) -> DataSetInfo:
     """Load dataset metadata from the info JSON file."""
-    dataset_path = DATASET_PATH / dataset_name
+    dataset_path = EXTERNAL_DATA_PATH / dataset_name
     info_path = dataset_path / "dataset_info.json"
 
     if not info_path.exists():
@@ -360,6 +333,8 @@ def create_dataset(
     parse_func: Callable[[Any], MathSymbolSample | str | None],
     data: Any,
     dataset_name: str,
+    format: Literal["vortex", "parquet"],
+    split_parts: bool = True,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
 ) -> None:
     """
@@ -377,6 +352,8 @@ def create_dataset(
             a `str` (indicating an unmapped LaTeX symbol error), or `None` (skip).
         data: An iterable of raw data to be processed.
         dataset_name: The name of the dataset. Output will be saved to `{OUT_DIR}/{dataset_name}`.
+        format: The format to save the dataset in. Options are "vortex" or "parquet".
+        split_parts: Whether to split the dataset into parts/shards. Default is True.
         split_ratio: A tuple representing the fraction of data for (Train, Test, Validation).
             Must sum to approximately 1.0. Default is (0.8, 0.1, 0.1).
 
@@ -430,7 +407,6 @@ def create_dataset(
     # Threshold 2: Boundary between Test and Val
     t2 = train_r + test_r
 
-    # slowest ever....?
     lf = pl.DataFrame({"label": labels_acc, "data": data_acc})
 
     base_lf = (
@@ -468,6 +444,14 @@ def create_dataset(
         .sort("label")
     )
 
+    def _write_to_file(
+        data_frame: pl.DataFrame, filename: Path, format: Literal["vortex", "parquet"]
+    ):
+        if format == "vortex":
+            vx.io.write(vx.compress(vx.array(data_frame.to_arrow())), str(filename))
+        else:
+            data_frame.write_parquet(filename, compression="zstd", compression_level=19)
+
     # 4. Helper to Write Shards
     def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path, batch_size: int):
         # We collect the specific split to memory to slice it efficiently.
@@ -485,15 +469,19 @@ def create_dataset(
         for i, start_idx in enumerate(range(0, total_rows, batch_size)):
             # Slice is zero-copy in Polars
             chunk = df.slice(start_idx, batch_size)
-            filename = f"part_{str(i).zfill(pad_width)}.parquet"
-            chunk.write_parquet(
-                output_dir / filename, compression="zstd", compression_level=19
-            )
+            filename = f"part_{str(i).zfill(pad_width)}.vortex"
+            path = output_dir / filename
+            _write_to_file(chunk, path, format)
 
     # 5. Execute Writes
-    _write_shards(train_lf, train_path, batch_size)
-    _write_shards(test_lf, test_path, batch_size)
-    _write_shards(val_lf, val_path, batch_size)
+    if split_parts:
+        _write_shards(train_lf, train_path, batch_size)
+        _write_shards(test_lf, test_path, batch_size)
+        _write_shards(val_lf, val_path, batch_size)
+    else:
+        _write_to_file(train_lf.collect(), train_path / ("data" + format), format)
+        _write_to_file(test_lf.collect(), test_path / ("data" + format), format)
+        _write_to_file(val_lf.collect(), val_path / ("data" + format), format)
 
     # 6. Metadata
     stats_df = lf["label"].value_counts()
@@ -527,20 +515,24 @@ if __name__ == "__main__":
 
     # # Parse math symbols from detexify dataset
     with open(DETEXIFY_DATA_PATH / "detexify.json", "rb") as f:
-        # got list[str | list[list[list[int]]]
         detexify_raw_data = msgspec.json.decode(f.read())
 
     create_dataset(
         parse_func=partial(parse_detexify_symbol, key_to_typ),
         data=detexify_raw_data,
         dataset_name="detexify",
+        format="parquet",
     )
+
+    # clean right after done
+    del detexify_raw_data
 
     # # Parse MathWrting Dataset sole symboles
     create_dataset(
         parse_func=partial(parse_inkml_symbol, tex_to_typ),
         data=MATH_WRITING_DATA_PATH.glob("*.inkml"),
         dataset_name="mathwriting",
+        format="parquet",
     )
 
     # Parse contributed data
@@ -548,5 +540,8 @@ if __name__ == "__main__":
         with open(CONTRIB_DATA_PATH, "rb") as f:
             samples = msgspec.json.decode(f.read())[0]["results"]
             create_dataset(
-                parse_func=parse_contrib, data=samples, dataset_name="contrib"
+                parse_func=parse_contrib,
+                data=samples,
+                dataset_name="contrib",
+                format="parquet",
             )

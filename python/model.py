@@ -3,40 +3,51 @@ from typing import Literal
 import lightning as L
 from timm import create_model
 from torch import nn, optim
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics import Accuracy
 
 type model_size = Literal["small", "medium", "large"]
+# result of timm.list_models("*mobilenetv4*")
+type model_names = Literal[
+    "mobilenetv4_conv_aa_large",
+    "mobilenetv4_conv_aa_medium",
+    "mobilenetv4_conv_blur_medium",
+    "mobilenetv4_conv_large",
+    "mobilenetv4_conv_medium",
+    "mobilenetv4_conv_small",
+    "mobilenetv4_conv_small_035",
+    "mobilenetv4_conv_small_050",
+    "mobilenetv4_hybrid_large",
+    "mobilenetv4_hybrid_large_075",
+    "mobilenetv4_hybrid_medium",
+    "mobilenetv4_hybrid_medium_075",
+]
 
 
 class MobileNetV4(L.LightningModule):
     def __init__(
         self,
         num_classes: int,
-        use_transformer=False,
-        fine_tune=False,
-        model_size: model_size = "small",
+        use_transformer=True,
+        model_name: model_names = "mobilenetv4_hybrid_medium",
+        batch_size: int = 128,
+        warmup_rounds: int = 20,
+        total_rounds: int = 200,
     ):
         super().__init__()
-        is_hybrid = "hybrid" if use_transformer else "conv"
-        model_name = f"mobilenetv4_{is_hybrid}_{model_size}"
-        if fine_tune:
-            self.model = create_model(
-                "mobilenetv4_conv_medium.e500_r256_in1k",
-                pretrained=True,
-                num_classes=num_classes,
-            )
-        else:
-            self.model = create_model(
-                model_name,
-                num_classes=num_classes,
-                in_chans=1,
-            )
+        self.model = create_model(
+            model_name,
+            num_classes=num_classes,
+            in_chans=1,
+        )
         self.criterion = nn.CrossEntropyLoss()
 
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.val_acc_top5 = Accuracy(
             task="multiclass", num_classes=num_classes, top_k=5
         )
+        self.warm_up_epochs = warmup_rounds
+        self.total_epochs = total_rounds
 
     def forward(self, x):
         return self.model(x)
@@ -61,7 +72,18 @@ class MobileNetV4(L.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters())
         # see: https://docs.pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.CosineAnnealingWarmRestarts.html
-        scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
+        warmup_scheduler = LinearLR(
+            optimizer,
+            total_iters=self.warm_up_epochs,
+        )
+        decay_scheduler = CosineAnnealingLR(
+            optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=0.0
+        )
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, decay_scheduler],
+            milestones=[self.warm_up_epochs],
+        )
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
