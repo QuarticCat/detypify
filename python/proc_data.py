@@ -373,11 +373,12 @@ def create_dataset(
     labels_acc: list[str] = []
     data_acc: list[Strokes] = []
     unmapped_latex_symbols: set[str] = set()
+    chunksize = 500
     batch_size = 2000
 
     # 1. Parse Data
     with ProcessPoolExecutor() as exec:
-        results = exec.map(parse_func, data, chunksize=batch_size)
+        results = exec.map(parse_func, data, chunksize=chunksize)
         for result in results:
             if not result:
                 continue
@@ -386,6 +387,8 @@ def create_dataset(
             else:
                 labels_acc.append(result.label)
                 data_acc.append(result.symbol)
+
+    del results, data
 
     # 2. Prepare Base LazyFrame with Partitioning Info
     # We calculate the cumulative thresholds for splitting
@@ -433,12 +436,12 @@ def create_dataset(
     )
 
     def _write_to_file(
-        data_frame: pl.DataFrame, filename: Path, format: Literal["vortex", "parquet"]
+        data_frame: pl.DataFrame, filepath: Path, format: Literal["vortex", "parquet"]
     ):
         if format == "vortex":
-            vx.io.write(vx.compress(vx.array(data_frame.to_arrow())), str(filename))
+            vx.io.write(vx.compress(vx.array(data_frame.to_arrow())), str(filepath))
         else:
-            data_frame.write_parquet(filename, compression="zstd", compression_level=19)
+            data_frame.write_parquet(filepath, compression="zstd", compression_level=19)
 
     # 4. Helper to Write Shards
     def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path, batch_size: int):
@@ -457,7 +460,7 @@ def create_dataset(
         for i, start_idx in enumerate(range(0, total_rows, batch_size)):
             # Slice is zero-copy in Polars
             chunk = df.slice(start_idx, batch_size)
-            filename = f"part_{str(i).zfill(pad_width)}.vortex"
+            filename = f"part_{str(i).zfill(pad_width)}.{format}"
             path = output_dir / filename
             _write_to_file(chunk, path, format)
 
@@ -467,13 +470,15 @@ def create_dataset(
         _write_shards(test_lf, test_path, batch_size)
         _write_shards(val_lf, val_path, batch_size)
     else:
-        _write_to_file(train_lf.collect(), train_path / ("data" + format), format)
-        _write_to_file(test_lf.collect(), test_path / ("data" + format), format)
-        _write_to_file(val_lf.collect(), val_path / ("data" + format), format)
+        _write_to_file(train_lf.collect(), train_path / ("data." + format), format)
+        _write_to_file(test_lf.collect(), test_path / ("data." + format), format)
+        _write_to_file(val_lf.collect(), val_path / ("data." + format), format)
 
     # 6. Metadata
     stats_df = lf["label"].value_counts()
     class_counters = dict(zip(stats_df["label"], stats_df["count"]))
+
+    del lf, stats_df
 
     data_set_info_path = dataset_path / "dataset_info.json"
     if not data_set_info_path.exists():

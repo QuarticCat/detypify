@@ -4,8 +4,8 @@ from typing import Literal
 
 import msgspec
 import polars as pl
-import pytorch_lightning as L
 import torch
+from lightning import LightningDataModule
 from PIL import Image, ImageDraw
 from proc_data import IMG_SIZE, DataSetInfo, Strokes
 from torch.utils.data import DataLoader, default_collate
@@ -61,11 +61,12 @@ class SymbolDataset(VisionDataset):
     def __init__(
         self,
         dataset_name: str,
-        transform: Compose | None,
+        transforms: Compose | None,
         split: Literal["train", "test", "val"],
     ):
         self.dataset_path = DATA_ROOT / dataset_name
         self.split_dir = self.dataset_path / split
+        self.transforms = transforms
 
         # 1. Load Metadata
         info_path = self.dataset_path / "dataset_info.json"
@@ -118,12 +119,12 @@ class SymbolDataset(VisionDataset):
         return image, label_idx
 
 
-class MathSymbolDataModule(L.LightningDataModule):
+class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
         data_root: Path,
         dataset_name: str,
-        batch_size: int = 128,
+        batch_size: int = 64,
         num_workers: int = process_cpu_count(),
     ):
         super().__init__()
@@ -162,31 +163,33 @@ class MathSymbolDataModule(L.LightningDataModule):
         self.test_dataset: SymbolDataset
 
     def setup(self, stage: str | None = None):
-        if stage == "fit" or stage is None:
+        num_classes = len(get_dataset_info(self.dataset_name).class_count.keys())
+
+        # data agumentaion with MixUp and CutMix
+        mixup = v2.MixUp(num_classes=num_classes, alpha=0.8)
+        cutmix = v2.CutMix(num_classes=num_classes, alpha=1.0)
+
+        # 3. Create the Switch (Paper uses 0.5 switch probability )
+        # This randomly picks either MixUp or CutMix for a given batch.
+        cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
+        self.collate_fn = lambda batch: cutmix_or_mixup(*default_collate(batch))
+        if stage == "fit":
             self.train_dataset = SymbolDataset(
                 dataset_name=self.dataset_name,
                 split="train",
-                transform=self.train_transform,
+                transforms=self.train_transform,
             )
             self.val_dataset = SymbolDataset(
                 dataset_name=self.dataset_name,
                 split="val",
-                transform=self.eval_transform,  # Note: No augmentation
+                transforms=self.eval_transform,  # Note: No augmentation
             )
-            num_classes = len(self.train_dataset.classes)
-            mixup = v2.MixUp(num_classes=num_classes, alpha=0.8)
-            cutmix = v2.CutMix(num_classes=num_classes, alpha=1.0)
-
-            # 3. Create the Switch (Paper uses 0.5 switch probability )
-            # This randomly picks either MixUp or CutMix for a given batch.
-            cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
-            self.collate_fn = lambda batch: cutmix_or_mixup(*default_collate(batch))
 
         if stage == "test" or stage is None:
             self.test_dataset = SymbolDataset(
                 dataset_name=self.dataset_name,
                 split="test",
-                transform=self.eval_transform,  # Note: No augmentation
+                transforms=self.eval_transform,  # Note: No augmentation
             )
             self.num_classes = len(self.test_dataset.classes)
 

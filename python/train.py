@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import lightning as L
+import lightning.pytorch
 import msgspec
 import torch
 from dataset import MathSymbolDataModule, get_dataset_info
@@ -32,12 +33,12 @@ if __name__ == "__main__":
     total_epochs = 200
 
     models = [
-        TypstSymbolClassifier(num_classes=len(classes)),
         MobileNetV4(
             num_classes=len(classes),
             warmup_rounds=warmup_epochs,
             total_rounds=total_epochs,
         ),
+        TypstSymbolClassifier(num_classes=len(classes)),
     ]
 
     logger = TensorBoardLogger(OUT_DIR / "train" / "tb_logs")  # type: ignore
@@ -49,15 +50,23 @@ if __name__ == "__main__":
         # TODO: add code to freeze decoder weights on initial round for MobileNetV4
         # (maybe) use fp16
         trainer = L.Trainer(
-            max_epochs=total_epochs, default_root_dir=OUT_DIR, logger=logger
+            max_epochs=total_epochs,
+            default_root_dir=OUT_DIR,
+            logger=logger,
+            # See: https://docs.pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
+            # this should be the same as torch.set_float32_matmul_precision("high")
+            precision="bf16-mixed",
         )
         for dataset in datasets:
             dm = MathSymbolDataModule(
-                data_root=DATA_DIR, dataset_name=dataset, batch_size=batch_size
+                data_root=DATA_DIR,
+                dataset_name=dataset,
+                batch_size=batch_size,
+                num_workers=num_workers,
             )
             # training
             trainer.fit(
-                compiled_model,  # type: ignore
+                model,
                 datamodule=dm,  # type: ignore
             )
             # validate
