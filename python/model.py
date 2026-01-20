@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 import lightning as L
 from timm import create_model
@@ -30,12 +30,13 @@ class MobileNetV4(L.LightningModule):
         num_classes: int,
         use_transformer=True,
         model_name: model_names = "mobilenetv4_hybrid_medium",
-        batch_size: int = 128,
+        batch_size: int = 64,
         warmup_rounds: int = 20,
         total_rounds: int = 200,
     ):
         super().__init__()
-        self.model = create_model(
+        self.save_hyperparameters()
+        self.model: Any = create_model(
             model_name,
             num_classes=num_classes,
             in_chans=1,
@@ -96,7 +97,7 @@ class MobileNetV4(L.LightningModule):
 class TypstSymbolClassifier(L.LightningModule):
     def __init__(self, num_classes: int):
         super().__init__()
-        self.model = nn.Sequential(
+        self.model: Any = nn.Sequential(
             nn.Conv2d(1, 16, 5),
             nn.ReLU(),
             nn.MaxPool2d(2),
