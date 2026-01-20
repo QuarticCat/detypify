@@ -14,7 +14,6 @@ import polars as pl
 from bs4 import BeautifulSoup
 from lxml import etree
 from PIL import Image, ImageDraw
-from tqdm import tqdm
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -29,7 +28,7 @@ class MathSymbolSample:
 
 OUT_DIR = Path("build/data")
 DATASET_PATH = Path("external/dataset")
-MATH_WRITING_DATA_PATH = DATASET_PATH / "mathwriting-2024"
+MATH_WRITING_DATA_PATH = DATASET_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = DATASET_PATH / "detexify"
 CONTRIB_DATA_PATH = Path("build/dataset.json")
 IMG_SIZE = 64  # px
@@ -148,6 +147,10 @@ TEX_TO_TYP = {
     "\\MVAt": "at",
     "\\EUR": "euro",
     "\\blacksquare": "qed",
+    "\\emptyset": "emptyset",
+    "\\|": "bar.v.double",
+    "\\iff": "arrow.l.r.double.long",
+    "\\bullet": "bullet.op",
 }
 
 
@@ -188,13 +191,14 @@ class MathSymbol(msgspec.Struct, array_like=True):
 
 
 def parse_detexify_symbol(
-    key: str,
-    raw_strokes: list[list[tuple[float, float, float]]],
-) -> MathSymbolSample | None:
-    key_to_typ = map_sym(typ_sym_info, tex_to_typ)
+    key_to_typ: dict[str, TypstSymInfo], raw_data: Any
+) -> MathSymbolSample | str | None:
+    key: str = raw_data[0]
+    raw_strokes: list[list[list[int]]] = raw_data[1]
     typ = key_to_typ.get(key)
     if typ is None:
-        return
+        # missing key
+        return key
     strokes = [
         [(float(x), float(y)) for x, y, _ in s] for s in raw_strokes if len(s) > 2
     ]
@@ -208,87 +212,37 @@ def get_xml_parser():
     return etree.XMLParser()
 
 
-def parse_inkml(filepath: Path, trace_ids: set[int] | None) -> Strokes:
-    tree = etree.parse(filepath, get_xml_parser())
-    root = tree.getroot()
-
-    def _trace_to_stroke(trace: str) -> Stroke:
-        """
-        translate trace to stroke
-        e.g. trace text:597.79 77.05 1841.0,596.41 80.84 1897.0 (a list of point(x,y,time) seperated by commas)
-        """
-        return [
-            (float(parts[0]), float(parts[1]))
-            for point_str in trace.split(",")
-            for parts in point_str.strip().split()
-            if len(parts) >= 2
-        ]
-
-    def _is_valid_trace(allowed_ids: set[int] | None, element: etree._Element) -> bool:
-        """
-        Predicate function to determine if a trace should be included.
-        """
-        if not allowed_ids:
-            return True
-            # Safely handle potential missing or non-integer IDs
-        trace_id = element.attrib.get("id")
-        if not trace_id:
-            return False
-        return int(trace_id) in allowed_ids
-
-    return [
-        _trace_to_stroke(trace.text)
-        for trace in filter(
-            lambda el: _is_valid_trace(trace_ids, el),
-            root.iterfind("//trace"),
-        )
-        if trace.text
-    ]
-
-
-def parse_sole_symbol(
-    filepath: Path,
+def parse_inkml_symbol(
     tex_to_typ: dict[str, TypstSymInfo],
-) -> MathSymbolSample | str:
-    tree = etree.parse(filepath, get_xml_parser())
-    root = tree.getroot()
-    tex_label = root.findtext('.//annotation[@type="label"]')
+    filepath: Path,
+) -> MathSymbolSample | str | None:
+    root = etree.parse(filepath, get_xml_parser()).getroot()
+    namespace = {"ink": "http://www.w3.org/2003/InkML"}
+    tex_label = root.findtext(".//ink:annotation[@type='label']", namespaces=namespace)
+    if not tex_label:
+        return
     if isinstance(tex_label, str):
         typ = tex_to_typ.get(tex_label)
         if typ is not None:
             label = typ.char
+        # missing mapping, return current label
         else:
             return tex_label
     return MathSymbolSample(
         label,
-        parse_inkml(filepath, None),
-    )
-
-
-def read_symbol_seg_anno() -> list[SymbolSegInfo]:
-    """loads symbol extraction annotation of MathWrting Dataset"""
-    decoder = msgspec.json.Decoder(SymbolSegInfo)
-    with open(OUT_DIR / "mathwriting" / "symbols.jsonl", "rb") as f:
-        symbol_annos = decoder.decode_lines(f.read())
-    return symbol_annos
-
-
-def extract_symbol(
-    symbol_seg_anno: SymbolSegInfo,
-    tex_to_typ: dict[str, TypstSymInfo],
-) -> MathSymbolSample | str:
-    """extract math symbol from math expression"""
-    typ = tex_to_typ.get(symbol_seg_anno.label)
-    if not typ:
-        return symbol_seg_anno.label
-    filepath = Path(
-        MATH_WRITING_DATA_PATH,
-        "train",
-        f"{symbol_seg_anno.sourceSampleId}.inkml",
-    )
-    return MathSymbolSample(
-        typ.char,
-        parse_inkml(filepath, set(symbol_seg_anno.strokeIndices)),
+        [
+            [
+                (float(x), float(y))
+                for x, y, _ in (
+                    # point tuple[int, int, int]
+                    point_str.split()
+                    for point_str in trace.text.split(",")
+                    if len(point_str.split()) == 3
+                )
+            ]
+            for trace in root.iterfind(".//ink:trace", namespaces=namespace)
+            if trace.text
+        ],
     )
 
 
@@ -363,7 +317,7 @@ def map_sym(
     }
 
 
-def normalize(strokes: Strokes) -> Strokes:
+def normalize(strokes: Strokes, target_size: int) -> Strokes:
     xs = [x for s in strokes for x, _ in s]
     min_x, max_x = min(xs), max(xs)
     ys = [y for s in strokes for _, y in s]
@@ -375,15 +329,15 @@ def normalize(strokes: Strokes) -> Strokes:
     width = width * 1.2 + 20  # leave margin to avoid edge cases
     zero_x = (max_x + min_x - width) / 2
     zero_y = (max_y + min_y - width) / 2
-    scale = IMG_SIZE / width
+    scale = target_size / width
 
     return [
         [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
     ]
 
 
-def draw_to_img(strokes: Strokes) -> Image.Image:
-    image = Image.new("1", (IMG_SIZE, IMG_SIZE), "white")
+def draw_to_img(strokes: Strokes, size: int) -> Image.Image:
+    image = Image.new("1", (size, size), "white")
     draw = ImageDraw.Draw(image)
     for stroke in strokes:
         draw.line(stroke)
@@ -442,23 +396,24 @@ def create_dataset(
             └── dataset_info.json
     """
     dataset_path = OUT_DIR / dataset_name
+    dataset_path.mkdir(exist_ok=True)
     train_path = dataset_path / "train"
     test_path = dataset_path / "test"
     val_path = dataset_path / "val"
 
     for p in [train_path, test_path, val_path]:
-        p.mkdir(parents=True, exist_ok=True)
+        p.mkdir(exist_ok=True)
 
     # Accumulators
     labels_acc: list[str] = []
     data_acc: list[Strokes] = []
     unmapped_latex_symbols: set[str] = set()
-    batch_size = 1000
+    batch_size = 2000
 
     # 1. Parse Data
     with ProcessPoolExecutor() as exec:
         results = exec.map(parse_func, data, chunksize=batch_size)
-        for result in tqdm(results, desc=f"Processing dataset {dataset_name}."):
+        for result in results:
             if not result:
                 continue
             elif isinstance(result, str):
@@ -475,11 +430,11 @@ def create_dataset(
     # Threshold 2: Boundary between Test and Val
     t2 = train_r + test_r
 
+    # slowest ever....?
     lf = pl.DataFrame({"label": labels_acc, "data": data_acc})
 
-    #
     base_lf = (
-        lf.sample(shuffle=True, seed=42)
+        lf.sample(fraction=1.0, shuffle=True, seed=42)
         .with_columns(
             [
                 pl.len().over("label").alias("n"),
@@ -531,7 +486,9 @@ def create_dataset(
             # Slice is zero-copy in Polars
             chunk = df.slice(start_idx, batch_size)
             filename = f"part_{str(i).zfill(pad_width)}.parquet"
-            chunk.write_parquet(output_dir / filename, compression="zstd")
+            chunk.write_parquet(
+                output_dir / filename, compression="zstd", compression_level=19
+            )
 
     # 5. Execute Writes
     _write_shards(train_lf, train_path, batch_size)
@@ -540,18 +497,20 @@ def create_dataset(
 
     # 6. Metadata
     stats_df = lf["label"].value_counts()
-    class_counters = dict(zip(stats_df["label"], stats_df["len"]))
+    class_counters = dict(zip(stats_df["label"], stats_df["count"]))
 
-    with open(dataset_path / "dataset_info.json", "wb") as f:
-        dataset_info = DataSetInfo(
-            name=dataset_name,
-            total_count=len(labels_acc),
-            class_count=class_counters,
-            unmapped_latex_symbols=unmapped_latex_symbols
-            if unmapped_latex_symbols
-            else None,
-        )
-        f.write(msgspec.json.encode(dataset_info))
+    data_set_info_path = dataset_path / "dataset_info.json"
+    if not data_set_info_path.exists():
+        with open(dataset_path / "dataset_info.json", "wb") as f:
+            dataset_info = DataSetInfo(
+                name=dataset_name,
+                total_count=len(labels_acc),
+                class_count=class_counters,
+                unmapped_latex_symbols=unmapped_latex_symbols
+                if unmapped_latex_symbols
+                else None,
+            )
+            f.write(msgspec.json.encode(dataset_info))
 
 
 if __name__ == "__main__":
@@ -560,31 +519,28 @@ if __name__ == "__main__":
     # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
     tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
+    name_to_typ = {name: s for s in typ_sym_info for name in s.names}
+    tex_to_typ |= {k: name_to_typ[v] for k, v in TEX_TO_TYP.items()}
     key_to_typ = map_sym(typ_sym_info, tex_to_typ)
-    with open(f"{OUT_DIR}/symbols.json", "wb") as f:
-        f.write(msgspec.json.encode(typ_sym_info))
+    # with open(f"{OUT_DIR}/symbols.json", "wb") as f:
+    #     f.write(msgspec.json.encode(typ_sym_info))
 
-    # Parse math symbols from detexify dataset
+    # # Parse math symbols from detexify dataset
     with open(DETEXIFY_DATA_PATH / "detexify.json", "rb") as f:
+        # got list[str | list[list[list[int]]]
         detexify_raw_data = msgspec.json.decode(f.read())
-        create_dataset(
-            parse_func=partial(parse_detexify_symbol, key_to_typ),
-            data=detexify_raw_data,
-            dataset_name="detexify",
-        )
 
-    # Parse MathWrting Dataset sole symboles
     create_dataset(
-        parse_func=partial(parse_sole_symbol, tex_to_typ),
-        data=Path(MATH_WRITING_DATA_PATH, "symbols").glob("*.inkml"),
-        dataset_name="mathwriting_symbols",
+        parse_func=partial(parse_detexify_symbol, key_to_typ),
+        data=detexify_raw_data,
+        dataset_name="detexify",
     )
-    # Parse extracted symbols from MathWrting Dataset
-    seg_annos = read_symbol_seg_anno()
+
+    # # Parse MathWrting Dataset sole symboles
     create_dataset(
-        parse_func=partial(extract_symbol, tex_to_typ),
-        data=seg_annos,
-        dataset_name="mathwriting_extracted",
+        parse_func=partial(parse_inkml_symbol, tex_to_typ),
+        data=MATH_WRITING_DATA_PATH.glob("*.inkml"),
+        dataset_name="mathwriting",
     )
 
     # Parse contributed data
