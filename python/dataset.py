@@ -34,11 +34,12 @@ def normalize(strokes: Strokes, target_size: int) -> Strokes:
     ]
 
 
-def draw_to_img(strokes: Strokes, size: int) -> Image.Image:
-    normalized = normalize(strokes, size)
+def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image:
+    if resize:
+        strokes = normalize(strokes, size)
     image = Image.new("1", (size, size), "black")
     draw = ImageDraw.Draw(image)
-    for stroke in normalized:
+    for stroke in strokes:
         draw.line(stroke, fill="white")
     return image
 
