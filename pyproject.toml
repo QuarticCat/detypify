@@ -53,14 +53,17 @@ line-length = 88
 # default set and isort
 [tool.ruff.lint]
 extend-select = [
+    "A",        # detect shadowed builtins
     "F",        # Pyflakes rules
     "W",        # PyCodeStyle warnings
     "E",        # PyCodeStyle errors
     "I",        # Sort imports properly
+    "N",        # Naming conventions
     "UP",       # Warn if certain things can changed due to newer Python versions
     "C4",       # Catch incorrect use of comprehensions, dict, list, etc
     "FA",       # Enforce from __future__ import annotations
     "ISC",      # Good use of string concatenation
+    "ARG",      # Unused Arguments
     "ICN",      # Use common import conventions
     "RET",      # Good return practices
     "SIM",      # Common simplification rules
