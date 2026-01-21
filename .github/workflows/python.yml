@@ -2,9 +2,9 @@ name: Python
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, model-dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, model-dev]
     types: [opened, synchronize]
   workflow_dispatch:
 
