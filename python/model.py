@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-import lightning as L
+import lightning as L  # noqa
 from timm import create_model
 from torch import nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
@@ -28,9 +28,7 @@ class MobileNetV4(L.LightningModule):
     def __init__(
         self,
         num_classes: int,
-        use_transformer=True,
         model_name: model_names = "mobilenetv4_hybrid_medium",
-        batch_size: int = 64,
         warmup_rounds: int = 20,
         total_rounds: int = 200,
     ):
@@ -113,14 +111,14 @@ class TypstSymbolClassifier(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         x, y = batch
         pred = self.model(x)
         loss = self.criterion(pred, y)
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch):
         x, y = batch
         pred = self.model(x)
         loss = self.criterion(pred, y)
