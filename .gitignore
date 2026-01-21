@@ -12,3 +12,4 @@ dist/
 
 # Ref: https://github.com/astral-sh/uv/issues/6349
 uv.lock
+.zed

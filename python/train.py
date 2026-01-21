@@ -2,22 +2,23 @@
 
 from os import process_cpu_count
 from pathlib import Path
-from typing import Literal
 
 import lightning as L
 import lightning.pytorch
 import msgspec
 import torch
-from dataset import MathSymbolDataModule, get_dataset_info
+from dataset import MathSymbolDataModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from model import MobileNetV4, TypstSymbolClassifier
-from proc_data import DETEXIFY_DATA_PATH, IMG_SIZE, TypstSymInfo
+from proc_data import (
+    DATASET_ROOT,
+    DETEXIFY_DATA_PATH,
+    IMG_SIZE,
+    TypstSymInfo,
+    get_dataset_info,
+)
 
-OUT_DIR = Path("build/train")
-DATA_DIR = Path("build/data")
-
-USE_TRANSFORMER = False
-type model_size = Literal["small", "medium", "large"]
+TRAIN_OUT_DIR = Path("build/train")
 
 
 if __name__ == "__main__":
@@ -41,17 +42,15 @@ if __name__ == "__main__":
         TypstSymbolClassifier(num_classes=len(classes)),
     ]
 
-    logger = TensorBoardLogger(OUT_DIR / "train" / "tb_logs")  # type: ignore
+    logger = TensorBoardLogger(TRAIN_OUT_DIR / "train" / "tb_logs")  # type: ignore
 
     for model in models:
         compiled_model = torch.compile(model)
         num_workers = process_cpu_count() or 1
 
-        # TODO: add code to freeze decoder weights on initial round for MobileNetV4
-        # (maybe) use fp16
         trainer = L.Trainer(
             max_epochs=total_epochs,
-            default_root_dir=OUT_DIR,
+            default_root_dir=TRAIN_OUT_DIR,
             logger=logger,
             # See: https://docs.pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
             # this should be the same as torch.set_float32_matmul_precision("high")
@@ -59,7 +58,7 @@ if __name__ == "__main__":
         )
         for dataset in datasets:
             dm = MathSymbolDataModule(
-                data_root=DATA_DIR,
+                data_root=DATASET_ROOT,
                 dataset_name=dataset,
                 batch_size=batch_size,
                 num_workers=num_workers,
@@ -74,7 +73,7 @@ if __name__ == "__main__":
 
         # Export ONNX.
         model.to_onnx(
-            f"{OUT_DIR}/model.onnx",
+            f"{TRAIN_OUT_DIR}/model.onnx",
             # 1 image , 1 color channels(grey scale)
             torch.randn(1, 1, IMG_SIZE, IMG_SIZE),
             dynamo=True,
@@ -82,7 +81,7 @@ if __name__ == "__main__":
         )
 
     # Generate JSON for the infer page.
-    with open(DETEXIFY_DATA_PATH / "symbols.json", "rb") as f:
+    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
         sym_info = msgspec.json.decode(f.read(), type=list[TypstSymInfo])
     chr_to_sym = {s.char: s for s in sym_info}
     infer = []
@@ -96,10 +95,10 @@ if __name__ == "__main__":
         elif sym.math_shorthand:
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
-    with open(OUT_DIR / "infer.json", "wb") as f:
+    with (TRAIN_OUT_DIR / "infer.json").open("wb") as f:
         f.write(msgspec.json.encode(infer))
 
     # Generate JSON for the contrib page.
     contrib = {n: s.char for s in sym_info for n in s.names}
-    with open(OUT_DIR / "contrib.json", "wb") as f:
+    with (TRAIN_OUT_DIR / "contrib.json").open("wb") as f:
         f.write(msgspec.json.encode(contrib))
