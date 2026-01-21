@@ -15,8 +15,7 @@ dependencies = [
   "onnx>=1.20.0",
   "onnxscript>=0.5.7",
   "pillow>=12.0.0",
-  "polars>=1.37.1",
-  "pyarrow>=23.0.0",
+  "polars>=1.34.0",
   "scikit-learn>=1.8.0",
   "timm>=1.0.22",
   "torch",
@@ -25,12 +24,21 @@ dependencies = [
   "vortex-data>=0.58.0",
 ]
 
+[project.optional-dependencies]
+# use gpu can be enabled only on linux with nvidia graphics (experiemental)
+# may accelerate processing data
+# use with env var POLARS_ENGINE_AFFINITY="gpu"
+polars-gpu = [
+    "polars[gpu]; sys_platform == 'linux'"
+]
+
 [dependency-groups]
 dev = [
   "ipykernel>=7.1.0",
   "ipython>=9.9.0",
   "lxml-stubs>=0.5.1",
   "pyrefly",
+  "ruff>=0.14.13",
   "tensorboard>=2.20.0",
   "tensorboardx>=2.6.4",
   "torch-tb-profiler>=0.4.3",
@@ -38,13 +46,29 @@ dev = [
   "zuban",
 ]
 
-# linter and formatter, line-length 88 as black default
+# linter and formatter, line length 88 as black default
 [tool.ruff]
 line-length = 88
 
 # default set and isort
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+extend-select = [
+    "F",        # Pyflakes rules
+    "W",        # PyCodeStyle warnings
+    "E",        # PyCodeStyle errors
+    "I",        # Sort imports properly
+    "UP",       # Warn if certain things can changed due to newer Python versions
+    "C4",       # Catch incorrect use of comprehensions, dict, list, etc
+    "FA",       # Enforce from __future__ import annotations
+    "ISC",      # Good use of string concatenation
+    "ICN",      # Use common import conventions
+    "RET",      # Good return practices
+    "SIM",      # Common simplification rules
+    "TID",      # Some good import practices
+    "TC",       # Enforce importing certain types in a TYPE_CHECKING block
+    "PTH",      # Use pathlib instead of os.path
+    "NPY",      # Some numpy-specific things
+]
 
 [tool.uv.sources]
 torch = [
