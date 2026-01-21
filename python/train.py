@@ -3,7 +3,7 @@
 from os import process_cpu_count
 from pathlib import Path
 
-import lightning as L
+import lightning as L  # noqa
 import lightning.pytorch
 import msgspec
 import torch

@@ -178,12 +178,6 @@ class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     # css_class: str
 
 
-class SymbolSegInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
-    sourceSampleId: str
-    strokeIndices: list[int]
-    label: str
-
-
 class MathSymbolSample(msgspec.Struct):
     label: str
     symbol: Strokes
@@ -405,8 +399,8 @@ def construct_mathwrting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | N
     data_acc = []
     unmapped: set[str] = set()
 
-    with ProcessPoolExecutor() as exec:
-        results = exec.map(
+    with ProcessPoolExecutor() as executor:
+        results = executor.map(
             parse_inkml_symbol,
             data_path.glob("*.inkml"),
             chunksize=500,
@@ -485,7 +479,7 @@ def construct_contribute_df(path: Path) -> pl.LazyFrame:
 
 def create_dataset(
     dataset_name: Literal["mathwriting", "detexify", "contrib"],
-    format: Literal["vortex", "parquet"] = "parquet",
+    file_format: Literal["vortex", "parquet"] = "parquet",
     split_parts: bool = True,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
     batch_size: int = 2000,
@@ -578,7 +572,7 @@ def create_dataset(
     # 4. Writing Logic
     # ---------------------------------------------------------
     def _write_to_file(df: pl.DataFrame, path: Path):
-        if format == "vortex":
+        if file_format == "vortex":
             import vortex as vx
 
             vx.io.write(vx.compress(vx.array(df.to_arrow())), str(path))
@@ -601,7 +595,7 @@ def create_dataset(
 
         for i, start_idx in enumerate(range(0, total_rows, batch_size)):
             chunk = df.slice(start_idx, batch_size)
-            filename = f"part_{str(i).zfill(pad_width)}.{format}"
+            filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
             _write_to_file(chunk, output_dir / filename)
 
     if split_parts:
@@ -610,9 +604,9 @@ def create_dataset(
         _write_shards(val_lf, val_path)
     else:
         print("  -> Writing single files...")
-        _write_to_file(train_lf.collect(), train_path / f"data.{format}")
-        _write_to_file(test_lf.collect(), test_path / f"data.{format}")
-        _write_to_file(val_lf.collect(), val_path / f"data.{format}")
+        _write_to_file(train_lf.collect(), train_path / f"data.{file_format}")
+        _write_to_file(test_lf.collect(), test_path / f"data.{file_format}")
+        _write_to_file(val_lf.collect(), val_path / f"data.{file_format}")
 
     # ---------------------------------------------------------
     # 5. Metadata Generation
