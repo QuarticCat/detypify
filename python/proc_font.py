@@ -1,16 +1,16 @@
 """Preprocess font for the webpage."""
 
-import os
 import shutil
+from pathlib import Path
 
 from fontTools import subset
 from proc_data import get_typst_symbol_info
 
-OUT_DIR = "build/font"
+OUT_DIR = Path("build/font")
 
 if __name__ == "__main__":
     shutil.rmtree(OUT_DIR, ignore_errors=True)
-    os.makedirs(OUT_DIR, exist_ok=True)
+    OUT_DIR.mkdir(exist_ok=True)
 
     sym_info = get_typst_symbol_info()
     args = [

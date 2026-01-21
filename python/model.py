@@ -55,6 +55,7 @@ class MobileNetV4(L.LightningModule):
 
     def training_step(self, batch):
         x, y = batch
+        print(y.shape)
         pred = self.model(x)
         loss = self.criterion(pred, y)
         self.log("train_loss", loss)

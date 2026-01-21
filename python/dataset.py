@@ -2,59 +2,14 @@ from os import process_cpu_count
 from pathlib import Path
 from typing import Literal
 
-import msgspec
 import polars as pl
 import torch
 from lightning import LightningDataModule
-from PIL import Image, ImageDraw
-from proc_data import IMG_SIZE, DataSetInfo, Strokes
+from proc_data import DATASET_ROOT, IMG_SIZE, draw_to_img, get_dataset_info
 from torch.utils.data import DataLoader, default_collate
 from torchvision.datasets import VisionDataset
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import Compose
-
-DATA_ROOT = Path("build/data")
-
-
-def get_dataset_info(dataset_name: str) -> DataSetInfo:
-    """Load dataset metadata from the info JSON file."""
-    dataset_path = DATA_ROOT / dataset_name
-    info_path = dataset_path / "dataset_info.json"
-
-    if not info_path.exists():
-        raise FileNotFoundError(f"Could not find dataset info at {info_path}")
-
-    with open(info_path, "rb") as f:
-        return msgspec.json.decode(f.read(), type=DataSetInfo)
-
-
-def normalize(strokes: Strokes, target_size: int) -> Strokes:
-    xs = [x for s in strokes for x, _ in s]
-    min_x, max_x = min(xs), max(xs)
-    ys = [y for s in strokes for _, y in s]
-    min_y, max_y = min(ys), max(ys)
-
-    width = max(max_x - min_x, max_y - min_y)
-    if width == 0:
-        return []
-    width = width * 1.2 + 20  # leave margin to avoid edge cases
-    zero_x = (max_x + min_x - width) / 2
-    zero_y = (max_y + min_y - width) / 2
-    scale = target_size / width
-
-    return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
-    ]
-
-
-def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image:
-    if resize:
-        strokes = normalize(strokes, size)
-    image = Image.new("1", (size, size), "black")
-    draw = ImageDraw.Draw(image)
-    for stroke in strokes:
-        draw.line(stroke, fill="white")
-    return image
 
 
 class SymbolDataset(VisionDataset):
@@ -64,8 +19,8 @@ class SymbolDataset(VisionDataset):
         transforms: Compose | None,
         split: Literal["train", "test", "val"],
     ):
-        self.dataset_path = DATA_ROOT / dataset_name
-        self.split_dir = self.dataset_path / split
+        self.dataset_path = DATASET_ROOT / dataset_name
+        split_dir = self.dataset_path / split
         self.transforms = transforms
 
         # 1. Load Metadata
@@ -76,18 +31,18 @@ class SymbolDataset(VisionDataset):
         self.info = get_dataset_info(dataset_name)
         self.classes = sorted(self.info.class_count.keys())
 
-        # Create mapping dataframe for joining (more efficient than dict replace for large data)
-        # We make a small LazyFrame for the class mapping
+        # Create mapping dataframe for joining
+        # more efficient than dict replace for large data
         class_map_df = pl.DataFrame(
             {"label": self.classes, "label_idx": range(len(self.classes))}
         ).lazy()
 
         # 2. Setup Lazy Loading Pattern
-        parquet_glob = str(self.split_dir / "*.parquet")
+        parquet_glob = str(split_dir / "*.parquet")
 
         # Check existence cheaply before scanning
-        if not list(self.split_dir.glob("*.parquet")):
-            raise FileNotFoundError(f"No .parquet files found in {self.split_dir}")
+        if not list(split_dir.glob("*.parquet")):
+            raise FileNotFoundError(f"No .parquet files found in {split_dir}")
 
         try:
             q = pl.scan_parquet(parquet_glob)
@@ -101,22 +56,21 @@ class SymbolDataset(VisionDataset):
                 .collect()
                 .to_arrow()
             )
+            del class_map_df
 
         except Exception as e:
             raise RuntimeError(
                 f"Failed to load parquet shards from {parquet_glob}"
             ) from e
-        # These are zero-copy references to the table created above
         self.samples = arrow_table["data"]
         self.targets = arrow_table["label_idx"]
 
+        del arrow_table
+
     def __len__(self):
-        # Return length of the Arrow array
         return len(self.samples)
 
     def __getitem__(self, idx):
-        # Access data by index
-        # .as_py() deserializes the C++ binary format to Python objects on-the-fly
         strokes = self.samples[idx].as_py()
         label_idx = self.targets[idx].as_py()
 
@@ -210,7 +164,7 @@ class MathSymbolDataModule(LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
-            persistent_workers=True if self.num_workers > 0 else False,
+            persistent_workers=self.num_workers > 0,
             collate_fn=self.collate_fn,
         )
 
@@ -221,7 +175,7 @@ class MathSymbolDataModule(LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
-            persistent_workers=True if self.num_workers > 0 else False,
+            persistent_workers=self.num_workers > 0,
         )
 
     def test_dataloader(self):
