@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw
 type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
-type Datasets = Literal["mathwriting", "detexify", "contrib"]
+type DataSetName = Literal["mathwriting", "detexify", "contrib"]
 
 
 # constants
@@ -552,7 +552,7 @@ def construct_contribute_df() -> pl.LazyFrame:
 
 
 def create_dataset(
-    dataset_name: Literal["mathwriting", "detexify", "contrib"],
+    dataset_name: DataSetName,
     file_format: Literal["vortex", "parquet"] = "parquet",
     split_parts: bool = True,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
@@ -719,10 +719,9 @@ if __name__ == "__main__":
         with symbols_info_path.open("wb") as f:
             f.write(msgspec.json.encode(typ_sym_info))
 
-    create_dataset(dataset_name="detexify")
+    # create_dataset(dataset_name="detexify")
 
-    # Parse MathWrting Dataset sole symboles
-    create_dataset(dataset_name="mathwriting", split_parts=False)
+    # create_dataset(dataset_name="mathwriting", split_parts=False)
 
     # Parse contributed data
     # if USE_CONTRIB:

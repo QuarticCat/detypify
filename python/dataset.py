@@ -1,11 +1,20 @@
+import lzma
 from os import process_cpu_count
 from pathlib import Path
+from shutil import copyfileobj, unpack_archive
 from typing import Literal
 
 import polars as pl
 import torch
 from lightning import LightningDataModule
-from proc_data import DATASET_ROOT, IMG_SIZE, draw_to_img, get_dataset_info
+from proc_data import (
+    DATASET_ROOT,
+    IMG_SIZE,
+    DataSetName,
+    create_dataset,
+    draw_to_img,
+    get_dataset_info,
+)
 from torch.utils.data import DataLoader, default_collate
 from torchvision.datasets import VisionDataset
 from torchvision.transforms import v2
@@ -87,7 +96,7 @@ class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
         data_root: Path,
-        dataset_name: str,
+        dataset_name: DataSetName,
         batch_size: int = 64,
         num_workers: int = process_cpu_count(),
     ):
@@ -124,6 +133,23 @@ class MathSymbolDataModule(LightningDataModule):
         self.train_dataset: SymbolDataset
         self.val_dataset: SymbolDataset
         self.test_dataset: SymbolDataset
+
+    def prepara_data(self):
+        # uncompress data for mathwriting and detexify datasets.
+        if self.dataset_name == "mathwriting":
+            unpack_archive(
+                "external/mathwriting.tar.xz", "external/dataset/mathwriting/"
+            )
+        elif self.dataset_name == "detexify":
+            detexify_compressed_file = Path("external/mathwriting.tar.xz")
+            with (
+                lzma.open(detexify_compressed_file, "rb") as f_in,
+                Path(detexify_compressed_file.stem).open("wb") as f_out,
+            ):
+                copyfileobj(f_in, f_out)
+
+        # create dataset
+        create_dataset(dataset_name=self.dataset_name)
 
     def setup(self, stage: str | None = None):
         num_classes = len(get_dataset_info(self.dataset_name).count_by_class.keys())
