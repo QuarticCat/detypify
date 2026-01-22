@@ -27,7 +27,7 @@ type Datasets = Literal["mathwriting", "detexify", "contrib"]
 DATASET_ROOT = Path("build/dataset")
 EXTERNAL_DATA_PATH = Path("external/dataset")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
-DETEXIFY_DATA = EXTERNAL_DATA_PATH / "detexify" / "detexify.json"
+DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 CONTRIB_DATA = Path("build/dataset.json")
 USE_CONTRIB = False
 IMG_SIZE = 224  # px
@@ -186,6 +186,20 @@ class MathSymbolSample(msgspec.Struct):
 
 # Helper functions
 def normalize(strokes: Strokes, target_size: int) -> Strokes:
+    """Normalizes the strokes to fit within a target box while preserving aspect ratio.
+
+    The normalization process involves:
+    1. Finding the bounding box of the strokes.
+    2. Centering the strokes.
+    3. Scaling the strokes to fit within the `target_size` with a margin.
+
+    Args:
+        strokes: A list of strokes, where each stroke is a list of (x, y) points.
+        target_size: The size of the output bounding box (square).
+
+    Returns:
+        The normalized strokes.
+    """
     xs = [x for s in strokes for x, _ in s]
     min_x, max_x = min(xs), max(xs)
     ys = [y for s in strokes for _, y in s]
@@ -194,7 +208,7 @@ def normalize(strokes: Strokes, target_size: int) -> Strokes:
     width = max(max_x - min_x, max_y - min_y)
     if width == 0:
         return []
-    width = width * 1.2 + 20  # leave margin to avoid edge cases
+    width = width * 1.1 + 10  # leave margin to avoid edge cases
     zero_x = (max_x + min_x - width) / 2
     zero_y = (max_y + min_y - width) / 2
     scale = target_size / width
@@ -210,7 +224,15 @@ def is_invisible(c: str) -> bool:
 
 @cache
 def get_typst_symbol_info() -> list[TypstSymInfo]:
-    """Parse Typst symbol page to get information."""
+    """Parses the Typst symbol page to extract symbol information.
+
+    Retrieves the HTML content from the Typst documentation (downloading it if
+    necessary) and parses it to find symbol names, characters, and their LaTeX
+    equivalents.
+
+    Returns:
+        A list of `TypstSymInfo` objects containing details for each symbol.
+    """
 
     page_path = Path("external/typ_sym.html")
     if not page_path.exists():
@@ -251,6 +273,16 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
 
 
 def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image:
+    """Draws strokes onto a PIL Image.
+
+    Args:
+        strokes: A list of strokes to draw.
+        size: The width and height of the output image.
+        resize: Whether to normalize the strokes before drawing.
+
+    Returns:
+        A binary PIL Image with the drawn strokes, white strokes on black background
+    """
     if resize:
         strokes = normalize(strokes, size)
     image = Image.new("1", (size, size), "black")
@@ -261,7 +293,17 @@ def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image
 
 
 def get_dataset_info(dataset_name: str) -> DataSetInfo:
-    """Load dataset metadata from the info JSON file."""
+    """Load dataset metadata from the info JSON file.
+
+    Args:
+        dataset_name: The name of the dataset (e.g., "detexify").
+
+    Returns:
+        A `DataSetInfo` object containing the metadata.
+
+    Raises:
+        FileNotFoundError: If the info file does not exist.
+    """
     dataset_path = DATASET_ROOT / dataset_name
     info_path = dataset_path / "dataset_info.json"
 
@@ -274,6 +316,15 @@ def get_dataset_info(dataset_name: str) -> DataSetInfo:
 
 @cache
 def map_tex_typ() -> dict[str, TypstSymInfo]:
+    """Creates a mapping from TeX command names to Typst symbol information.
+
+    Combines mappings from the Typst symbol page (via `get_typst_symbol_info`)
+    and a manual fallback dictionary (`TEX_TO_TYP`).
+
+    Returns:
+        A dictionary where keys are TeX commands (e.g., "\\alpha") and values
+        are `TypstSymInfo` objects.
+    """
     typ_sym_info = get_typst_symbol_info()
     # mapping for symbol name to unicode char
     tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
@@ -289,8 +340,15 @@ def get_xml_parser():
 
 @cache
 def map_sym() -> dict[str, TypstSymInfo]:
-    """Get a mapping from Detexify keys to Typst symbol info."""
-    with (DETEXIFY_DATA / "symbols.json").open("rb") as f:
+    """Get a mapping from Detexify keys to Typst symbol info.
+
+    Reads the Detexify symbol list and maps them to Typst symbols using the
+    TeX command mapping.
+
+    Returns:
+        A dictionary mapping Detexify IDs to Typst symbol info.
+    """
+    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
         tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     tex_to_typ = map_tex_typ()
     return {
@@ -301,6 +359,16 @@ def map_sym() -> dict[str, TypstSymInfo]:
 def parse_inkml_symbol(
     filepath: Path,
 ) -> MathSymbolSample | str | None:
+    """Parses a single InkML file to extract the label and stroke data.
+
+    Args:
+        filepath: Path to the .inkml file.
+
+    Returns:
+        A `MathSymbolSample` if successful.
+        A string (the TeX label) if the label could not be mapped to a Typst symbol.
+        None if no label is found.
+    """
     root = etree.parse(filepath, parser=get_xml_parser()).getroot()
     namespace = {"ink": "http://www.w3.org/2003/InkML"}
     tex_label = root.findtext(".//ink:annotation[@type='label']", namespaces=namespace)
@@ -333,11 +401,19 @@ def parse_inkml_symbol(
 
 
 # Dataset creating functions
-def construct_detexify_df(
-    external_data_path: Path,
-) -> tuple[pl.LazyFrame, set[str] | None]:
+def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
+    """Constructs a Polars LazyFrame for the Detexify dataset.
+
+    Reads the raw JSON data, maps the keys to Typst symbols, filters out
+    unmapped or empty samples, and formats the strokes.
+
+    Returns:
+        A tuple containing:
+            - The processed LazyFrame with 'label' and 'strokes' columns.
+            - A set of unmapped keys (commands that couldn't be mapped to Typst).
+    """
     key_to_typ = map_sym()
-    with external_data_path.open("rb") as f:
+    with (DETEXIFY_DATA_PATH / "detexify.json").open("rb") as f:
         # Schema: list of (key, strokes)
         raw_strokes_t = list[tuple[str, list[list[tuple[float, float, float]]]]]
         data = msgspec.json.decode(f.read(), type=raw_strokes_t)
@@ -387,7 +463,15 @@ def construct_detexify_df(
     return final_lf, unmapped_keys
 
 
-def construct_mathwriting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | None]:
+def construct_mathwriting_df() -> tuple[pl.LazyFrame, set[str] | None]:
+    """Constructs a Polars LazyFrame for the MathWriting dataset.
+
+    Parses InkML files in parallel to extract strokes and labels.
+    Returns:
+        A tuple containing:
+            - The processed LazyFrame with 'label' and 'strokes' columns.
+            - A set of unmapped labels (TeX commands that couldn't be mapped).
+    """
     label_acc = []
     data_acc = []
     unmapped: set[str] = set()
@@ -395,7 +479,7 @@ def construct_mathwriting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | 
     with ProcessPoolExecutor() as executor:
         results = executor.map(
             parse_inkml_symbol,
-            data_path.glob("*.inkml"),
+            MATH_WRITING_DATA_PATH.glob("*.inkml"),
             chunksize=500,
         )
         for result in results:
@@ -452,7 +536,7 @@ def construct_contribute_df() -> pl.LazyFrame:
         # Join Labels
         .join(mapping_lf, on="sym", how="left")
     )
-    final_lf = (
+    return (
         processed_lf.filter(pl.col("label").is_not_null())
         .select(
             [
@@ -466,10 +550,6 @@ def construct_contribute_df() -> pl.LazyFrame:
         .filter(pl.col("strokes").list.len() > 0)
     )
 
-    del data
-
-    return final_lf
-
 
 def create_dataset(
     dataset_name: Literal["mathwriting", "detexify", "contrib"],
@@ -478,13 +558,19 @@ def create_dataset(
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
     batch_size: int = 2000,
 ) -> None:
-    """
-    Orchestrates the creation of a math symbol dataset.
+    """Orchestrates the creation of a math symbol dataset.
 
     1. Loads symbol mappings using the specific project logic.
     2. Dispatches data loading to specific construct_* functions.
     3. Performs a stratified train/test/val split.
     4. Saves data as sharded files (Parquet/Vortex) and writes metadata.
+
+    Args:
+        dataset_name: The name of the dataset to create.
+        file_format: The output file format ("parquet" or "vortex").
+        split_parts: Whether to split the dataset into multiple shards.
+        split_ratio: A tuple defining the ratio for (train, test, val) splits.
+        batch_size: The number of rows per shard.
     """
     print(f"--- Creating Dataset: {dataset_name} ---")
 
@@ -495,10 +581,10 @@ def create_dataset(
     unmapped_symbols: set[str] | None = None
 
     if dataset_name == "mathwriting":
-        lf, unmapped_symbols = construct_mathwriting_df(MATH_WRITING_DATA_PATH)
+        lf, unmapped_symbols = construct_mathwriting_df()
 
     elif dataset_name == "detexify":
-        lf, unmapped_symbols = construct_detexify_df(DETEXIFY_DATA)
+        lf, unmapped_symbols = construct_detexify_df()
 
     elif dataset_name == "contrib":
         # Requires: typ_sym_info list (to map by 'names')
@@ -630,14 +716,10 @@ if __name__ == "__main__":
         with symbols_info_path.open("wb") as f:
             f.write(msgspec.json.encode(typ_sym_info))
 
-    create_dataset(
-        dataset_name="detexify",
-    )
+    create_dataset(dataset_name="detexify")
 
     # Parse MathWrting Dataset sole symboles
-    create_dataset(
-        dataset_name="mathwriting",
-    )
+    create_dataset(dataset_name="mathwriting", split_parts=False)
 
     # Parse contributed data
     # if USE_CONTRIB:
