@@ -639,9 +639,9 @@ def create_dataset(
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
 
     # Cleanup temporary columns
-    train_lf = train_lf.drop(["n", "idx"]).sort("label")
-    test_lf = test_lf.drop(["n", "idx"]).sort("label")
-    val_lf = val_lf.drop(["n", "idx"]).sort("label")
+    train_lf = train_lf.drop(["n", "idx"]).sort("label").collect()
+    test_lf = test_lf.drop(["n", "idx"]).sort("label").collect()
+    val_lf = val_lf.drop(["n", "idx"]).sort("label").collect()
 
     def _write_to_file(df: pl.DataFrame, path: Path):
         if file_format == "vortex":
@@ -651,8 +651,7 @@ def create_dataset(
         else:
             df.write_parquet(path, compression="zstd", compression_level=19)
 
-    def _write_shards(lazy_frame: pl.LazyFrame, output_dir: Path):
-        df = lazy_frame.collect()
+    def _write_shards(df: pl.DataFrame, output_dir: Path):
         total_rows = len(df)
         if total_rows == 0:
             return
@@ -670,15 +669,19 @@ def create_dataset(
             filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
             _write_to_file(chunk, output_dir / filename)
 
-    if split_parts:
-        _write_shards(train_lf, train_path)
-        _write_shards(test_lf, test_path)
-        _write_shards(val_lf, val_path)
-    else:
-        print("  -> Writing single files...")
-        _write_to_file(train_lf.collect(), train_path / f"data.{file_format}")
-        _write_to_file(test_lf.collect(), test_path / f"data.{file_format}")
-        _write_to_file(val_lf.collect(), val_path / f"data.{file_format}")
+            for lf, output_dir in [
+                (train_lf, train_path),
+                (test_lf, test_path),
+                (val_lf, val_path),
+            ]:
+                if split_parts:
+                    _write_shards(lf, output_dir)
+                else:
+                    print(
+                        f"  -> Writing {len(df)} rows to {output_dir.name}... \
+                        as single file."
+                    )
+                    _write_to_file(df, output_dir / f"data.{file_format}")
 
     # ---------------------------------------------------------
     # 5. Metadata Generation
