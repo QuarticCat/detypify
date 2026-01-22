@@ -29,7 +29,7 @@ class SymbolDataset(VisionDataset):
             raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
         self.info = get_dataset_info(dataset_name)
-        self.classes = sorted(self.info.class_count.keys())
+        self.classes = sorted(self.info.count_by_class.keys())
 
         # Create mapping dataframe for joining
         # more efficient than dict replace for large data
@@ -126,7 +126,7 @@ class MathSymbolDataModule(LightningDataModule):
         self.test_dataset: SymbolDataset
 
     def setup(self, stage: str | None = None):
-        num_classes = len(get_dataset_info(self.dataset_name).class_count.keys())
+        num_classes = len(get_dataset_info(self.dataset_name).count_by_class.keys())
 
         # data agumentaion with MixUp and CutMix
         mixup = v2.MixUp(num_classes=num_classes, alpha=0.8)

@@ -26,7 +26,7 @@ if __name__ == "__main__":
     classes: set[str] = set()
     for dataset in datasets:
         data_info = get_dataset_info(dataset)
-        classes.update(data_info.class_count.keys())
+        classes.update(data_info.count_by_class.keys())
 
     # hyper params
     batch_size = 64
