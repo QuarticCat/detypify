@@ -137,9 +137,7 @@ class MathSymbolDataModule(LightningDataModule):
     def prepara_data(self):
         # uncompress data for mathwriting and detexify datasets.
         if self.dataset_name == "mathwriting":
-            unpack_archive(
-                "external/mathwriting.tar.xz", "external/dataset/mathwriting/"
-            )
+            unpack_archive("external/mathwriting.tar.xz", "external/dataset/")
         elif self.dataset_name == "detexify":
             detexify_compressed_file = Path("external/mathwriting.tar.xz")
             with (
