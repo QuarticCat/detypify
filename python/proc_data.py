@@ -14,6 +14,7 @@ import msgspec
 import polars as pl
 from bs4 import BeautifulSoup
 from lxml import etree
+from msgspec import json
 from PIL import Image, ImageDraw
 
 type Point = tuple[float, float]
@@ -23,11 +24,11 @@ type Datasets = Literal["mathwriting", "detexify", "contrib"]
 
 
 # constants
-DATASET_ROOT = Path("build/data")
+DATASET_ROOT = Path("build/dataset")
 EXTERNAL_DATA_PATH = Path("external/dataset")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
-DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
-CONTRIB_DATA_PATH = Path("build/dataset.json")
+DETEXIFY_DATA = EXTERNAL_DATA_PATH / "detexify" / "detexify.json"
+CONTRIB_DATA = Path("build/dataset.json")
 USE_CONTRIB = False
 IMG_SIZE = 224  # px
 
@@ -289,7 +290,7 @@ def get_xml_parser():
 @cache
 def map_sym() -> dict[str, TypstSymInfo]:
     """Get a mapping from Detexify keys to Typst symbol info."""
-    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
+    with (DETEXIFY_DATA / "symbols.json").open("rb") as f:
         tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
     tex_to_typ = map_tex_typ()
     return {
@@ -332,12 +333,10 @@ def parse_inkml_symbol(
 
 
 # Dataset creating functions
-
-
 def construct_detexify_df(
     external_data_path: Path,
 ) -> tuple[pl.LazyFrame, set[str] | None]:
-    key_to_typ = map_tex_typ()
+    key_to_typ = map_sym()
     with external_data_path.open("rb") as f:
         # Schema: list of (key, strokes)
         raw_strokes_t = list[tuple[str, list[list[tuple[float, float, float]]]]]
@@ -345,9 +344,10 @@ def construct_detexify_df(
 
     raw_data_schema = {
         "key": pl.String,
+        # use float32 for mem saving
         "strokes": pl.List(pl.List(pl.Array(pl.Float32, 3))),
     }
-    raw_lf = pl.DataFrame(data, schema=raw_data_schema).lazy()
+    raw_lf = pl.DataFrame(data, schema=raw_data_schema, orient="row").lazy()
     del data
 
     # 2. Prepare Mapping
@@ -355,7 +355,7 @@ def construct_detexify_df(
     mapping_lf = pl.DataFrame(
         {
             "key": list(key_to_typ.keys()),
-            "label": list(key_to_typ.values()),
+            "label": [typ.char for typ in key_to_typ.values()],
         }
     ).lazy()
 
@@ -377,7 +377,7 @@ def construct_detexify_df(
                 pl.col("label"),
                 pl.col("strokes")
                 # Drop time (keep only x, y)
-                .list.eval(pl.element().list.eval(pl.element().list.head(2))),
+                .list.eval(pl.element().list.eval(pl.element().arr.head(2))),
             ]
         )
         # 3. Drop empty samples
@@ -387,7 +387,7 @@ def construct_detexify_df(
     return final_lf, unmapped_keys
 
 
-def construct_mathwrting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | None]:
+def construct_mathwriting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | None]:
     label_acc = []
     data_acc = []
     unmapped: set[str] = set()
@@ -422,9 +422,10 @@ def construct_mathwrting_df(data_path: Path) -> tuple[pl.LazyFrame, set[str] | N
     return final_lf, unmapped
 
 
-def construct_contribute_df(path: Path) -> pl.LazyFrame:
+# WIP
+def construct_contribute_df() -> pl.LazyFrame:
     # 1. Load Data
-    with path.open("rb") as f:
+    with CONTRIB_DATA.open("rb") as f:
         # Schema: list of dicts {sym: str, strokes: json_string}
         data = msgspec.json.decode(f.read(), type=list[dict[str, str]])
 
@@ -458,7 +459,7 @@ def construct_contribute_df(path: Path) -> pl.LazyFrame:
                 pl.col("label"),
                 pl.col("strokes")
                 # Drop time (keep only x, y)
-                .list.eval(pl.element().list.eval(pl.element().list.head(2))),
+                .list.eval(pl.element().list.eval(pl.element().arr.head(2))),
             ]
         )
         # 3. Drop empty samples
@@ -494,18 +495,14 @@ def create_dataset(
     unmapped_symbols: set[str] | None = None
 
     if dataset_name == "mathwriting":
-        # Requires: tex_to_typ mapping
-        lf, unmapped_symbols = construct_mathwrting_df(MATH_WRITING_DATA_PATH)
+        lf, unmapped_symbols = construct_mathwriting_df(MATH_WRITING_DATA_PATH)
 
     elif dataset_name == "detexify":
-        # Requires: key_to_typ mapping
-        detexify_path = DETEXIFY_DATA_PATH / "detexify.json"
-        lf, unmapped_symbols = construct_detexify_df(detexify_path)
+        lf, unmapped_symbols = construct_detexify_df(DETEXIFY_DATA)
 
     elif dataset_name == "contrib":
         # Requires: typ_sym_info list (to map by 'names')
-        contrib_path = CONTRIB_DATA_PATH / "contribute.json"
-        lf = construct_contribute_df(contrib_path)
+        lf = construct_contribute_df()
 
     else:
         raise ValueError(f"Unknown dataset name: {dataset_name}")
@@ -534,7 +531,6 @@ def create_dataset(
     print("  -> Shuffling and splitting data...")
 
     # Add Stratified Indices
-    # We collect() once to shuffle efficiently in memory, then go back to lazy.
     # Casting label to Utf8 ensures consistency across datasets.
     base_lf = (
         lf.with_columns(pl.col("label").cast(pl.Utf8))
@@ -561,9 +557,6 @@ def create_dataset(
     test_lf = test_lf.drop(["n", "idx"]).sort("label")
     val_lf = val_lf.drop(["n", "idx"]).sort("label")
 
-    # ---------------------------------------------------------
-    # 4. Writing Logic
-    # ---------------------------------------------------------
     def _write_to_file(df: pl.DataFrame, path: Path):
         if file_format == "vortex":
             import vortex as vx
@@ -620,7 +613,7 @@ def create_dataset(
     )
 
     with (dataset_path / "dataset_info.json").open("wb") as f:
-        f.write(msgspec.json.encode(dataset_info))
+        f.write(json.format(json.encode(dataset_info)))
 
     print(f"--- Done. Dataset saved to {dataset_path} ---")
 
@@ -630,8 +623,6 @@ if __name__ == "__main__":
 
     # Get symbol info.
     typ_sym_info = get_typst_symbol_info()
-    key_to_typ = map_sym()
-
     name_to_chr = {x.names[0]: x.char for x in typ_sym_info}
 
     symbols_info_path = DATASET_ROOT / "symbols.json"
@@ -639,21 +630,19 @@ if __name__ == "__main__":
         with symbols_info_path.open("wb") as f:
             f.write(msgspec.json.encode(typ_sym_info))
 
-    # create_dataset(
-    #     parse_func=partial(parse_detexify_symbol, key_to_typ),
-    #     data=detexify_raw_data,
-    #     dataset_name="detexify",
-    # )
+    create_dataset(
+        dataset_name="detexify",
+    )
 
-    # # Parse MathWrting Dataset sole symboles
+    # Parse MathWrting Dataset sole symboles
     create_dataset(
         dataset_name="mathwriting",
     )
 
-    # # Parse contributed data
-    if USE_CONTRIB:
-        with CONTRIB_DATA_PATH.open("rb") as f:
-            samples = msgspec.json.decode(f.read())[0]["results"]
-            create_dataset(
-                dataset_name="contrib",
-            )
+    # Parse contributed data
+    # if USE_CONTRIB:
+    #     with CONTRIB_DATA.open("rb") as f:
+    #         samples = msgspec.json.decode(f.read())[0]["results"]
+    #         create_dataset(
+    #             dataset_name="contrib",
+    #         )
