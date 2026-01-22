@@ -24,21 +24,12 @@ dependencies = [
   "vortex-data>=0.58.0",
 ]
 
-[project.optional-dependencies]
-# use gpu can be enabled only on linux with nvidia graphics (experiemental)
-# may accelerate processing data
-# use with env var POLARS_ENGINE_AFFINITY="gpu"
-polars-gpu = [
-    "polars[gpu]; sys_platform == 'linux'"
-]
-
 [dependency-groups]
 dev = [
-  "ipykernel>=7.1.0",
-  "ipython>=9.9.0",
+  "ipykernel",
   "lxml-stubs>=0.5.1",
   "pyrefly",
-  "ruff>=0.14.13",
+  "ruff",
   "tensorboard>=2.20.0",
   "tensorboardx>=2.6.4",
   "torch-tb-profiler>=0.4.3",
