@@ -166,7 +166,7 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
 class DataSetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     name: str
     total_count: int
-    class_count: dict[str, int]
+    count_by_class: dict[str, int]
     unmapped: set[str] | None = None
 
 
@@ -697,7 +697,7 @@ def create_dataset(
     dataset_info = DataSetInfo(
         name=dataset_name,
         total_count=total_count,
-        class_count=class_counters,
+        count_by_class=class_counters,
         unmapped=unmapped_symbols if unmapped_symbols else None,
     )
 
