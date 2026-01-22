@@ -12,7 +12,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from model import MobileNetV4, TypstSymbolClassifier
 from proc_data import (
     DATASET_ROOT,
-    DETEXIFY_DATA_PATH,
+    DETEXIFY_DATA,
     IMG_SIZE,
     TypstSymInfo,
     get_dataset_info,
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         )
 
     # Generate JSON for the infer page.
-    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
+    with (DETEXIFY_DATA / "symbols.json").open("rb") as f:
         sym_info = msgspec.json.decode(f.read(), type=list[TypstSymInfo])
     chr_to_sym = {s.char: s for s in sym_info}
     infer = []

@@ -5,11 +5,10 @@ node_modules/
 .wrangler/
 
 build/
-train/
 dist/
 /*.zsh
 /*.zip
+/*.tar.zst
 
 # Ref: https://github.com/astral-sh/uv/issues/6349
 uv.lock
-.zed
