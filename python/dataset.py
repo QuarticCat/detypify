@@ -100,7 +100,6 @@ class MathSymbolDataModule(LightningDataModule):
         # --- 2. Build Transforms ---
         # Common steps for all splits
         base_transforms = [
-            v2.Grayscale(num_output_channels=1),
             v2.ToImage(),
             v2.ToDtype(torch.float16, scale=True),
         ]
