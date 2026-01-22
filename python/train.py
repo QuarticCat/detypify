@@ -14,6 +14,7 @@ from proc_data import (
     DATASET_ROOT,
     DETEXIFY_DATA_PATH,
     IMG_SIZE,
+    DataSetName,
     TypstSymInfo,
     get_dataset_info,
 )
@@ -22,7 +23,11 @@ TRAIN_OUT_DIR = Path("build/train")
 
 
 if __name__ == "__main__":
-    datasets = ["mathwriting", "detexify"]
+    datasets: list[DataSetName] = [
+        "mathwriting",
+        "detexify",
+        # "contrib"
+    ]
     classes: set[str] = set()
     for dataset in datasets:
         data_info = get_dataset_info(dataset)
