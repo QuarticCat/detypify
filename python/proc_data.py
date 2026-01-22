@@ -7,7 +7,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import cache
 from pathlib import Path
 from shutil import rmtree as rmdir
-from typing import Literal
+from typing import Literal, cast
 from urllib.request import urlretrieve
 
 import msgspec
@@ -211,7 +211,7 @@ def is_invisible(c: str) -> bool:
 def get_typst_symbol_info() -> list[TypstSymInfo]:
     """Parse Typst symbol page to get information."""
 
-    page_path = Path("/tmp/typ_sym.html")
+    page_path = Path("external/typ_sym.html")
     if not page_path.exists():
         urlretrieve("https://typst.app/docs/reference/symbols/sym/", page_path)
     with page_path.open() as f:
@@ -235,22 +235,15 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
                 li.get("data-alternates", ""),
             )
 
-            # cursed type guards
-            assert isinstance(name, str)
-            assert isinstance(latex_name, str | None)
-            assert isinstance(math_shorthand, str | None)
-            assert isinstance(markup_shorthand, str | None)
-            assert isinstance(alternates, str)
-
             # New symbols. Add to map.
             sym_info[char] = TypstSymInfo(
                 char=char,
-                names=[name],
-                latex_name=latex_name,
-                markup_shorthand=markup_shorthand,
-                math_shorthand=math_shorthand,
+                names=[cast("str", name)],
+                latex_name=cast("str | None", latex_name),
+                markup_shorthand=cast("str | None", markup_shorthand),
+                math_shorthand=cast("str | None", math_shorthand),
                 accent=li.get("accent") == "true",
-                alternates=alternates.split(),
+                alternates=cast("str", alternates).split(),
             )
 
     return list(sym_info.values())

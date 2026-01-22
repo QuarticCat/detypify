@@ -59,6 +59,7 @@ extend-select = [
     "E",        # PyCodeStyle errors
     "I",        # Sort imports properly
     "N",        # Naming conventions
+    "S",        # Security
     "UP",       # Warn if certain things can changed due to newer Python versions
     "C4",       # Catch incorrect use of comprehensions, dict, list, etc
     "FA",       # Enforce from __future__ import annotations
