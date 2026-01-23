@@ -1,7 +1,5 @@
-import lzma
 from os import process_cpu_count
 from pathlib import Path
-from shutil import copyfileobj, unpack_archive
 from typing import Literal
 
 import polars as pl
@@ -11,7 +9,6 @@ from proc_data import (
     DATASET_ROOT,
     IMG_SIZE,
     DataSetName,
-    create_dataset,
     draw_to_img,
     get_dataset_info,
 )
@@ -134,20 +131,20 @@ class MathSymbolDataModule(LightningDataModule):
         self.val_dataset: SymbolDataset
         self.test_dataset: SymbolDataset
 
-    def prepara_data(self):
-        # uncompress data for mathwriting and detexify datasets.
-        if self.dataset_name == "mathwriting":
-            unpack_archive("external/mathwriting.tar.xz", "external/dataset/")
-        elif self.dataset_name == "detexify":
-            detexify_compressed_file = Path("external/mathwriting.tar.xz")
-            with (
-                lzma.open(detexify_compressed_file, "rb") as f_in,
-                Path(detexify_compressed_file.stem).open("wb") as f_out,
-            ):
-                copyfileobj(f_in, f_out)
+    # def prepara_data(self):
+    #     # uncompress data for mathwriting and detexify datasets.
+    #     if self.dataset_name == "mathwriting":
+    #         unpack_archive("external/mathwriting.tar.xz", "external/dataset/")
+    #     elif self.dataset_name == "detexify":
+    #         detexify_compressed_file = Path("external/mathwriting.tar.xz")
+    #         with (
+    #             lzma.open(detexify_compressed_file, "rb") as f_in,
+    #             Path(detexify_compressed_file.stem).open("wb") as f_out,
+    #         ):
+    #             copyfileobj(f_in, f_out)
 
-        # create dataset
-        create_dataset(dataset_name=self.dataset_name)
+    #     # create dataset
+    #     create_dataset(dataset_name=self.dataset_name)
 
     def setup(self, stage: str | None = None):
         num_classes = len(get_dataset_info(self.dataset_name).count_by_class.keys())
