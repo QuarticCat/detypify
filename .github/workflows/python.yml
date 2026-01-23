@@ -3,9 +3,14 @@ name: Python
 on:
   push:
     branches: [main, "*dev"]
+    paths:
+      - "python/**"
+
   pull_request:
     branches: [main, "*dev"]
     types: [opened, synchronize]
+    paths:
+      - "python/**"
   workflow_dispatch:
 
 jobs:
