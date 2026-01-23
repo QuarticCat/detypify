@@ -31,125 +31,7 @@ DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 CONTRIB_DATA = Path("build/dataset.json")
 USE_CONTRIB = False
 IMG_SIZE = 224  # px
-
-# Missing mappings in the Typst symbol page.
-TEX_TO_TYP = {
-    # Double Struck Capital Letters
-    "\\mathds{A}": "AA",
-    "\\mathds{B}": "BB",
-    "\\mathds{C}": "CC",
-    "\\mathds{D}": "DD",
-    "\\mathds{E}": "EE",
-    "\\mathds{F}": "FF",
-    "\\mathds{G}": "GG",
-    "\\mathds{H}": "HH",
-    "\\mathds{I}": "II",
-    "\\mathds{J}": "JJ",
-    "\\mathds{K}": "KK",
-    "\\mathds{L}": "LL",
-    "\\mathds{M}": "MM",
-    "\\mathds{N}": "NN",
-    "\\mathds{O}": "OO",
-    "\\mathds{P}": "PP",
-    "\\mathds{Q}": "QQ",
-    "\\mathds{R}": "RR",
-    "\\mathds{S}": "SS",
-    "\\mathds{T}": "TT",
-    "\\mathds{U}": "UU",
-    "\\mathds{V}": "VV",
-    "\\mathds{W}": "WW",
-    "\\mathds{X}": "XX",
-    "\\mathds{Y}": "YY",
-    "\\mathds{Z}": "ZZ",
-    # Greek Capital Letters
-    "\\Alpha": "Alpha",
-    "\\Beta": "Beta",
-    "\\Gamma": "Gamma",
-    "\\Delta": "Delta",
-    "\\Epsilon": "Epsilon",
-    "\\Zeta": "Zeta",
-    "\\Eta": "Eta",
-    "\\Theta": "Theta",  # TODO: no Theta.alt
-    "\\Iota": "Iota",
-    "\\Kappa": "Kappa",
-    "\\Lambda": "Lambda",
-    "\\Mu": "Mu",
-    "\\Nu": "Nu",
-    "\\Xi": "Xi",
-    "\\Omicron": "Omicron",
-    "\\Pi": "Pi",
-    "\\Rho": "Rho",
-    "\\Sigma": "Sigma",
-    "\\Tau": "Tau",
-    "\\Upsilon": "Upsilon",
-    "\\Phi": "Phi",
-    "\\Chi": "Chi",
-    "\\Psi": "Psi",
-    "\\Omega": "Omega",
-    # Greek Small Letters
-    "\\alpha": "alpha",
-    "\\beta": "beta",
-    "\\gamma": "gamma",
-    "\\delta": "delta",
-    "\\varepsilon": "epsilon",
-    "\\epsilon": "epsilon.alt",
-    "\\zeta": "zeta",
-    "\\eta": "eta",
-    "\\theta": "theta",
-    "\\vartheta": "theta.alt",
-    "\\iota": "iota",
-    "\\kappa": "kappa",
-    "\\varkappa": "kappa.alt",
-    "\\lambda": "lambda",
-    "\\mu": "mu",
-    "\\nu": "nu",
-    "\\xi": "xi",
-    "\\omicron": "omicron",
-    "\\pi": "pi",
-    "\\varpi": "pi.alt",
-    "\\rho": "rho",
-    "\\varrho": "rho.alt",
-    "\\sigma": "sigma",
-    "\\varsigma": "sigma.alt",
-    "\\tau": "tau",
-    "\\upsilon": "upsilon",
-    "\\varphi": "phi",
-    "\\phi": "phi.alt",
-    "\\chi": "chi",
-    "\\psi": "psi",
-    "\\omega": "omega",
-    # Hebrew Letters
-    "\\aleph": "aleph",  # TODO: no beth, daleth, gimel
-    # Others
-    "\\&": "amp",
-    "\\#": "hash",
-    "\\%": "percent",
-    "\\{": "brace.l",
-    "\\}": "brace.r",
-    "\\--": "dash.en",
-    "\\---": "dash.em",
-    "\\colon": "colon",
-    "\\degree": "degree",
-    "\\copyright": "copyright",
-    "\\textcircledP": "copyright.sound",
-    "\\textreferencemark": "refmark",
-    "\\textperthousand": "permille",
-    "\\simeq": "tilde.eq",
-    "\\circlearrowleft": "arrow.ccw",
-    "\\circlearrowright": "arrow.cw",
-    "\\dashleftarrow": "arrow.l.dashed",
-    "\\dashrightarrow": "arrow.r.dashed",
-    "\\lightning": "arrow.zigzag",
-    "\\circ": "compose",
-    "\\bowtie": "join",
-    "\\MVAt": "at",
-    "\\EUR": "euro",
-    "\\blacksquare": "qed",
-    "\\emptyset": "emptyset",
-    "\\|": "bar.v.double",
-    "\\iff": "arrow.l.r.double.long",
-    "\\bullet": "bullet.op",
-}
+TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
 
 
 # Structs
@@ -329,7 +211,11 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
     # mapping for symbol name to unicode char
     tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
-    tex_to_typ |= {k: name_to_typ[v] for k, v in TEX_TO_TYP.items()}
+
+    with TEX_TO_TYP_PATH.open("rb") as f:
+        manual_mapping = msgspec.json.decode(f.read(), type=dict[str, str])
+
+    tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
     return tex_to_typ
 
 
@@ -374,14 +260,13 @@ def parse_inkml_symbol(
     tex_label = root.findtext(".//ink:annotation[@type='label']", namespaces=namespace)
     if not tex_label:
         return None
-    if isinstance(tex_label, str):
-        tex_to_typ = map_tex_typ()
-        typ = tex_to_typ.get(tex_label)
-        if typ is not None:
-            label = typ.char
-        # missing mapping, return current label
-        else:
-            return tex_label
+    tex_to_typ = map_tex_typ()
+    typ = tex_to_typ.get(tex_label)
+    if typ is not None:
+        label = typ.char
+    # missing mapping, return current label
+    else:
+        return tex_label
     return MathSymbolSample(
         label,
         [
