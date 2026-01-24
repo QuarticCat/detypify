@@ -1,4 +1,4 @@
-"""Preprocess training datasets."""
+"""Preprocess training datasets, helping functions and related constants/types."""
 
 import math
 import re
@@ -14,7 +14,7 @@ from urllib.request import urlretrieve
 import msgspec
 import polars as pl
 from bs4 import BeautifulSoup
-from datasets import Dataset
+from datasets import Dataset, DatasetInfo
 from lxml import etree
 from msgspec import json
 from PIL import Image, ImageDraw
@@ -23,16 +23,21 @@ type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
 type DataSetName = Literal["mathwriting", "detexify", "contrib"]
+type SplitName = Literal["train", "test", "val"]
 
 
-# constants
+# Constants
+# Data
 DATASET_ROOT = Path("build/dataset")
-EXTERNAL_DATA_PATH = Path("external/dataset")
+EXTERNAL_DATA_PATH = Path("build/raw_data")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
-CONTRIB_DATA = Path("build/dataset.json")
 USE_CONTRIB = False
+CONTRIB_DATA = Path("build/dataset.json")
+# Processing
+UPLOAD = True
 IMG_SIZE = 224  # px
+# Extra latex to typst mapping.
 TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
 
 
@@ -118,7 +123,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
         A list of `TypstSymInfo` objects containing details for each symbol.
     """
 
-    page_path = Path("external/typ_sym.html")
+    page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
     if not page_path.exists():
         urlretrieve("https://typst.app/docs/reference/symbols/sym/", page_path)
     with page_path.open() as f:
@@ -443,10 +448,9 @@ def construct_contribute_df() -> pl.LazyFrame:
 
 def create_dataset(
     dataset_name: DataSetName,
-    file_format: Literal["vortex", "parquet"] = "parquet",
-    split_parts: bool = True,
+    upload: bool = False,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
-    batch_size: int = 2000,
+    **kwargs,
 ) -> None:
     """Orchestrates the creation of a math symbol dataset.
 
@@ -457,11 +461,14 @@ def create_dataset(
 
     Args:
         dataset_name: The name of the dataset to create.
-        file_format: The output file format ("parquet" or "vortex").
-        split_parts: Whether to split the dataset into multiple shards.
         split_ratio: A tuple defining the ratio for (train, test, val) splits.
-        batch_size: The number of rows per shard.
+        upload: whether or not uploading dataset to hugggingface.
+        kwargs: valid only when not uploading.
+            split_parts: Whether to split the dataset into multiple shards.
+            batch_size: The number of rows per shard.
+            file_format: The output file format ("parquet" or "vortex").
     """
+
     print(f"--- Creating Dataset: {dataset_name} ---")
 
     # ---------------------------------------------------------
@@ -487,17 +494,12 @@ def create_dataset(
     # 3. Preparation & Splitting Logic
     # ---------------------------------------------------------
     dataset_path = DATASET_ROOT / dataset_name
+    split_names: list[SplitName] = ["train", "test", "val"]
 
     # Clean/Create Directories
     if dataset_path.exists():
         rmdir(dataset_path)
     dataset_path.mkdir(parents=True, exist_ok=True)
-
-    train_path = dataset_path / "train"
-    test_path = dataset_path / "test"
-    val_path = dataset_path / "val"
-    for p in [train_path, test_path, val_path]:
-        p.mkdir(exist_ok=True)
 
     # Calculate Split Thresholds
     train_r, test_r, _ = split_ratio
@@ -533,71 +535,81 @@ def create_dataset(
     test_lf = test_lf.drop(["n", "idx"]).sort("label").collect()
     val_lf = val_lf.drop(["n", "idx"]).sort("label").collect()
 
-    def _upload_to_huggingface(
-        dataset_name: DataSetName,
-        split: Literal["train", "test", "val"],
-        data_frame: pl.DataFrame,
-        repo_name: str = "Cloud0310/detypify-datasets",
-    ):
-        match dataset_name:
-            case "detexify":
-                description = "Detexify Dataset mapped for typst"
-                homepage = "https://github.com/kirel/detexify-data"
-            case "mathwriting":
-                description = "Mathwriting Dataset mapped for typst"
-                homepage = "https://github.com/google-research/google-research/blob/master/mathwriting"
-            case "contrib":
-                description = "Contributed data from detypify users"
-                homepage = "https://huggingface.co/datasets/Cloud0310/detypify-datasets"
+    if upload:
 
-        dataset = Dataset.from_polars(data_frame)
-        dataset.push_to_hub(
-            repo_id=repo_name,
-            config_name=dataset_name,
-            split=split,
-            num_proc=process_cpu_count(),
-        )
+        def _upload_to_huggingface(
+            dataset_name: DataSetName,
+            split: SplitName,
+            data_frame: pl.DataFrame,
+            repo_name: str = "Cloud0310/detypify-datasets",
+        ):
+            match dataset_name:
+                case "detexify":
+                    description = "Detexify Dataset mapped for typst"
+                    homepage = "https://github.com/kirel/detexify-data"
+                case "mathwriting":
+                    description = "Mathwriting Dataset mapped for typst"
+                    homepage = "https://github.com/google-research/google-research/blob/master/mathwriting"
+                case "contrib":
+                    description = "Contributed data from detypify users"
+                    homepage = (
+                        "https://huggingface.co/datasets/Cloud0310/detypify-datasets"
+                    )
 
-    def _write_to_file(df: pl.DataFrame, path: Path):
-        if file_format == "vortex":
-            import vortex as vx
+            dataset_info = DatasetInfo(description=description, homepage=homepage)
 
-            vx.io.write(vx.compress(vx.array(df.to_arrow())), str(path))
-        else:
-            df.write_parquet(path, compression="zstd", compression_level=19)
-
-    def _write_shards(df: pl.DataFrame, output_dir: Path):
-        total_rows = len(df)
-        if total_rows == 0:
-            return
-
-        num_shards = math.ceil(total_rows / batch_size)
-        pad_width = len(str(num_shards))
-
-        print(
-            f"  -> Writing {total_rows} rows to \
-            {output_dir.name} ({num_shards} shards)..."
-        )
-
-        for i, start_idx in enumerate(range(0, total_rows, batch_size)):
-            chunk = df.slice(start_idx, batch_size)
-            filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
-            _write_to_file(chunk, output_dir / filename)
-
-    for df, output_dir in [
-        (train_lf, train_path),
-        (test_lf, test_path),
-        (val_lf, val_path),
-    ]:
-        if split_parts:
-            _write_shards(df, output_dir)
-        else:
-            print(
-                f"  -> Writing {len(df)} rows to {output_dir.name}... \
-                as single file."
+            dataset = Dataset.from_polars(data_frame, info=dataset_info)
+            dataset.push_to_hub(
+                repo_id=repo_name,
+                config_name=dataset_name,
+                split=split,
+                num_proc=process_cpu_count(),
             )
-            _write_to_file(df, output_dir / f"data.{file_format}")
 
+        for df, split in zip([train_lf, test_lf, val_lf], split_names):
+            print(f"  -> Uploading {dataset_name} split: {split}... to huggingface.")
+            _upload_to_huggingface(dataset_name, split, df)
+    else:
+        split_parts: bool = kwargs.get("split_parts", False)
+        batch_size: int = kwargs.get("batch_size", 2000)
+        file_format: Literal["vortex", "parquet"] = kwargs.get("file_format", "parquet")
+
+        def _write_to_file(df: pl.DataFrame, path: Path):
+            if file_format == "vortex":
+                import vortex as vx
+
+                vx.io.write(vx.compress(vx.array(df.to_arrow())), str(path))
+            else:
+                df.write_parquet(path, compression="zstd", compression_level=19)
+
+        def _write_shards(df: pl.DataFrame, output_dir: Path):
+            total_rows = len(df)
+            if total_rows == 0:
+                return
+
+            num_shards = math.ceil(total_rows / batch_size)
+            pad_width = len(str(num_shards))
+
+            print(
+                f"  -> Writing {total_rows} rows to"
+                f"{output_dir.name} ({num_shards} shards)."
+            )
+
+            for i, start_idx in enumerate(range(0, total_rows, batch_size)):
+                chunk = df.slice(start_idx, batch_size)
+                filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
+                _write_to_file(chunk, output_dir / filename)
+
+        for df, split in zip([train_lf, test_lf, val_lf], split_names):
+            output_dir = dataset_path / split
+            output_dir.mkdir(exist_ok=True)
+            if split_parts:
+                _write_shards(df, output_dir)
+            else:
+                print(
+                    f"  -> Writing {len(df)} rows to{output_dir.name} as single file."
+                )
+                _write_to_file(df, output_dir / f"data.{file_format}")
     # ---------------------------------------------------------
     # 5. Metadata Generation
     # ---------------------------------------------------------
@@ -634,14 +646,17 @@ if __name__ == "__main__":
         with symbols_info_path.open("wb") as f:
             f.write(msgspec.json.encode(typ_sym_info))
 
-    create_dataset(dataset_name="detexify")
+    # Use streaming engine as default for less mem and speed
+    pl.Config.set_engine_affinity("streaming")
 
-    create_dataset(dataset_name="mathwriting")
+    create_dataset(dataset_name="detexify", upload=UPLOAD)
 
-    # Parse contributed data
-    # if USE_CONTRIB:
-    #     with CONTRIB_DATA.open("rb") as f:
-    #         samples = msgspec.json.decode(f.read())[0]["results"]
-    #         create_dataset(
-    #             dataset_name="contrib",
-    #         )
+    create_dataset(dataset_name="mathwriting", upload=UPLOAD)
+
+    # Parse contributed data, WIP @QuaticCat
+    if USE_CONTRIB:
+        with CONTRIB_DATA.open("rb") as f:
+            samples = msgspec.json.decode(f.read())[0]["results"]
+            create_dataset(
+                dataset_name="contrib",
+            )
