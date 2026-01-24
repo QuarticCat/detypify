@@ -3,9 +3,10 @@
 import shutil
 from pathlib import Path
 
+import cv2
 import msgspec
 from PIL import Image, ImageDraw, ImageFont
-from proc_data import IMG_SIZE, draw_to_img, get_typst_symbol_info
+from proc_data import IMG_SIZE, get_typst_symbol_info, rasterize_strokes
 
 OUT_DIR = Path("build/contrib")
 REF_SIZE = 100  # px
@@ -32,8 +33,8 @@ if __name__ == "__main__":
     name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
-        img = draw_to_img(msgspec.json.decode(strokes), IMG_SIZE)
-        img.save(f"{OUT_DIR}/{sym}-{id_}-{token}.png")
+        img = rasterize_strokes(msgspec.json.decode(strokes), IMG_SIZE)
+        cv2.imwrite(f"{OUT_DIR}/{sym}-{id_}-{token}.png", img)
 
         if not Path(f"{OUT_DIR}/{sym}-0-0.png").exists():
             text = name_to_chr[sym]
