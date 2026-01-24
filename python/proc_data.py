@@ -11,13 +11,14 @@ from shutil import rmtree as rmdir
 from typing import Literal, cast
 from urllib.request import urlretrieve
 
+import cv2
 import msgspec
+import numpy as np
 import polars as pl
 from bs4 import BeautifulSoup
 from datasets import Dataset, DatasetInfo
 from lxml import etree
 from msgspec import json
-from PIL import Image, ImageDraw
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -34,8 +35,9 @@ MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 USE_CONTRIB = False
 CONTRIB_DATA = Path("build/dataset.json")
-# Processing
+DATASET_REPO = "Cloud0310/detypify-datasets"
 UPLOAD = True
+# Processing
 IMG_SIZE = 224  # px
 # Extra latex to typst mapping.
 TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
@@ -74,37 +76,6 @@ class MathSymbolSample(msgspec.Struct):
 
 
 # Helper functions
-def normalize(strokes: Strokes, target_size: int) -> Strokes:
-    """Normalizes the strokes to fit within a target box while preserving aspect ratio.
-
-    The normalization process involves:
-    1. Finding the bounding box of the strokes.
-    2. Centering the strokes.
-    3. Scaling the strokes to fit within the `target_size` with a margin.
-
-    Args:
-        strokes: A list of strokes, where each stroke is a list of (x, y) points.
-        target_size: The size of the output bounding box (square).
-
-    Returns:
-        The normalized strokes.
-    """
-    xs = [x for s in strokes for x, _ in s]
-    min_x, max_x = min(xs), max(xs)
-    ys = [y for s in strokes for _, y in s]
-    min_y, max_y = min(ys), max(ys)
-
-    width = max(max_x - min_x, max_y - min_y)
-    if width == 0:
-        return []
-    width = width * 1.1 + 10  # leave margin to avoid edge cases
-    zero_x = (max_x + min_x - width) / 2
-    zero_y = (max_y + min_y - width) / 2
-    scale = target_size / width
-
-    return [
-        [((x - zero_x) * scale, (y - zero_y) * scale) for x, y in s] for s in strokes
-    ]
 
 
 def is_invisible(c: str) -> bool:
@@ -161,24 +132,64 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     return list(sym_info.values())
 
 
-def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image:
-    """Draws strokes onto a PIL Image.
+def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarray:
+    """
+    Normalizes vector strokes and rasterizes them into a binary NumPy array.
 
     Args:
-        strokes: A list of strokes to draw.
-        size: The width and height of the output image.
-        resize: Whether to normalize the strokes before drawing.
+        strokes: List of strokes, where each stroke is a list of (x, y) coordinates.
+        output_size: The width and height of the output square grid.
 
     Returns:
-        A binary PIL Image with the drawn strokes, white strokes on black background
+        np.ndarray: A (size, size) uint8 array.
+                    Background is 0 (black), Strokes are 255 (white).
     """
-    if resize:
-        strokes = normalize(strokes, size)
-    image = Image.new("1", (size, size), "black")
-    draw = ImageDraw.Draw(image)
-    for stroke in strokes:
-        draw.line(stroke, fill="white")
-    return image
+    # 1. Handle empty input
+    if not strokes:
+        return np.zeros((output_size, output_size), dtype=np.uint8)
+
+    # 2. Batch Conversion: List of Lists -> List of Arrays
+    # Filter out empty strokes immediately
+    stroke_arrays = [np.array(s, dtype=np.float32) for s in strokes if s]
+
+    if not stroke_arrays:
+        return np.zeros((output_size, output_size), dtype=np.uint8)
+
+    # Stack for vectorized calculation
+    all_points = np.vstack(stroke_arrays)
+
+    # 3. Vectorized Normalization
+    min_x, min_y = all_points.min(axis=0)
+    max_x, max_y = all_points.max(axis=0)
+
+    width = max(max_x - min_x, max_y - min_y)
+    if width == 0:
+        return np.zeros((output_size, output_size), dtype=np.uint8)
+
+    # Logic: 1.1 scale (10% pad) + 10px safety margin
+    padded_width = width * 1.1 + 10
+    scale = output_size / padded_width
+
+    zero_x = (max_x + min_x - padded_width) / 2
+    zero_y = (max_y + min_y - padded_width) / 2
+
+    # In-place transformation of the big array
+    all_points -= [zero_x, zero_y]
+    all_points *= scale
+
+    # 4. Rendering
+    # Split the big array back into a list of arrays for cv2.polylines
+    lengths = [len(a) for a in stroke_arrays]
+    split_indices = np.cumsum(lengths)[:-1]
+    normalized_strokes = np.split(all_points.astype(np.int32), split_indices)
+
+    # Create the canvas
+    canvas = np.zeros((output_size, output_size), dtype=np.uint8)
+
+    # Draw white (255) on black (0)
+    cv2.polylines(canvas, normalized_strokes, isClosed=False, color=255, thickness=1)
+
+    return canvas
 
 
 def get_dataset_info(dataset_name: str) -> MathWritingDatasetInfo:
@@ -541,7 +552,6 @@ def create_dataset(
             dataset_name: DataSetName,
             split: SplitName,
             data_frame: pl.DataFrame,
-            repo_name: str = "Cloud0310/detypify-datasets",
         ):
             match dataset_name:
                 case "detexify":
@@ -560,10 +570,10 @@ def create_dataset(
 
             dataset = Dataset.from_polars(data_frame, info=dataset_info)
             dataset.push_to_hub(
-                repo_id=repo_name,
+                repo_id=DATASET_REPO,
                 config_name=dataset_name,
                 split=split,
-                num_proc=process_cpu_count(),
+                num_proc=process_cpu_count() if process_cpu_count() else 1,
             )
 
         for df, split in zip([train_lf, test_lf, val_lf], split_names):
