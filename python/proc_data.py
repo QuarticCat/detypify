@@ -5,6 +5,7 @@ import re
 import unicodedata
 from concurrent.futures import ProcessPoolExecutor
 from functools import cache
+from os import process_cpu_count
 from pathlib import Path
 from shutil import rmtree as rmdir
 from typing import Literal, cast
@@ -13,6 +14,7 @@ from urllib.request import urlretrieve
 import msgspec
 import polars as pl
 from bs4 import BeautifulSoup
+from datasets import Dataset
 from lxml import etree
 from msgspec import json
 from PIL import Image, ImageDraw
@@ -45,7 +47,7 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     alternates: list[str] | None = None
 
 
-class DataSetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+class MathWritingDatasetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     name: str
     total_count: int
     count_by_class: dict[str, int]
@@ -174,7 +176,7 @@ def draw_to_img(strokes: Strokes, size: int, resize: bool = True) -> Image.Image
     return image
 
 
-def get_dataset_info(dataset_name: str) -> DataSetInfo:
+def get_dataset_info(dataset_name: str) -> MathWritingDatasetInfo:
     """Load dataset metadata from the info JSON file.
 
     Args:
@@ -193,7 +195,7 @@ def get_dataset_info(dataset_name: str) -> DataSetInfo:
         raise FileNotFoundError(f"Could not find dataset info at {info_path}")
 
     with info_path.open("rb") as f:
-        return msgspec.json.decode(f.read(), type=DataSetInfo)
+        return msgspec.json.decode(f.read(), type=MathWritingDatasetInfo)
 
 
 @cache
@@ -255,34 +257,37 @@ def parse_inkml_symbol(
         A string (the TeX label) if the label could not be mapped to a Typst symbol.
         None if no label is found.
     """
+    # parsing
     root = etree.parse(filepath, parser=get_xml_parser()).getroot()
     namespace = {"ink": "http://www.w3.org/2003/InkML"}
     tex_label = root.findtext(".//ink:annotation[@type='label']", namespaces=namespace)
+
+    # couldn't find data, return None
     if not tex_label:
         return None
     tex_to_typ = map_tex_typ()
     typ = tex_to_typ.get(tex_label)
-    if typ is not None:
+    # found mapped typst symbol
+    if typ:
         label = typ.char
-    # missing mapping, return current label
-    else:
-        return tex_label
-    return MathSymbolSample(
-        label,
-        [
+        return MathSymbolSample(
+            label,
             [
-                (float(x), float(y))
-                for x, y, _ in (
-                    # point tuple[int, int, int]
-                    point_str.split()
-                    for point_str in trace.text.split(",")
-                    if len(point_str.split()) == 3
-                )
-            ]
-            for trace in root.iterfind(".//ink:trace", namespaces=namespace)
-            if trace.text
-        ],
-    )
+                [
+                    (float(x), float(y))
+                    for x, y, _ in (
+                        # point tuple[int, int, int]
+                        point_str.split()
+                        for point_str in trace.text.split(",")
+                        if len(point_str.split()) == 3
+                    )
+                ]
+                for trace in root.iterfind(".//ink:trace", namespaces=namespace)
+                if trace.text
+            ],
+        )
+    # missing mapping, return current label as unmap
+    return tex_label
 
 
 # Dataset creating functions
@@ -523,10 +528,35 @@ def create_dataset(
     )
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
 
-    # Cleanup temporary columns
+    # Cleanup temporary columns and query
     train_lf = train_lf.drop(["n", "idx"]).sort("label").collect()
     test_lf = test_lf.drop(["n", "idx"]).sort("label").collect()
     val_lf = val_lf.drop(["n", "idx"]).sort("label").collect()
+
+    def _upload_to_huggingface(
+        dataset_name: DataSetName,
+        split: Literal["train", "test", "val"],
+        data_frame: pl.DataFrame,
+        repo_name: str = "Cloud0310/detypify-datasets",
+    ):
+        match dataset_name:
+            case "detexify":
+                description = "Detexify Dataset mapped for typst"
+                homepage = "https://github.com/kirel/detexify-data"
+            case "mathwriting":
+                description = "Mathwriting Dataset mapped for typst"
+                homepage = "https://github.com/google-research/google-research/blob/master/mathwriting"
+            case "contrib":
+                description = "Contributed data from detypify users"
+                homepage = "https://huggingface.co/datasets/Cloud0310/detypify-datasets"
+
+        dataset = Dataset.from_polars(data_frame)
+        dataset.push_to_hub(
+            repo_id=repo_name,
+            config_name=dataset_name,
+            split=split,
+            num_proc=process_cpu_count(),
+        )
 
     def _write_to_file(df: pl.DataFrame, path: Path):
         if file_format == "vortex":
@@ -554,19 +584,19 @@ def create_dataset(
             filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
             _write_to_file(chunk, output_dir / filename)
 
-            for lf, output_dir in [
-                (train_lf, train_path),
-                (test_lf, test_path),
-                (val_lf, val_path),
-            ]:
-                if split_parts:
-                    _write_shards(lf, output_dir)
-                else:
-                    print(
-                        f"  -> Writing {len(df)} rows to {output_dir.name}... \
-                        as single file."
-                    )
-                    _write_to_file(df, output_dir / f"data.{file_format}")
+    for df, output_dir in [
+        (train_lf, train_path),
+        (test_lf, test_path),
+        (val_lf, val_path),
+    ]:
+        if split_parts:
+            _write_shards(df, output_dir)
+        else:
+            print(
+                f"  -> Writing {len(df)} rows to {output_dir.name}... \
+                as single file."
+            )
+            _write_to_file(df, output_dir / f"data.{file_format}")
 
     # ---------------------------------------------------------
     # 5. Metadata Generation
@@ -579,7 +609,7 @@ def create_dataset(
     class_counters = dict(zip(stats_df["label"], stats_df["count"]))
     total_count = int(stats_df["count"].sum())
 
-    dataset_info = DataSetInfo(
+    dataset_info = MathWritingDatasetInfo(
         name=dataset_name,
         total_count=total_count,
         count_by_class=class_counters,
@@ -604,9 +634,9 @@ if __name__ == "__main__":
         with symbols_info_path.open("wb") as f:
             f.write(msgspec.json.encode(typ_sym_info))
 
-    # create_dataset(dataset_name="detexify")
+    create_dataset(dataset_name="detexify")
 
-    # create_dataset(dataset_name="mathwriting", split_parts=False)
+    create_dataset(dataset_name="mathwriting")
 
     # Parse contributed data
     # if USE_CONTRIB:
