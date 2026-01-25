@@ -9,22 +9,16 @@ from torchmetrics import Accuracy
 type model_size = Literal["small", "medium", "large"]
 # result of timm.list_models("*mobilenetv4*")
 type model_names = Literal[
-    "mobilenetv4_conv_aa_large",
-    "mobilenetv4_conv_aa_medium",
-    "mobilenetv4_conv_blur_medium",
-    "mobilenetv4_conv_large",
-    "mobilenetv4_conv_medium",
     "mobilenetv4_conv_small",
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
-    "mobilenetv4_hybrid_large",
-    "mobilenetv4_hybrid_large_075",
     "mobilenetv4_hybrid_medium",
     "mobilenetv4_hybrid_medium_075",
+    "efficientnet_b1",
 ]
 
 
-class MobileNetV4(L.LightningModule):
+class TimmModel(L.LightningModule):
     def __init__(
         self,
         num_classes: int,
@@ -52,15 +46,14 @@ class MobileNetV4(L.LightningModule):
         return self.model(x)
 
     def training_step(self, batch):
-        x, y = batch
-        print(y.shape)
+        x, y = batch["image"], batch["label"]
         pred = self.model(x)
         loss = self.criterion(pred, y)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch):
-        x, y = batch
+        x, y = batch["image"], batch["label"]
         pred = self.model(x)
         loss = self.criterion(pred, y)
         self.log("val_loss", loss)
@@ -68,6 +61,14 @@ class MobileNetV4(L.LightningModule):
         self.log("val_top5", self.val_acc_top5(pred, y))
 
         return loss
+
+    def test_step(self, batch):
+        x, y = batch["image"], batch["label"]
+        pred = self.model(x)
+        loss = self.criterion(pred, y)
+        self.log("val_loss", loss)
+        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
+        self.log("val_top5", self.val_acc_top5(pred, y))
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters())
@@ -93,7 +94,7 @@ class MobileNetV4(L.LightningModule):
         }
 
 
-class TypstSymbolClassifier(L.LightningModule):
+class CNNModel(L.LightningModule):
     def __init__(self, num_classes: int):
         super().__init__()
         self.model: Any = nn.Sequential(
@@ -107,25 +108,35 @@ class TypstSymbolClassifier(L.LightningModule):
             nn.Linear(32 * 5 * 5, num_classes),
         )
         self.criterion = nn.CrossEntropyLoss()
+        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.val_acc_top5 = Accuracy(
+            task="multiclass", num_classes=num_classes, top_k=5
+        )
 
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch):
-        x, y = batch
+        x, y = batch["image"], batch["label"]
         pred = self.model(x)
         loss = self.criterion(pred, y)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch):
-        x, y = batch
+        x, y = batch["image"], batch["label"]
         pred = self.model(x)
         loss = self.criterion(pred, y)
-        acc = (pred.argmax(1) == y).float().mean()
         self.log("val_loss", loss)
-        self.log("val_acc", acc, prog_bar=True)
+        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
+        self.log("val_top5", self.val_acc_top5(pred, y))
         return loss
+
+    def test_step(self, batch):
+        x, y = batch["image"], batch["label"]
+        pred = self.model(x)
+        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
+        self.log("val_top5", self.val_acc_top5(pred, y))
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters())
