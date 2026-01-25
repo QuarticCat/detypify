@@ -1,10 +1,11 @@
 from os import process_cpu_count
 from pathlib import Path
 
-from datasets import load_dataset
+import torch
+from datasets import Value, load_dataset
 from lightning import LightningDataModule
 from proc_data import DATASET_REPO, IMG_SIZE, DataSetName, rasterize_strokes
-from torch.utils.data import DataLoader, default_collate
+from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
 
@@ -26,9 +27,7 @@ class MathSymbolDataModule(LightningDataModule):
 
         # --- 2. Build Transforms ---
         # Common steps for all splits
-        base_transforms = [
-            v2.ToImage(),
-        ]
+        base_transforms = [v2.ToImage(), v2.ToDtype(dtype=torch.bfloat16)]
 
         # Augmentation (Train only)
         augmentations = [
@@ -54,34 +53,66 @@ class MathSymbolDataModule(LightningDataModule):
         # We need classes for MixUp/CutMix and for SymbolDataset
         # Load the dataset (cached) to get info
         dataset = load_dataset(DATASET_REPO, name=self.dataset_name)
-        num_classes = len(dataset.unique("label"))
+        classes: set[str] = set()
+        for split in dataset.values():
+            classes.update(split.unique("label"))
+        self.classes = classes
+        class_to_idx = {cls: idx for idx, cls in enumerate(sorted(classes))}
 
         # Data agumentaion with MixUp and CutMix
-        mixup = v2.MixUp(num_classes=num_classes, alpha=0.8)
-        cutmix = v2.CutMix(num_classes=num_classes, alpha=1.0)
+        mixup = v2.MixUp(num_classes=len(classes), alpha=0.8)
+        cutmix = v2.CutMix(num_classes=len(classes), alpha=1.0)
 
         # 3. Create the Switch (Paper uses 0.5 switch probability )
         # This randomly picks either MixUp or CutMix for a given batch.
         cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
-        self.collate_fn = lambda batch: cutmix_or_mixup(*default_collate(batch))
+        self.collate_fn = lambda batch: cutmix_or_mixup(
+            batch["images"], batch["labels"]
+        )
+
+        def preprocess(samples):
+            samples["label"] = [class_to_idx[label] for label in samples["label"]]
+            samples["image"] = [
+                rasterize_strokes(strokes) for strokes in samples["strokes"]
+            ]
+            return samples
+
+        def train_transform(samples):
+            samples["image"] = [
+                self.train_transform(image) for image in samples["image"]
+            ]
+            return samples
+
+        def eval_transform(samples):
+            samples["image"] = [
+                self.eval_transform(image) for image in samples["image"]
+            ]
+            return samples
+
         if stage == "fit":
-            self.train_dataset = dataset.map(
-                lambda strokes: self.train_transform(
-                    rasterize_strokes(strokes, self.image_size)
-                )
-            ).with_format("torch")
-            self.val_dataset = dataset.map(
-                lambda strokes: self.eval_transform(
-                    rasterize_strokes(strokes, self.image_size)
-                )
-            ).with_format("torch")
+            self.train_dataset = (
+                dataset["train"]
+                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .with_transform(train_transform)
+                .cast_column("label", Value("int32"))
+                .with_format("torch")
+            )
+            self.val_dataset = (
+                dataset["val"]
+                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .with_transform(eval_transform)
+                .cast_column("label", Value("int32"))
+                .with_format("torch")
+            )
 
         if stage == "test" or stage is None:
-            self.test_dataset = dataset.map(
-                lambda strokes: self.eval_transform(
-                    rasterize_strokes(strokes, self.image_size)
-                )
-            ).with_format("torch")
+            self.test_dataset = (
+                dataset["test"]
+                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .with_transform(eval_transform)
+                .cast_column("label", Value("int32"))
+                .with_format("torch")
+            )
 
     def train_dataloader(self):
         return DataLoader(

@@ -9,7 +9,7 @@ import msgspec
 import torch
 from dataset import MathSymbolDataModule
 from lightning.pytorch.loggers import TensorBoardLogger
-from model import MobileNetV4, TypstSymbolClassifier
+from model import CNNModel, TimmModel
 from proc_data import (
     DATASET_ROOT,
     DETEXIFY_DATA_PATH,
@@ -39,12 +39,12 @@ if __name__ == "__main__":
     total_epochs = 200
 
     models = [
-        MobileNetV4(
+        TimmModel(
             num_classes=len(classes),
             warmup_rounds=warmup_epochs,
             total_rounds=total_epochs,
         ),
-        TypstSymbolClassifier(num_classes=len(classes)),
+        CNNModel(len(classes)),
     ]
 
     logger = TensorBoardLogger(TRAIN_OUT_DIR / "train" / "tb_logs")  # type: ignore
@@ -53,6 +53,7 @@ if __name__ == "__main__":
         compiled_model = torch.compile(model)
         num_workers = process_cpu_count() or 1
 
+        torch.set_float32_matmul_precision("high")
         trainer = L.Trainer(
             max_epochs=total_epochs,
             default_root_dir=TRAIN_OUT_DIR,
@@ -75,6 +76,7 @@ if __name__ == "__main__":
             )
             # validate
             trainer.validate(datamodule=dm)  # type: ignore
+            trainer.test(model, datamodule=dm)  # type: ignore
 
         # Export ONNX.
         model.to_onnx(
