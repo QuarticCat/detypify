@@ -27,7 +27,7 @@ class MathSymbolDataModule(LightningDataModule):
 
         # --- 2. Build Transforms ---
         # Common steps for all splits
-        base_transforms = [v2.ToImage(), v2.ToDtype(dtype=torch.bfloat16)]
+        base_transforms = [v2.ToImage(), v2.ToDtype(dtype=torch.bfloat16, scale=True)]
 
         # Augmentation (Train only)
         augmentations = [
