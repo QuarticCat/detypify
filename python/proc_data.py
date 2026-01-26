@@ -567,6 +567,7 @@ def create_dataset(
             dataset_info = DatasetInfo(description=description, homepage=homepage)
 
             dataset = Dataset.from_polars(data_frame, info=dataset_info)
+            dataset.class_encode_column("label")
             dataset.push_to_hub(
                 repo_id=DATASET_REPO,
                 config_name=dataset_name,

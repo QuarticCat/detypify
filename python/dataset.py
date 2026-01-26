@@ -2,7 +2,7 @@ from os import process_cpu_count
 from pathlib import Path
 
 import torch
-from datasets import Value, load_dataset
+from datasets import Array2D, Value, load_dataset
 from lightning import LightningDataModule
 from proc_data import DATASET_REPO, IMG_SIZE, DataSetName, rasterize_strokes
 from torch.utils.data import DataLoader
@@ -91,14 +91,22 @@ class MathSymbolDataModule(LightningDataModule):
                 dataset["train"]
                 .map(preprocess, batched=True, remove_columns="strokes")
                 .cast_column("label", Value("uint32"))
-                .with_format("numpy")
+                .cast_column(
+                    "image",
+                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
+                )
+                .with_format("torch")
                 .with_transform(train_transform)
             )
             self.val_dataset = (
                 dataset["val"]
                 .map(preprocess, batched=True, remove_columns="strokes")
                 .cast_column("label", Value("uint32"))
-                .with_format("numpy")
+                .cast_column(
+                    "image",
+                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
+                )
+                .with_format("torch")
                 .with_transform(eval_transform)
             )
 
@@ -107,7 +115,11 @@ class MathSymbolDataModule(LightningDataModule):
                 dataset["test"]
                 .map(preprocess, batched=True, remove_columns="strokes")
                 .cast_column("label", Value("uint32"))
-                .with_format("numpy")
+                .cast_column(
+                    "image",
+                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
+                )
+                .with_format("torch")
                 .with_transform(eval_transform)
             )
 
