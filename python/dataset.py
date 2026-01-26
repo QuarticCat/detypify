@@ -14,6 +14,7 @@ class MathSymbolDataModule(LightningDataModule):
         self,
         data_root: Path,
         dataset_name: DataSetName,
+        class_to_idx: dict[str, int],
         batch_size: int = 64,
         num_workers: int = process_cpu_count(),
         image_size: int = IMG_SIZE,
@@ -24,12 +25,13 @@ class MathSymbolDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
+        self.class_to_idx = class_to_idx
 
-        # --- 2. Build Transforms ---
-        # Common steps for all splits
-        base_transforms = [v2.ToImage(), v2.ToDtype(dtype=torch.bfloat16, scale=True)]
+        base_transforms = [
+            v2.ToImage(),
+            v2.ToDtype(dtype=torch.float32, scale=True),
+        ]
 
-        # Augmentation (Train only)
         augmentations = [
             v2.RandomRotation(15),  # type: ignore
             v2.RandomAffine(
@@ -53,15 +55,10 @@ class MathSymbolDataModule(LightningDataModule):
         # We need classes for MixUp/CutMix and for SymbolDataset
         # Load the dataset (cached) to get info
         dataset = load_dataset(DATASET_REPO, name=self.dataset_name)
-        classes: set[str] = set()
-        for split in dataset.values():
-            classes.update(split.unique("label"))
-        self.classes = classes
-        class_to_idx = {cls: idx for idx, cls in enumerate(sorted(classes))}
 
         # Data agumentaion with MixUp and CutMix
-        mixup = v2.MixUp(num_classes=len(classes), alpha=0.8)
-        cutmix = v2.CutMix(num_classes=len(classes), alpha=1.0)
+        mixup = v2.MixUp(num_classes=len(self.class_to_idx), alpha=0.8)
+        cutmix = v2.CutMix(num_classes=len(self.class_to_idx), alpha=1.0)
 
         # 3. Create the Switch (Paper uses 0.5 switch probability )
         # This randomly picks either MixUp or CutMix for a given batch.
@@ -70,48 +67,48 @@ class MathSymbolDataModule(LightningDataModule):
             batch["images"], batch["labels"]
         )
 
-        def preprocess(samples):
-            samples["label"] = [class_to_idx[label] for label in samples["label"]]
-            samples["image"] = [
-                rasterize_strokes(strokes) for strokes in samples["strokes"]
+        def preprocess(batch):
+            batch["label"] = [self.class_to_idx[label] for label in batch["label"]]
+            batch["image"] = [
+                rasterize_strokes(strokes) for strokes in batch["strokes"]
             ]
-            return samples
+            return batch
 
-        def train_transform(samples):
-            samples["image"] = [
-                self.train_transform(image) for image in samples["image"]
-            ]
-            return samples
+        def train_transform(batch):
+            batch["image"] = self.train_transform(
+                torch.tensor(batch["image"]).unsqueeze(1)
+            )
+            return batch
 
-        def eval_transform(samples):
-            samples["image"] = [
-                self.eval_transform(image) for image in samples["image"]
-            ]
-            return samples
+        def eval_transform(batch):
+            batch["image"] = self.eval_transform(
+                torch.tensor(batch["image"]).unsqueeze(1)
+            )
+            return batch
 
         if stage == "fit":
             self.train_dataset = (
                 dataset["train"]
-                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .map(preprocess, batched=True, remove_columns="strokes")
+                .cast_column("label", Value("uint32"))
+                .with_format("numpy")
                 .with_transform(train_transform)
-                .cast_column("label", Value("int32"))
-                .with_format("torch")
             )
             self.val_dataset = (
                 dataset["val"]
-                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .map(preprocess, batched=True, remove_columns="strokes")
+                .cast_column("label", Value("uint32"))
+                .with_format("numpy")
                 .with_transform(eval_transform)
-                .cast_column("label", Value("int32"))
-                .with_format("torch")
             )
 
         if stage == "test" or stage is None:
             self.test_dataset = (
                 dataset["test"]
-                .map(preprocess, batched=True, remove_columns=["strokes"])
+                .map(preprocess, batched=True, remove_columns="strokes")
+                .cast_column("label", Value("uint32"))
+                .with_format("numpy")
                 .with_transform(eval_transform)
-                .cast_column("label", Value("int32"))
-                .with_format("torch")
             )
 
     def train_dataloader(self):
