@@ -161,21 +161,19 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
     # 3. Vectorized Normalization
     min_x, min_y = all_points.min(axis=0)
     max_x, max_y = all_points.max(axis=0)
+    padding = 10
+    target_size = output_size - (2 * padding)
 
     width = max(max_x - min_x, max_y - min_y)
-    if width == 0:
-        return np.zeros((output_size, output_size), dtype=np.uint8)
-
-    # Logic: 1.1 scale (10% pad) + 10px safety margin
-    padded_width = width * 1.1 + 10
-    scale = output_size / padded_width
-
-    zero_x = (max_x + min_x - padded_width) / 2
-    zero_y = (max_y + min_y - padded_width) / 2
+    scale = target_size / width
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
 
     # In-place transformation of the big array
-    all_points -= [zero_x, zero_y]
-    all_points *= scale
+    all_points = ((all_points - [center_x, center_y]) * scale) + [
+        output_size / 2,
+        output_size / 2,
+    ]
 
     # 4. Rendering
     # Split the big array back into a list of arrays for cv2.polylines

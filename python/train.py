@@ -32,6 +32,7 @@ if __name__ == "__main__":
     for dataset in datasets:
         data_info = get_dataset_info(dataset)
         classes.update(data_info.count_by_class.keys())
+    class_to_idx = {cls: idx for idx, cls in enumerate(classes)}
 
     # hyper params
     batch_size = 64
@@ -39,12 +40,12 @@ if __name__ == "__main__":
     total_epochs = 200
 
     models = [
+        CNNModel(len(classes)),
         TimmModel(
             num_classes=len(classes),
             warmup_rounds=warmup_epochs,
             total_rounds=total_epochs,
         ),
-        CNNModel(len(classes)),
     ]
 
     logger = TensorBoardLogger(TRAIN_OUT_DIR / "train" / "tb_logs")  # type: ignore
@@ -68,10 +69,11 @@ if __name__ == "__main__":
                 dataset_name=dataset,
                 batch_size=batch_size,
                 num_workers=num_workers,
+                class_to_idx=class_to_idx,
             )
             # training
             trainer.fit(
-                model,
+                model,  # type: ignore
                 datamodule=dm,  # type: ignore
             )
             # validate
@@ -79,12 +81,12 @@ if __name__ == "__main__":
             trainer.test(model, datamodule=dm)  # type: ignore
 
         # Export ONNX.
-        model.to_onnx(
-            f"{TRAIN_OUT_DIR}/model.onnx",
+        export_output = torch.onnx.export(
+            model,
             # 1 image , 1 color channels(grey scale)
-            torch.randn(1, 1, IMG_SIZE, IMG_SIZE),
+            (torch.randn(1, 1, IMG_SIZE, IMG_SIZE),),
+            "simple_model_dynamo.onnx",
             dynamo=True,
-            external_data=False,
         )
 
     # Generate JSON for the infer page.

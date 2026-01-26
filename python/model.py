@@ -22,7 +22,7 @@ class TimmModel(L.LightningModule):
     def __init__(
         self,
         num_classes: int,
-        model_name: model_names = "mobilenetv4_hybrid_medium",
+        model_name: model_names = "mobilenetv4_conv_small_035",
         warmup_rounds: int = 20,
         total_rounds: int = 200,
     ):
@@ -59,14 +59,11 @@ class TimmModel(L.LightningModule):
         self.log("val_loss", loss)
         self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
         self.log("val_top5", self.val_acc_top5(pred, y))
-
         return loss
 
     def test_step(self, batch):
         x, y = batch["image"], batch["label"]
         pred = self.model(x)
-        loss = self.criterion(pred, y)
-        self.log("val_loss", loss)
         self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
         self.log("val_top5", self.val_acc_top5(pred, y))
 
