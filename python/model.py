@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 import lightning as L  # noqa
 import torch
@@ -8,14 +8,14 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics import Accuracy
 
 type model_size = Literal["small", "medium", "large"]
-# result of timm.list_models("*mobilenetv4*")
+# Selected models for efficiency, ranked by model size, ascending
 type model_names = Literal[
-    "mobilenetv4_conv_small",
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
-    "mobilenetv4_hybrid_medium",
-    "mobilenetv4_hybrid_medium_075",
+    "mobilenetv4_conv_small",
     "efficientnet_b1",
+    "mobilenetv4_hybrid_medium_075",
+    "mobilenetv4_hybrid_medium",
 ]
 
 
@@ -32,12 +32,13 @@ class TimmModel(L.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.model: Any = create_model(
+        self.model = create_model(
             model_name,
             num_classes=num_classes,
             in_chans=1,
             drop_path_rate=0.1,
             drop_rate=0.0,
+            exportable=True,
         )
         self.criterion = nn.CrossEntropyLoss()
 
@@ -170,8 +171,8 @@ class CNNModel(L.LightningModule):
         )
         self.criterion = nn.CrossEntropyLoss()
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        self.val_acc_top5 = Accuracy(
-            task="multiclass", num_classes=num_classes, top_k=5
+        self.val_acc_top3 = Accuracy(
+            task="multiclass", num_classes=num_classes, top_k=3
         )
         self.export = export
 
@@ -189,7 +190,7 @@ class CNNModel(L.LightningModule):
 
     def forward(self, x):
         if self.export:
-            self.features(x)
+            x = self.features(x)
             x = self.avgpool(x)
             return self.classifier(x)
         x = self.features_opt(x)
@@ -209,14 +210,14 @@ class CNNModel(L.LightningModule):
         loss = self.criterion(pred, y)
         self.log("val_loss", loss)
         self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top5", self.val_acc_top5(pred, y))
+        self.log("val_top3", self.val_acc_top3(pred, y))
         return loss
 
     def test_step(self, batch):
         x, y = batch["image"], batch["label"]
         pred = self.forward(x)
         self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top5", self.val_acc_top5(pred, y))
+        self.log("val_top3", self.val_acc_top3(pred, y))
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters())
