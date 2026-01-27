@@ -2,7 +2,7 @@
     <img src="./assets/logo.svg" alt="logo" width="150"/>
     <h1>Detypify</h1>
     <p>
-        Can't remember some Typst symbol?
+        Can't find some Typst symbol?
         <a href="https://detypify.quarticcat.com/">Draw it!</a>
     </p>
 </div>
@@ -13,14 +13,7 @@
 - **Tiny model**: 1.3 MiB (ONNX), fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
-## News
-
-- 2024-04-06: This project has been integrated into [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
-
-## Associated Repos
-
-- [detypify-data](https://github.com/QuarticCat/detypify-data): Detypify's own dataset (your contributions on the website finally go here)
-- [detypify-external](https://github.com/QuarticCat/detypify-external): Necessary external data to bootstrap Detypify
+You can also use it in [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
 
 ## Development
 
@@ -43,16 +36,14 @@ Before you build frontend projects, make sure you have the `train` folder in [fr
 
 ### Logo
 
-The logo is a hand-written SVG file in [assets/manuscript.svg](./assets/manuscript.svg).
+Source: [assets/manuscript.svg](./assets/manuscript.svg) (requires [*NewComputerModernMath*](https://ctan.org/pkg/newcomputermodern) font)
 
-It requires *NewComputerModernMath* font ([install guide](https://wiki.archlinux.org/title/TeX_Live#Making_fonts_available_to_Fontconfig)).
-
-To strip the font requirement and optimize for production:
+To compile it for production:
 
 ```console
 $ cd assets
-$ inkscape manuscript.svg --export-text-to-path --export-filename=logo.svg
-$ bunx svgo --multipass logo.svg
+$ inkscape manuscript.svg --export-text-to-path --export-filename=logo.svg  # convert text to path
+$ bunx svgo --multipass logo.svg  # optimize SVG
 ```
 
 ## License
