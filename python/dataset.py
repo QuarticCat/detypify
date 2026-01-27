@@ -1,10 +1,9 @@
 from os import process_cpu_count
-from pathlib import Path
 
 import torch
 from datasets import Array2D, Value, load_dataset
 from lightning import LightningDataModule
-from proc_data import DATASET_REPO, IMG_SIZE, DataSetName, rasterize_strokes
+from proc_data import DATASET_REPO, IMG_SIZE, rasterize_strokes
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
@@ -12,20 +11,14 @@ from torchvision.transforms import v2
 class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
-        data_root: Path,
-        dataset_name: DataSetName,
-        class_to_idx: dict[str, int],
         batch_size: int = 64,
         num_workers: int = process_cpu_count(),
         image_size: int = IMG_SIZE,
     ):
         super().__init__()
-        self.data_root = data_root
-        self.dataset_name = dataset_name
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
-        self.class_to_idx = class_to_idx
 
         base_transforms = [
             v2.ToImage(),
@@ -49,15 +42,14 @@ class MathSymbolDataModule(LightningDataModule):
         self.eval_transform = v2.Compose(base_transforms)
 
     def prepare_data(self):
-        load_dataset(DATASET_REPO, name=self.dataset_name)
+        load_dataset(DATASET_REPO)
 
     def setup(self, stage: str | None = None):
         # We need classes for MixUp/CutMix and for SymbolDataset
         # Load the dataset (cached) to get info
-        dataset = load_dataset(DATASET_REPO, name=self.dataset_name)
+        dataset = load_dataset(DATASET_REPO)
 
         def preprocess(batch):
-            batch["label"] = [self.class_to_idx[label] for label in batch["label"]]
             batch["image"] = [
                 rasterize_strokes(strokes) for strokes in batch["strokes"]
             ]
@@ -79,7 +71,6 @@ class MathSymbolDataModule(LightningDataModule):
             self.train_dataset = (
                 dataset["train"]
                 .map(preprocess, batched=True, remove_columns="strokes")
-                .cast_column("label", Value("uint32"))
                 .cast_column(
                     "image",
                     Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
@@ -90,7 +81,6 @@ class MathSymbolDataModule(LightningDataModule):
             self.val_dataset = (
                 dataset["val"]
                 .map(preprocess, batched=True, remove_columns="strokes")
-                .cast_column("label", Value("uint32"))
                 .cast_column(
                     "image",
                     Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
