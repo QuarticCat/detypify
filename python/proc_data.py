@@ -16,7 +16,7 @@ import msgspec
 import numpy as np
 import polars as pl
 from bs4 import BeautifulSoup
-from datasets import Dataset, DatasetInfo
+from datasets import ClassLabel, Dataset, DatasetInfo, Features, LargeList, List, Value
 from lxml import etree
 from msgspec import json
 
@@ -56,8 +56,6 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
 
 class MathWritingDatasetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     name: str
-    total_count: int
-    count_by_class: dict[str, int]
     unmapped: set[str] | None = None
 
 
@@ -351,7 +349,9 @@ def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
                 pl.col("label"),
                 pl.col("strokes")
                 # Drop time (keep only x, y)
-                .list.eval(pl.element().list.eval(pl.element().arr.head(2))),
+                .list.eval(
+                    pl.element().list.eval(pl.element().arr.head(2).list.to_array(2))
+                ),
             ]
         )
         # 3. Drop empty samples
@@ -411,7 +411,8 @@ def construct_contribute_df() -> pl.LazyFrame:
         # Schema: list of dicts {sym: str, strokes: json_string}
         data = msgspec.json.decode(f.read(), type=list[dict[str, str]])
 
-    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
+    typ_sym_info = get_typst_symbol_info()
+    name_to_chr = {name: s.char for s in typ_sym_info for name in s.names}
     # 2. Decode JSON Strings & Join Labels Locally
 
     mapping_lf = pl.DataFrame(
@@ -450,8 +451,8 @@ def construct_contribute_df() -> pl.LazyFrame:
 
 
 def create_dataset(
-    dataset_name: DataSetName,
-    upload: bool = False,
+    dataset_names: list[DataSetName],
+    upload: bool = True,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
     **kwargs,
 ) -> None:
@@ -472,31 +473,38 @@ def create_dataset(
             file_format: The output file format ("parquet" or "vortex").
     """
 
-    print(f"--- Creating Dataset: {dataset_name} ---")
+    print(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
     # ---------------------------------------------------------
     # 2. Dispatcher: Construct LazyFrame & Unmapped Set
     # ---------------------------------------------------------
-    lf: pl.LazyFrame
-    unmapped_symbols: set[str] | None = None
 
-    if dataset_name == "mathwriting":
-        lf, unmapped_symbols = construct_mathwriting_df()
-
-    elif dataset_name == "detexify":
-        lf, unmapped_symbols = construct_detexify_df()
-
-    elif dataset_name == "contrib":
-        # Requires: typ_sym_info list (to map by 'names')
-        lf = construct_contribute_df()
-
-    else:
-        raise ValueError(f"Unknown dataset name: {dataset_name}")
+    lfs = []
+    unmapped: dict[DataSetName, set[str]] = {}
+    for dataset_name in dataset_names:
+        match dataset_name:
+            case "mathwriting":
+                math_writing_lf, unmapped_symbols = construct_mathwriting_df()
+                lfs.append(math_writing_lf)
+                if unmapped_symbols:
+                    unmapped[dataset_name] = unmapped_symbols
+            case "detexify":
+                detexify_lf, unmapped_symbols = construct_detexify_df()
+                lfs.append(detexify_lf)
+                if unmapped_symbols:
+                    unmapped[dataset_name] = unmapped_symbols
+            case "contrib":
+                # Requires: typ_sym_info list (to map by 'names')
+                contrib_lf = construct_contribute_df()
+                lfs.append(contrib_lf)
+            case _:
+                raise ValueError(f"Unknown dataset name: {dataset_name}")
+    lf = pl.concat(lfs)
 
     # ---------------------------------------------------------
     # 3. Preparation & Splitting Logic
     # ---------------------------------------------------------
-    dataset_path = DATASET_ROOT / dataset_name
+    dataset_path = DATASET_ROOT
     split_names: list[SplitName] = ["train", "test", "val"]
 
     # Clean/Create Directories
@@ -516,7 +524,7 @@ def create_dataset(
     base_lf = (
         lf.with_columns(pl.col("label").cast(pl.Utf8))
         .collect()
-        .sample(fraction=1.0, shuffle=True, seed=42)
+        .sample(fraction=1.0, shuffle=True, seed=114514)
         .lazy()
         .with_columns(
             [
@@ -525,53 +533,70 @@ def create_dataset(
             ]
         )
     )
+    print("  -> Generating metadata...")
+    # Use base_lf (materialized view logic) for fast stats
+    stats_df = (
+        base_lf.select(pl.col("label"))
+        .collect()
+        .get_column("label")
+        .value_counts()
+        .sort("label")
+    )
+    global_labels = stats_df["label"].to_list()
 
-    # Define Partitions (Lazy)
+    # Split and shuffle data
     train_lf = base_lf.filter(pl.col("idx") < (pl.col("n") * t1))
     test_lf = base_lf.filter(
         (pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2))
     )
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
 
-    # Cleanup temporary columns and query
     train_lf = train_lf.drop(["n", "idx"]).sort("label").collect()
     test_lf = test_lf.drop(["n", "idx"]).sort("label").collect()
     val_lf = val_lf.drop(["n", "idx"]).sort("label").collect()
 
     if upload:
+        global_features: Features = Features(
+            {
+                "label": ClassLabel(names=global_labels),
+                "strokes": LargeList(LargeList(List(Value("float32")))),
+            }
+        )  # type: ignore
 
         def _upload_to_huggingface(
-            dataset_name: DataSetName,
             split: SplitName,
             data_frame: pl.DataFrame,
         ):
-            match dataset_name:
-                case "detexify":
-                    description = "Detexify Dataset mapped for typst"
-                    homepage = "https://github.com/kirel/detexify-data"
-                case "mathwriting":
-                    description = "Mathwriting Dataset mapped for typst"
-                    homepage = "https://github.com/google-research/google-research/blob/master/mathwriting"
-                case "contrib":
-                    description = "Contributed data from detypify users"
-                    homepage = (
-                        "https://huggingface.co/datasets/Cloud0310/detypify-datasets"
-                    )
+            def encode_labels(batch):
+                class_feature = global_features["label"]
+                batch["label"] = [
+                    class_feature.str2int(label) for label in batch["label"]
+                ]
+                return batch
 
-            dataset_info = DatasetInfo(description=description, homepage=homepage)
+            description = (
+                "Detypify dataset, "
+                "composed by mathwriting, detexify and contributed datasets"
+            )
 
-            dataset = Dataset.from_polars(data_frame, info=dataset_info)
-            dataset.class_encode_column("label")
+            dataset_info = DatasetInfo(description=description)
+            dataset = cast(
+                "Dataset",
+                Dataset.from_polars(data_frame, info=dataset_info)
+                .map(encode_labels, batched=True)
+                .cast(features=global_features),
+            )
             dataset.push_to_hub(
                 repo_id=DATASET_REPO,
                 config_name=dataset_name,
-                split=split,
                 num_proc=process_cpu_count() if process_cpu_count() else 1,
+                split=split,
             )
 
         for df, split in zip([train_lf, test_lf, val_lf], split_names):
-            print(f"  -> Uploading {dataset_name} split: {split}... to huggingface.")
-            _upload_to_huggingface(dataset_name, split, df)
+            print(f"  -> Uploading split: {split}... to huggingface.")
+            _upload_to_huggingface(split, df)
+        print(f"--- Done. Dataset uploaded to {DATASET_REPO} ---")
     else:
         split_parts: bool = kwargs.get("split_parts", False)
         batch_size: int = kwargs.get("batch_size", 2000)
@@ -613,28 +638,17 @@ def create_dataset(
                     f"  -> Writing {len(df)} rows to{output_dir.name} as single file."
                 )
                 _write_to_file(df, output_dir / f"data.{file_format}")
-    # ---------------------------------------------------------
-    # 5. Metadata Generation
-    # ---------------------------------------------------------
-    print("  -> Generating metadata...")
-    # Use base_lf (materialized view logic) for fast stats
-    stats_df = (
-        base_lf.select(pl.col("label")).collect().get_column("label").value_counts()
-    )
-    class_counters = dict(zip(stats_df["label"], stats_df["count"]))
-    total_count = int(stats_df["count"].sum())
+        print(f"--- Done. Dataset saved to {dataset_path} ---")
 
-    dataset_info = MathWritingDatasetInfo(
-        name=dataset_name,
-        total_count=total_count,
-        count_by_class=class_counters,
-        unmapped=unmapped_symbols if unmapped_symbols else None,
-    )
-
-    with (dataset_path / "dataset_info.json").open("wb") as f:
-        f.write(json.format(json.encode(dataset_info)))
-
-    print(f"--- Done. Dataset saved to {dataset_path} ---")
+    for dataset_name, symbols in unmapped.items():
+        dataset_path = DATASET_ROOT / dataset_name
+        dataset_path.mkdir(exist_ok=True)
+        dataset_info = MathWritingDatasetInfo(
+            name=dataset_name,
+            unmapped=symbols if symbols else None,
+        )
+        with (dataset_path / "dataset_info.json").open("wb") as f:
+            f.write(json.format(json.encode(dataset_info)))
 
 
 if __name__ == "__main__":
@@ -651,15 +665,8 @@ if __name__ == "__main__":
 
     # Use streaming engine as default for less mem and speed
     pl.Config.set_engine_affinity("streaming")
-
-    create_dataset(dataset_name="detexify", upload=UPLOAD)
-
-    create_dataset(dataset_name="mathwriting", upload=UPLOAD)
-
-    # Parse contributed data, WIP @QuaticCat
+    dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
+    # WIP
     if USE_CONTRIB:
-        with CONTRIB_DATA.open("rb") as f:
-            samples = msgspec.json.decode(f.read())[0]["results"]
-            create_dataset(
-                dataset_name="contrib",
-            )
+        dataset_names.append("contrib")
+    create_dataset(dataset_names=dataset_names)
