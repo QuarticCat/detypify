@@ -7,36 +7,28 @@ import lightning.pytorch
 import msgspec
 import torch
 from dataset import MathSymbolDataModule
+from datasets import load_dataset
 from lightning.pytorch.loggers import TensorBoardLogger
 from model import CNNModel, TimmModel
-from proc_data import (
-    DATASET_ROOT,
-    DETEXIFY_DATA_PATH,
-    IMG_SIZE,
-    DataSetName,
-    TypstSymInfo,
-    get_dataset_info,
-)
+from proc_data import DATASET_REPO, DETEXIFY_DATA_PATH, IMG_SIZE, TypstSymInfo
 
 TRAIN_OUT_DIR = Path("build/train")
 
 
 if __name__ == "__main__":
-    datasets: list[DataSetName] = [
-        "mathwriting",
-        "detexify",
-        # "contrib"
-    ]
+    dm = MathSymbolDataModule()
     classes: set[str] = set()
-    for dataset in datasets:
-        data_info = get_dataset_info(dataset)
-        classes.update(data_info.count_by_class.keys())
-    class_to_idx = {cls: idx for idx, cls in enumerate(classes)}
+    dataset = load_dataset(DATASET_REPO)
+    for split in dataset:
+        classes.update(dataset[split].features["label"])
 
     # hyper params
     batch_size = 48
-    warmup_epochs = 5
-    total_epochs = 20
+    # warmup_epochs = 4
+    # total_epochs = 40
+    # Debug
+    warmup_epochs = 1
+    total_epochs = 2
 
     models = [
         TimmModel(
@@ -60,16 +52,13 @@ if __name__ == "__main__":
             gradient_clip_val=0.1,
             gradient_clip_algorithm="norm",
         )
-        for dataset in datasets:
-            dm = MathSymbolDataModule(
-                data_root=DATASET_ROOT,
-                dataset_name=dataset,
-                batch_size=batch_size,
-                class_to_idx=class_to_idx,
-            )
-            # training
-            trainer.fit(model, datamodule=dm)
-            trainer.test(model, datamodule=dm)
+        dm = MathSymbolDataModule(
+            batch_size=batch_size,
+            image_size=IMG_SIZE,
+        )
+        # training
+        trainer.fit(model, datamodule=dm)
+        trainer.test(model, datamodule=dm)
 
         model.eval()
         model.freeze()
