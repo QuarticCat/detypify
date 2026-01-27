@@ -1,6 +1,5 @@
 """Train the model."""
 
-from os import process_cpu_count
 from pathlib import Path
 
 import lightning as L  # noqa
@@ -35,57 +34,50 @@ if __name__ == "__main__":
     class_to_idx = {cls: idx for idx, cls in enumerate(classes)}
 
     # hyper params
-    batch_size = 64
-    warmup_epochs = 20
-    total_epochs = 200
+    batch_size = 48
+    warmup_epochs = 5
+    total_epochs = 20
 
     models = [
-        CNNModel(len(classes)),
         TimmModel(
             num_classes=len(classes),
             warmup_rounds=warmup_epochs,
             total_rounds=total_epochs,
+            batch_size=batch_size,
         ),
+        CNNModel(len(classes)),
     ]
 
-    logger = TensorBoardLogger(TRAIN_OUT_DIR / "train" / "tb_logs")  # type: ignore
+    logger = TensorBoardLogger(TRAIN_OUT_DIR / "tb_logs")  # type: ignore
 
     for model in models:
-        compiled_model = torch.compile(model)
-        num_workers = process_cpu_count() or 1
-
         torch.set_float32_matmul_precision("high")
         trainer = L.Trainer(
             max_epochs=total_epochs,
             default_root_dir=TRAIN_OUT_DIR,
             logger=logger,
-            # See: https://docs.pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
-            # this should be the same as torch.set_float32_matmul_precision("high")
             precision="bf16-mixed",
+            gradient_clip_val=0.1,
+            gradient_clip_algorithm="norm",
         )
         for dataset in datasets:
             dm = MathSymbolDataModule(
                 data_root=DATASET_ROOT,
                 dataset_name=dataset,
                 batch_size=batch_size,
-                num_workers=num_workers,
                 class_to_idx=class_to_idx,
             )
             # training
-            trainer.fit(
-                model,  # type: ignore
-                datamodule=dm,  # type: ignore
-            )
-            # validate
-            trainer.validate(datamodule=dm)  # type: ignore
-            trainer.test(model, datamodule=dm)  # type: ignore
+            trainer.fit(model, datamodule=dm)
+            trainer.test(model, datamodule=dm)
 
+        model.eval()
+        model.freeze()
+        model.export = True
         # Export ONNX.
-        export_output = torch.onnx.export(
-            model,
-            # 1 image , 1 color channels(grey scale)
-            (torch.randn(1, 1, IMG_SIZE, IMG_SIZE),),
-            "simple_model_dynamo.onnx",
+        model.to_onnx(
+            "model.onnx",
+            torch.randn(1, 1, IMG_SIZE, IMG_SIZE),
             dynamo=True,
         )
 
