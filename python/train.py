@@ -59,6 +59,13 @@ if __name__ == "__main__":
         ),
         TimmModel(
             num_classes=len(classes),
+            model_name="efficientnet_b1",
+            warmup_rounds=warmup_epochs,
+            total_rounds=total_epochs,
+            batch_size=batch_size,
+        ),
+        TimmModel(
+            num_classes=len(classes),
             model_name="mobilenetv4_hybrid_medium",
             warmup_rounds=warmup_epochs,
             total_rounds=total_epochs,
