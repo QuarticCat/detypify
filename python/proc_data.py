@@ -144,28 +144,23 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
         np.ndarray: A (size, size) uint8 array.
                     Background is 0 (black), Strokes are 255 (white).
     """
-    # 1. Handle empty input
     if not strokes:
         return np.zeros((output_size, output_size), dtype=np.uint8)
 
-    # 2. Batch Conversion: List of Lists -> List of Arrays
-    # Filter out empty strokes immediately
     stroke_arrays = [np.array(s, dtype=np.float32) for s in strokes if s]
 
     if not stroke_arrays:
         return np.zeros((output_size, output_size), dtype=np.uint8)
 
-    # Stack for vectorized calculation
     all_points = np.vstack(stroke_arrays)
 
-    # 3. Vectorized Normalization
     min_x, min_y = all_points.min(axis=0)
     max_x, max_y = all_points.max(axis=0)
     padding = 10
     target_size = output_size - (2 * padding)
 
     width = max(max_x - min_x, max_y - min_y)
-    scale = target_size / width
+    scale = target_size / width if width > 1e-6 else 1.0
     center_x = (min_x + max_x) / 2
     center_y = (min_y + max_y) / 2
 
@@ -175,17 +170,16 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
         output_size / 2,
     ]
 
-    # 4. Rendering
-    # Split the big array back into a list of arrays for cv2.polylines
     lengths = [len(a) for a in stroke_arrays]
     split_indices = np.cumsum(lengths)[:-1]
     normalized_strokes = np.split(all_points.astype(np.int32), split_indices)
 
-    # Create the canvas
     canvas = np.zeros((output_size, output_size), dtype=np.uint8)
 
-    # Draw white (255) on black (0)
-    cv2.polylines(canvas, normalized_strokes, isClosed=False, color=255, thickness=1)
+    thickness = max(1, output_size // 60)
+    cv2.polylines(
+        canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness
+    )
 
     return canvas
 
