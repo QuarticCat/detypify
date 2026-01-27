@@ -56,17 +56,6 @@ class MathSymbolDataModule(LightningDataModule):
         # Load the dataset (cached) to get info
         dataset = load_dataset(DATASET_REPO, name=self.dataset_name)
 
-        # Data agumentaion with MixUp and CutMix
-        mixup = v2.MixUp(num_classes=len(self.class_to_idx), alpha=0.8)
-        cutmix = v2.CutMix(num_classes=len(self.class_to_idx), alpha=1.0)
-
-        # 3. Create the Switch (Paper uses 0.5 switch probability )
-        # This randomly picks either MixUp or CutMix for a given batch.
-        cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
-        self.collate_fn = lambda batch: cutmix_or_mixup(
-            batch["images"], batch["labels"]
-        )
-
         def preprocess(batch):
             batch["label"] = [self.class_to_idx[label] for label in batch["label"]]
             batch["image"] = [
@@ -75,15 +64,15 @@ class MathSymbolDataModule(LightningDataModule):
             return batch
 
         def train_transform(batch):
-            batch["image"] = self.train_transform(
-                torch.tensor(batch["image"]).unsqueeze(1)
-            )
+            images = torch.tensor(batch["image"], dtype=torch.uint8)
+            images = self.train_transform(images.unsqueeze(1))
+            batch["image"] = images
             return batch
 
         def eval_transform(batch):
-            batch["image"] = self.eval_transform(
-                torch.tensor(batch["image"]).unsqueeze(1)
-            )
+            images = torch.tensor(batch["image"], dtype=torch.uint8)
+            images = self.eval_transform(images.unsqueeze(1))
+            batch["image"] = images
             return batch
 
         if stage == "fit":
@@ -131,7 +120,6 @@ class MathSymbolDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=True,
             persistent_workers=self.num_workers > 0,
-            collate_fn=self.collate_fn,
         )
 
     def val_dataloader(self):
