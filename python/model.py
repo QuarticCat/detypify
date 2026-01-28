@@ -2,18 +2,21 @@ from typing import Literal
 
 import lightning as L  # noqa
 import torch
+from proc_data import IMG_SIZE
 from timm import create_model
 from torch import nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics import Accuracy
 
-type model_size = Literal["small", "medium", "large"]
+type ModelSize = Literal["small", "medium", "large"]
 # Selected models for efficiency, ranked by model size, ascending
-type model_names = Literal[
+type ModelName = Literal[
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
     "mobilenetv4_conv_small",
     "efficientnet_b1",
+    "mobilenetv4_conv_medium",
+    "mobilenetv4_conv_aa_medium",
     "mobilenetv4_hybrid_medium_075",
     "mobilenetv4_hybrid_medium",
 ]
@@ -23,23 +26,28 @@ class TimmModel(L.LightningModule):
     def __init__(
         self,
         num_classes: int,
-        model_name: model_names = "mobilenetv4_hybrid_medium",
-        learning_rate: float = 1e-3,
-        warmup_rounds: int = 20,
-        total_rounds: int = 200,
-        export: bool = False,
-        batch_size: int = 48,
+        model_name: ModelName,
+        learning_rate: float = 0.002,
+        warmup_rounds: int = 5,
+        total_rounds: int = 20,
+        use_compile: bool = False,
+        image_size: int = IMG_SIZE,
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.model = create_model(
+        model = create_model(
             model_name,
             num_classes=num_classes,
             in_chans=1,
+            aa_layer="blurpc",
             drop_path_rate=0.1,
             drop_rate=0.0,
             exportable=True,
         )
+        model.default_cfg["input_size"] = (1, image_size, image_size)  # type: ignore
+        model.default_cfg["test_input_size"] = (1, image_size, image_size)  # type: ignore
+        self.model = model
+
         self.criterion = nn.CrossEntropyLoss()
 
         self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
@@ -48,12 +56,15 @@ class TimmModel(L.LightningModule):
         )
         self.warm_up_epochs = warmup_rounds
         self.total_epochs = total_rounds
-        self.export = export
-        self.batch_size = batch_size
+        self.export = use_compile
         self.learning_rate = learning_rate
+        self.model_name: str = model_name
+        self.example_input_array: torch.Tensor = torch.randn(
+            1, 1, image_size, image_size
+        )
 
     def configure_model(self):
-        self.model.to(memory_format=torch.channels_last)
+        self.model = self.model.to(memory_format=torch.channels_last)  # type: ignore
         self.model_opt = torch.compile(
             self.model,
             options={"triton.cudagraphs": True, "shape_padding": True},
@@ -116,14 +127,13 @@ class TimmModel(L.LightningModule):
             {"params": no_decay, "weight_decay": 0.0},  # No decay for biases/norms
         ]
 
-        # AdamW with eps=1e-7 is crucial for Hybrid models
         optimizer = optim.AdamW(
             optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7
         )
 
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=1e-6,
+            start_factor=1e-3,
             end_factor=1.0,
             total_iters=self.warm_up_epochs,
         )
@@ -149,7 +159,7 @@ class TimmModel(L.LightningModule):
 
 
 class CNNModel(L.LightningModule):
-    def __init__(self, num_classes: int, export: bool = False):
+    def __init__(self, num_classes: int, image_size: int, export: bool = False):
         super().__init__()
         self.features = nn.Sequential(
             nn.Conv2d(1, 16, 5),
@@ -166,7 +176,7 @@ class CNNModel(L.LightningModule):
             nn.Flatten(),
             nn.Linear(32 * 4 * 4, 512),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),
             nn.Linear(512, num_classes),
         )
         self.criterion = nn.CrossEntropyLoss()
@@ -175,8 +185,16 @@ class CNNModel(L.LightningModule):
             task="multiclass", num_classes=num_classes, top_k=3
         )
         self.export = export
+        self.example_input_array: torch.Tensor = torch.randn(
+            1, 1, image_size, image_size
+        )
 
     def configure_model(self):
+        # Change model to channel last format for speed
+        self.features = self.features.to(memory_format=torch.channels_last)  # type: ignore
+        self.avgpool = self.avgpool.to(memory_format=torch.channels_last)  # type: ignore
+        self.classifier = self.classifier.to(memory_format=torch.channels_last)  # type: ignore
+
         self.features_opt = torch.compile(
             self.features,
             options={"triton.cudagraphs": True, "shape_padding": True},
@@ -189,6 +207,7 @@ class CNNModel(L.LightningModule):
         )  # type: ignore
 
     def forward(self, x):
+        x = x.to(memory_format=torch.channels_last)  # type: ignore
         if self.export:
             x = self.features(x)
             x = self.avgpool(x)

@@ -7,17 +7,16 @@ authors = [
   { name = "Cloud0310", email = "gh@touchingfish.day" },
 ]
 dependencies = [
-  # required for training
   "datasets>=4.5.0",
   "lightning>=2.6.0",
   "msgspec>=0.20.0",
   "onnx>=1.20.0",
   "onnxscript>=0.5.7",
+  "opencv-python-headless>=4.13.0.90",
   "timm>=1.0.22",
-  "typed-argument-parser>=1.11.0",
   "torch",
   "torchvision",
-  "opencv-python-headless>=4.13.0.90",
+  "typed-argument-parser>=1.11.0",
 ]
 
 [project.optional-dependencies]
@@ -32,19 +31,23 @@ data = [
 
 [dependency-groups]
 dev = [
-  # lsp & linters
+  # misc
+  "ipykernel",
+  # ort export
+  "onnxruntime>=1.23.2",
+  # lsp
   "pyrefly",
-  "zuban",
+  # formatter and linter
   "ruff",
   # training logs
   "tensorboard>=2.20.0",
   "tensorboardx>=2.6.4",
   "torch-tb-profiler>=0.4.3",
-  # misc
-  "ipykernel",
+  # profiler
   "viztracer>=1.1.1",
+  # lsp
+  "zuban",
 ]
-
 
 # linter and formatter, line length 88 as black default
 [tool.ruff]
@@ -53,25 +56,24 @@ line-length = 88
 # default set and isort
 [tool.ruff.lint]
 extend-select = [
-  "A", # Detect shadowed builtins
-  "F", # Pyflakes rules
-  "W", # PyCodeStyle warnings
-  "E", # PyCodeStyle errors
-  "I", # Sort imports properly
-  "N", # Naming conventions
-  "S", # Security
-  "UP", # Warn if certain things can changed due to newer Python versions
-  "C4", # Catch incorrect use of comprehensions, dict, list, etc
-  "FA", # Enforce from __future__ import annotations
-  "ISC", # Good use of string concatenation
-  "ARG", # Unused Arguments
-  "ICN", # Use common import conventions
-  "RET", # Good return practices
-  "SIM", # Common simplification rules
-  "TID", # Some good import practices
-  "TC", # Enforce importing certain types in a TYPE_CHECKING block
-  "PTH", # Use pathlib instead of os.path
-  "NPY", # Some numpy-specific things
+  "A",  # Detect shadowed builtins
+  "F",  # Pyflakes rules
+  "W",  # PyCodeStyle warnings
+  "E",  # PyCodeStyle errors
+  "I",  # Sort imports properly
+  "N",  # Naming conventions
+  "UP",  # Warn if certain things can changed due to newer Python versions
+  "C4",  # Catch incorrect use of comprehensions, dict, list, etc
+  "FA",  # Enforce from __future__ import annotations
+  "ISC",  # Good use of string concatenation
+  "ARG",  # Unused Arguments
+  "ICN",  # Use common import conventions
+  "RET",  # Good return practices
+  "SIM",  # Common simplification rules
+  "TID",  # Some good import practices
+  "TC",  # Enforce importing certain types in a TYPE_CHECKING block
+  "PTH",  # Use pathlib instead of os.path
+  "NPY",  # Some numpy-specific things
 ]
 
 [tool.uv]
@@ -86,6 +88,6 @@ name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
-# zuban sys.path finding, for python lsp
+# zuban sys.path finding, for lsp
 [tool.zuban]
 mypy_path = ["python"]
