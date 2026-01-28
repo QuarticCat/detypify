@@ -174,7 +174,9 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
 
     canvas = np.zeros((output_size, output_size), dtype=np.uint8)
 
-    thickness_factor = 30  # increase for better feature extraction
+    # decrease to increase the stroke thinkness
+    # thinker stroke for better feature extraction
+    thickness_factor = 25
     thickness = max(1, output_size // thickness_factor)
     cv2.polylines(
         canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness
@@ -589,7 +591,6 @@ def create_dataset(
             )
             dataset.push_to_hub(
                 repo_id=DATASET_REPO,
-                config_name=dataset_name,
                 num_proc=process_cpu_count() if process_cpu_count() else 1,
                 split=split,
             )

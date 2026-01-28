@@ -34,7 +34,13 @@ class TimmModel(L.LightningModule):
         image_size: int = IMG_SIZE,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(
+            "num_classes",
+            "warmup_rounds",
+            "total_rounds",
+            "image_size",
+            "learning_rate",
+        )
         model = create_model(
             model_name,
             num_classes=num_classes,
@@ -44,9 +50,12 @@ class TimmModel(L.LightningModule):
             drop_rate=0.0,
             exportable=True,
         )
-        model.default_cfg["input_size"] = (1, image_size, image_size)  # type: ignore
-        model.default_cfg["test_input_size"] = (1, image_size, image_size)  # type: ignore
-        self.model = model
+        self.model = model.to(memory_format=torch.channels_last)  # type: ignore
+        self.model_opt = torch.compile(
+            self.model,
+            options={"triton.cudagraphs": True, "shape_padding": True},
+            dynamic=False,
+        )  # type: ignore
 
         self.criterion = nn.CrossEntropyLoss()
 
@@ -56,23 +65,15 @@ class TimmModel(L.LightningModule):
         )
         self.warm_up_epochs = warmup_rounds
         self.total_epochs = total_rounds
-        self.export = use_compile
+        self.use_compile = use_compile
         self.learning_rate = learning_rate
         self.model_name: str = model_name
         self.example_input_array: torch.Tensor = torch.randn(
             1, 1, image_size, image_size
         )
 
-    def configure_model(self):
-        self.model = self.model.to(memory_format=torch.channels_last)  # type: ignore
-        self.model_opt = torch.compile(
-            self.model,
-            options={"triton.cudagraphs": True, "shape_padding": True},
-            dynamic=False,
-        )  # type: ignore
-
     def forward(self, x):
-        if self.export:
+        if self.use_compile:
             return self.model_opt(x)
         return self.model(x)
 
@@ -133,7 +134,7 @@ class TimmModel(L.LightningModule):
 
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=1e-3,
+            start_factor=1e-4,
             end_factor=1.0,
             total_iters=self.warm_up_epochs,
         )
@@ -159,9 +160,21 @@ class TimmModel(L.LightningModule):
 
 
 class CNNModel(L.LightningModule):
-    def __init__(self, num_classes: int, image_size: int, export: bool = False):
+    def __init__(
+        self,
+        num_classes: int,
+        image_size: int,
+        use_compile: bool = False,
+        learning_rate: float = 1e-3,
+    ):
         super().__init__()
-        self.features = nn.Sequential(
+        self.save_hyperparameters(
+            "num_classes",
+            "image_size",
+            "learning_rate",
+        )
+
+        features = nn.Sequential(
             nn.Conv2d(1, 16, 5),
             nn.BatchNorm2d(16),
             nn.ReLU(),
@@ -171,30 +184,21 @@ class CNNModel(L.LightningModule):
             nn.ReLU(),
             nn.MaxPool2d(2),
         )
-        self.avgpool = nn.AdaptiveAvgPool2d((4, 4))
-        self.classifier = nn.Sequential(
+        avgpool = nn.AdaptiveAvgPool2d((4, 4))
+        classifier = nn.Sequential(
             nn.Flatten(),
             nn.Linear(32 * 4 * 4, 512),
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(512, num_classes),
         )
-        self.criterion = nn.CrossEntropyLoss()
-        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        self.val_acc_top3 = Accuracy(
-            task="multiclass", num_classes=num_classes, top_k=3
-        )
-        self.export = export
-        self.example_input_array: torch.Tensor = torch.randn(
-            1, 1, image_size, image_size
-        )
 
-    def configure_model(self):
         # Change model to channel last format for speed
-        self.features = self.features.to(memory_format=torch.channels_last)  # type: ignore
-        self.avgpool = self.avgpool.to(memory_format=torch.channels_last)  # type: ignore
-        self.classifier = self.classifier.to(memory_format=torch.channels_last)  # type: ignore
+        self.features = features.to(memory_format=torch.channels_last)  # type: ignore
+        self.avgpool = avgpool.to(memory_format=torch.channels_last)  # type: ignore
+        self.classifier = classifier.to(memory_format=torch.channels_last)  # type: ignore
 
+        # Use torch.compile sometimes have problems with export, so add opt for this
         self.features_opt = torch.compile(
             self.features,
             options={"triton.cudagraphs": True, "shape_padding": True},
@@ -206,15 +210,26 @@ class CNNModel(L.LightningModule):
             dynamic=False,
         )  # type: ignore
 
+        self.criterion = nn.CrossEntropyLoss()
+        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.val_acc_top3 = Accuracy(
+            task="multiclass", num_classes=num_classes, top_k=3
+        )
+        self.use_compile = use_compile
+        self.example_input_array: torch.Tensor = torch.randn(
+            1, 1, image_size, image_size
+        )
+        self.learning_rate = learning_rate
+
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)  # type: ignore
-        if self.export:
-            x = self.features(x)
+        if self.use_compile:
+            x = self.features_opt(x)
             x = self.avgpool(x)
-            return self.classifier(x)
-        x = self.features_opt(x)
+            return self.classifier_opt(x)
+        x = self.features(x)
         x = self.avgpool(x)
-        return self.classifier_opt(x)
+        return self.classifier(x)
 
     def training_step(self, batch):
         x, y = batch["image"], batch["label"]
@@ -239,7 +254,7 @@ class CNNModel(L.LightningModule):
         self.log("val_top3", self.val_acc_top3(pred, y))
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters())
+        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
         return {
             "optimizer": optimizer,
