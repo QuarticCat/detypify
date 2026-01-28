@@ -174,7 +174,8 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
 
     canvas = np.zeros((output_size, output_size), dtype=np.uint8)
 
-    thickness = max(1, output_size // 60)
+    thickness_factor = 30  # increase for better feature extraction
+    thickness = max(1, output_size // thickness_factor)
     cv2.polylines(
         canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness
     )
