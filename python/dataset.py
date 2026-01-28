@@ -30,7 +30,6 @@ class MathSymbolDataModule(LightningDataModule):
             v2.RandomAffine(
                 degrees=0,  # type: ignore
                 translate=(0.1, 0.1),
-                scale=(0.8, 1.2),
                 shear=10,
             ),
         ]
@@ -41,17 +40,18 @@ class MathSymbolDataModule(LightningDataModule):
         # Eval: Same base + normalize, BUT NO ROTATION/SHIFT
         self.eval_transform = v2.Compose(base_transforms)
 
+        self.image_size = image_size
+
     def prepare_data(self):
         load_dataset(DATASET_REPO)
 
     def setup(self, stage: str | None = None):
-        # We need classes for MixUp/CutMix and for SymbolDataset
-        # Load the dataset (cached) to get info
         dataset = load_dataset(DATASET_REPO)
 
         def preprocess(batch):
             batch["image"] = [
-                rasterize_strokes(strokes) for strokes in batch["strokes"]
+                rasterize_strokes(strokes, self.image_size)
+                for strokes in batch["strokes"]
             ]
             return batch
 
