@@ -95,12 +95,11 @@ if __name__ == "__main__":
         model.use_compile = False
         # NOTE: don't use fast_dev_run=True with scale batch and lr finder
         if device_count() == 1:
+            suggested_batch_size = tuner.scale_batch_size(
+                model, datamodule=dm, init_val=init_batch_size
+            )
             batch_size = (
-                tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
-                if tuner.scale_batch_size(
-                    model, datamodule=dm, init_val=init_batch_size
-                )
-                else init_batch_size
+                suggested_batch_size if suggested_batch_size else init_batch_size
             )
         print(f"The batch size is {batch_size}.")
         lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-6)
