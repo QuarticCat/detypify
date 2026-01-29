@@ -472,6 +472,7 @@ def generate_infer_json(classes: set[str] | None = None) -> None:
     infer_path.parent.mkdir(parents=True, exist_ok=True)
     contrib_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # lazy write
     if not infer_path.exists():
         infer = []
         if classes:
@@ -718,21 +719,24 @@ def create_dataset(
 
 
 if __name__ == "__main__":
-    DATASET_ROOT.mkdir(exist_ok=True)
+    convert_data = True
+    gen_info = True
 
-    # Get symbol info.
-    typ_sym_info = get_typst_symbol_info()
-    name_to_chr = {x.names[0]: x.char for x in typ_sym_info}
+    if gen_info:
+        # Get symbol info.
+        typ_sym_info = get_typst_symbol_info()
+        name_to_chr = {x.names[0]: x.char for x in typ_sym_info}
+        symbols_info_path = DATASET_ROOT / "symbols.json"
+        if not symbols_info_path.exists():
+            with symbols_info_path.open("wb") as f:
+                f.write(json.encode(typ_sym_info))
 
-    symbols_info_path = DATASET_ROOT / "symbols.json"
-    if not symbols_info_path.exists():
-        with symbols_info_path.open("wb") as f:
-            f.write(json.encode(typ_sym_info))
+    if convert_data:
+        dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
+        # WIP
+        if USE_CONTRIB:
+            dataset_names.append("contrib")
+        create_dataset(dataset_names=dataset_names)
 
-    dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
-    # WIP
-    if USE_CONTRIB:
-        dataset_names.append("contrib")
-    create_dataset(dataset_names=dataset_names)
-
-    generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
+    if gen_info:
+        generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
