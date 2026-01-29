@@ -13,9 +13,7 @@ type ModelName = Literal[
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
     "mobilenetv4_conv_small",
-    "efficientnet_b1",
     "mobilenetv4_conv_medium",
-    "mobilenetv4_conv_aa_medium",
     "mobilenetv4_hybrid_medium_075",
     "mobilenetv4_hybrid_medium",
 ]
