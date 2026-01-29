@@ -13,7 +13,7 @@ class MathSymbolDataModule(LightningDataModule):
         self,
         image_size: int,
         batch_size: int = 64,
-        num_workers: int = process_cpu_count(),
+        num_workers: int = min(process_cpu_count(), 12),
     ):
         super().__init__()
         self.batch_size = batch_size

@@ -1,7 +1,6 @@
 """Train the model."""
 
 import argparse
-from os import process_cpu_count
 from pathlib import Path
 from typing import cast
 
@@ -34,7 +33,7 @@ if __name__ == "__main__":
         "--init-batch-size", type=int, default=64, help="Initial batch size"
     )
     parser.add_argument(
-        "--warmup-epochs", type=int, default=3, help="Number of warmup epochs"
+        "--warmup-epochs", type=int, default=5, help="Number of warmup epochs"
     )
     parser.add_argument(
         "--total-epochs", type=int, default=35, help="Total number of epochs"
@@ -79,6 +78,13 @@ if __name__ == "__main__":
             "mobilenetv4_conv_small",
         ],
         help="List of timm models to train",
+        choices=[
+            "mobilenetv4_conv_small_035",
+            "mobilenetv4_conv_small_050",
+            "mobilenetv4_conv_small",
+            "mobilenetv4_conv_medium",
+            "mobilenetv4_hybrid_medium_075",
+        ],
     )
 
     args = parser.parse_args()
@@ -87,15 +93,15 @@ if __name__ == "__main__":
     out_dir = Path(args.out_dir)
     debug: bool = args.debug
     dev_run: bool = args.dev_run
-    init_batch_size = args.init_batch_size
-    warmup_epochs = args.warmup_epochs
-    total_epochs = args.total_epochs
-    image_size = args.image_size
+    init_batch_size: int = args.init_batch_size
+    warmup_epochs: int = args.warmup_epochs
+    total_epochs: int = args.total_epochs
+    image_size: int = args.image_size
     find_batch_size = not args.no_find_batch_size
     use_ema = debug and not args.no_ema
-    ema_decay = args.ema_decay
-    ema_start_step = args.ema_start_step
-    amp_precision = args.amp_precision
+    ema_decay: int = args.ema_decay
+    ema_start_step: int = args.ema_start_step
+    amp_precision: int = args.amp_precision
     timm_model_list: list[ModelName] = args.timm_models
 
     classes: set[str] = get_dataset_classes(DATASET_REPO)
@@ -120,7 +126,6 @@ if __name__ == "__main__":
     # define data module
     dm = MathSymbolDataModule(
         batch_size=init_batch_size,
-        num_workers=min(12, process_cpu_count()),
         image_size=image_size,
     )
 
