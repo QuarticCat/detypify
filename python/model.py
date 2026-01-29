@@ -46,8 +46,7 @@ class TimmModel(L.LightningModule):
             num_classes=num_classes,
             in_chans=1,
             aa_layer="blurpc",
-            drop_path_rate=0.1,
-            drop_rate=0.0,
+            drop_rate=0.25,
             exportable=True,
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
@@ -103,10 +102,6 @@ class TimmModel(L.LightningModule):
         self.log("val_top3", self.val_acc_top3(pred, y))
 
     def configure_optimizers(self):
-        """
-        AdamW optimization with strictly enforced parameter grouping.
-        Paper specifies Weight Decay = 0.1 for weights, 0.0 for bias/norm.
-        """
         decay = []
         no_decay = []
         for name, param in self.named_parameters():
@@ -124,8 +119,8 @@ class TimmModel(L.LightningModule):
                 decay.append(param)
 
         optim_groups = [
-            {"params": decay, "weight_decay": 0.1},  # High decay for weights
-            {"params": no_decay, "weight_decay": 0.0},  # No decay for biases/norms
+            {"params": decay, "weight_decay": 0.06},
+            {"params": no_decay, "weight_decay": 0.0},
         ]
 
         optimizer = optim.AdamW(
@@ -189,7 +184,7 @@ class CNNModel(L.LightningModule):
             nn.Flatten(),
             nn.Linear(32 * 4 * 4, 512),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(),
             nn.Linear(512, num_classes),
         )
 
@@ -256,10 +251,12 @@ class CNNModel(L.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
+                "interval": "epoch",
                 "monitor": "val_loss",
             },
         }
