@@ -23,10 +23,15 @@ if __name__ == "__main__":
     # hyper params
     # use batch size scaler to adjust to your hardware
     init_batch_size = 32
-    warmup_epochs = 5
-    total_epochs = 30
-    # scale up may increase accuracy, other params should be changed accordingly.
-    image_size = 256
+    warmup_epochs = 3
+    total_epochs = 35
+    # scale up may increase model accuracy
+    # maybe more significant on mobilenet models
+    # ref data:
+    # | model | image size | top 1
+    # mobilenetv4_conv_small_035 | 256 | 87%
+    # mobilenetv4_conv_small_035 | 128 | 84%
+    image_size = 128
 
     classes: set[str] = set()
     dataset = load_dataset(DATASET_REPO)
@@ -37,16 +42,22 @@ if __name__ == "__main__":
     timm_model_list: list[ModelName] = [
         "mobilenetv4_conv_small_035",
         "mobilenetv4_conv_small_050",
+        "mobilenetv4_conv_small",
     ]
     models: list[CNNModel | TimmModel] = [
-        CNNModel(num_classes=len(classes), image_size=image_size),
+        CNNModel(
+            num_classes=len(classes),
+            image_size=image_size,
+            warmup_epochs=warmup_epochs,
+            total_epochs=total_epochs,
+        ),
     ]
     for model_name in timm_model_list:
         model = TimmModel(
             num_classes=len(classes),
             model_name=model_name,
-            warmup_rounds=warmup_epochs,
-            total_rounds=total_epochs,
+            warmup_epochs=warmup_epochs,
+            total_epochs=total_epochs,
             image_size=image_size,
         )
         models.append(model)
@@ -92,7 +103,7 @@ if __name__ == "__main__":
                 model, datamodule=dm, init_val=init_batch_size
             )
         print(f"The batch size is {batch_size}.")
-        lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=5e-5)
+        lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-6)
         fig = lr_finder.plot(suggest=True)  # type: ignore
         save_path = TRAIN_OUT_DIR / "lr_find" / f"{model_name}_{image_size}.svg"
         save_path.parent.mkdir(parents=True, exist_ok=True)
