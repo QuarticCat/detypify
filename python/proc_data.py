@@ -1,5 +1,6 @@
 """Preprocess training datasets, helping functions and related constants/types."""
 
+import argparse
 from concurrent.futures import ProcessPoolExecutor
 from functools import cache
 from os import process_cpu_count
@@ -85,12 +86,12 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
 
     import re
 
-    from bs4 import BeautifulSoup
-
     page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
     if not page_path.exists():
         urlretrieve("https://typst.app/docs/reference/symbols/sym/", page_path)
     with page_path.open() as f:
+        from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(f.read(), "lxml")
     sym_info = {}
 
@@ -719,8 +720,79 @@ def create_dataset(
 
 
 if __name__ == "__main__":
-    convert_data = True
-    gen_info = True
+    parser = argparse.ArgumentParser(
+        description="Preprocess datasets, generate metadata, and upload results."
+    )
+
+    default_dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
+    if USE_CONTRIB:
+        default_dataset_names.append("contrib")
+
+    parser.add_argument(
+        "--skip-convert-data",
+        action="store_true",
+        help="Do not construct or upload local datasets.",
+    )
+    parser.add_argument(
+        "--skip-gen-info",
+        action="store_true",
+        help="Skip writing symbol metadata and infer JSON files.",
+    )
+    parser.add_argument(
+        "--datasets",
+        "-d",
+        type=str,
+        nargs="+",
+        choices=["mathwriting", "detexify", "contrib"],
+        default=default_dataset_names,
+        help="Datasets to process when converting data.",
+    )
+    parser.add_argument(
+        "--include-contrib",
+        action="store_true",
+        help="Append the contrib dataset even if it was not listed explicitly.",
+    )
+    parser.add_argument(
+        "--no-upload",
+        action="store_true",
+        help="Store processed datasets locally instead of uploading to Hugging Face.",
+    )
+    parser.add_argument(
+        "--split-ratio",
+        nargs=3,
+        type=float,
+        metavar=("TRAIN", "TEST", "VAL"),
+        default=(0.8, 0.1, 0.1),
+        help="Train/test/val split ratios for the processed dataset.",
+    )
+    parser.add_argument(
+        "--split-parts",
+        action="store_true",
+        help="Write each split as multiple shards instead of a single file.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=2000,
+        help="Number of rows per shard when --split-parts is enabled.",
+    )
+    parser.add_argument(
+        "--file-format",
+        choices=["parquet", "vortex"],
+        default="parquet",
+        help="Output format when writing dataset shards locally.",
+    )
+
+    args: argparse.Namespace = parser.parse_args()
+
+    convert_data: bool = not args.skip_convert_data
+    gen_info: bool = not args.skip_gen_info
+    datasets_arg: list[DataSetName] = cast("list[DataSetName]", args.datasets)
+    dataset_names: list[DataSetName] = list(dict.fromkeys(datasets_arg))
+    if args.include_contrib and "contrib" not in dataset_names:
+        dataset_names.append("contrib")
+    if USE_CONTRIB and "contrib" not in dataset_names:
+        dataset_names.append("contrib")
 
     if gen_info:
         # Get symbol info.
@@ -732,11 +804,15 @@ if __name__ == "__main__":
                 f.write(json.encode(typ_sym_info))
 
     if convert_data:
-        dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
-        # WIP
-        if USE_CONTRIB:
-            dataset_names.append("contrib")
-        create_dataset(dataset_names=dataset_names)
+        split_ratio: tuple[float, float, float] = tuple(args.split_ratio)
+        create_dataset(
+            dataset_names=dataset_names,
+            upload=not args.no_upload,
+            split_ratio=split_ratio,
+            split_parts=args.split_parts,
+            batch_size=args.batch_size,
+            file_format=args.file_format,
+        )
 
     if gen_info:
         generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
