@@ -10,22 +10,23 @@ from lightning.pytorch.callbacks import EMAWeightAveraging, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from model import CNNModel, ModelName, TimmModel
-from proc_data import DATASET_REPO
 from torch import set_float32_matmul_precision
+from torch.cuda import device_count
 
+DATASET_REPO = "Cloud0310/detypify-datasets"
 TRAIN_OUT_DIR = Path("build/train")
-DEBUG = True
+DEBUG = False
 DEV_RUN = False
 
 
 if __name__ == "__main__":
     # hyper params
     # use batch size scaler to adjust to your hardware
-    init_batch_size = 256
-    warmup_epochs = 7
-    total_epochs = 40
+    init_batch_size = 32
+    warmup_epochs = 5
+    total_epochs = 30
     # scale up may increase accuracy, other params should be changed accordingly.
-    image_size = 128
+    image_size = 256
 
     classes: set[str] = set()
     dataset = load_dataset(DATASET_REPO)
@@ -36,7 +37,6 @@ if __name__ == "__main__":
     timm_model_list: list[ModelName] = [
         "mobilenetv4_conv_small_035",
         "mobilenetv4_conv_small_050",
-        "mobilenetv4_conv_small",
     ]
     models: list[CNNModel | TimmModel] = [
         CNNModel(num_classes=len(classes), image_size=image_size),
@@ -54,6 +54,7 @@ if __name__ == "__main__":
     # define data module
     dm = MathSymbolDataModule(
         batch_size=init_batch_size,
+        num_workers=8,
         image_size=image_size,
     )
 
@@ -74,15 +75,10 @@ if __name__ == "__main__":
             default_root_dir=TRAIN_OUT_DIR,
             logger=logger,
             fast_dev_run=DEV_RUN,
-            precision="bf16-mixed",
-            gradient_clip_val=0.1,
-            gradient_clip_algorithm="norm",
-            accumulate_grad_batches=16,
+            precision="16-mixed",
             callbacks=[
-                EMAWeightAveraging(decay=0.9998, update_starting_at_step=100),
-                LearningRateMonitor(
-                    logging_interval="epoch", log_momentum=True, log_weight_decay=True
-                ),
+                EMAWeightAveraging(decay=0.99, update_starting_at_step=1200),
+                LearningRateMonitor(logging_interval="epoch"),
             ],
         )
 
@@ -91,13 +87,16 @@ if __name__ == "__main__":
         # disable compiling as it required fixed batch size
         model.use_compile = False
         # NOTE: don't use fast_dev_run=True with scale batch and lr finder
-        tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
-        lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-5)
-        if DEBUG:
-            fig = lr_finder.plot(suggest=True)  # type: ignore
-            save_path = TRAIN_OUT_DIR / "lr_find" / f"{model_name}_{image_size}.svg"
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(save_path)  # type: ignore
+        if device_count() == 1:
+            batch_size = tuner.scale_batch_size(
+                model, datamodule=dm, init_val=init_batch_size
+            )
+        print(f"The batch size is {batch_size}.")
+        lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=5e-5)
+        fig = lr_finder.plot(suggest=True)  # type: ignore
+        save_path = TRAIN_OUT_DIR / "lr_find" / f"{model_name}_{image_size}.svg"
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path)  # type: ignore
         model.hparams.learning_rate = lr_finder.suggestion()  # type: ignore
 
         # training
