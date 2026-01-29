@@ -3,7 +3,7 @@ from os import process_cpu_count
 import torch
 from datasets import Array2D, Value, load_dataset
 from lightning import LightningDataModule
-from proc_data import DATASET_REPO, IMG_SIZE, rasterize_strokes
+from proc_data import DATASET_REPO, rasterize_strokes
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
@@ -11,9 +11,9 @@ from torchvision.transforms import v2
 class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
+        image_size: int,
         batch_size: int = 64,
         num_workers: int = process_cpu_count(),
-        image_size: int = IMG_SIZE,
     ):
         super().__init__()
         self.batch_size = batch_size

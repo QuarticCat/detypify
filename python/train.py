@@ -4,16 +4,15 @@ from pathlib import Path
 from typing import cast
 
 from dataset import MathSymbolDataModule
-from datasets import load_dataset
 from lightning import Trainer
 from lightning.pytorch.callbacks import EMAWeightAveraging, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner import Tuner
 from model import CNNModel, ModelName, TimmModel
+from proc_data import DATASET_REPO, get_dataset_classes
 from torch import set_float32_matmul_precision
 from torch.cuda import device_count
 
-DATASET_REPO = "Cloud0310/detypify-datasets"
 TRAIN_OUT_DIR = Path("build/train")
 DEBUG = False
 DEV_RUN = False
@@ -33,10 +32,7 @@ if __name__ == "__main__":
     # mobilenetv4_conv_small_035 | 128 | 84%
     image_size = 128
 
-    classes: set[str] = set()
-    dataset = load_dataset(DATASET_REPO)
-    for split in dataset:
-        classes.update(dataset[split].features["label"].names)
+    classes: set[str] = get_dataset_classes(DATASET_REPO)
 
     # define models
     timm_model_list: list[ModelName] = [
@@ -99,8 +95,12 @@ if __name__ == "__main__":
         model.use_compile = False
         # NOTE: don't use fast_dev_run=True with scale batch and lr finder
         if device_count() == 1:
-            batch_size = tuner.scale_batch_size(
-                model, datamodule=dm, init_val=init_batch_size
+            batch_size = (
+                tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
+                if tuner.scale_batch_size(
+                    model, datamodule=dm, init_val=init_batch_size
+                )
+                else init_batch_size
             )
         print(f"The batch size is {batch_size}.")
         lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-6)
@@ -127,32 +127,3 @@ if __name__ == "__main__":
                 dynamo=True,
                 external_data=False,
             )
-
-    # TODO: migrate to `proc_data.py`
-
-    # Generate JSON for the infer page.
-    # infer_path = TRAIN_OUT_DIR / "infer.json"
-    # contrib_path = TRAIN_OUT_DIR / "contrib.json"
-    # with (DATASET_ROOT / "symbols.json").open("rb") as f:
-    #     sym_info = msgspec.json.decode(f.read(), type=list[TypstSymInfo])
-    # chr_to_sym = {s.char: s for s in sym_info}
-    # if not infer_path.exists():
-    #     infer = []
-    #     for c in classes:
-    #         sym = chr_to_sym[c]
-    #         info = {"char": sym.char, "names": sym.names}
-    #         if sym.markup_shorthand and sym.math_shorthand:
-    #             info["shorthand"] = sym.markup_shorthand
-    #         elif sym.markup_shorthand:
-    #             info["markupShorthand"] = sym.markup_shorthand
-    #         elif sym.math_shorthand:
-    #             info["mathShorthand"] = sym.math_shorthand
-    #             infer.append(info)
-    #     with infer_path.open("wb") as f:
-    #         f.write(msgspec.json.encode(infer))
-
-    # # Generate JSON for the contrib page.
-    # if not contrib_path.exists():
-    #     contrib = {n: s.char for s in sym_info for n in s.names}
-    #     with contrib_path.open("wb") as f:
-    #         f.write(msgspec.json.encode(contrib))

@@ -1,8 +1,5 @@
 """Preprocess training datasets, helping functions and related constants/types."""
 
-import math
-import re
-import unicodedata
 from concurrent.futures import ProcessPoolExecutor
 from functools import cache
 from os import process_cpu_count
@@ -11,14 +8,7 @@ from shutil import rmtree as rmdir
 from typing import Literal, cast
 from urllib.request import urlretrieve
 
-import cv2
-import msgspec
-import numpy as np
-import polars as pl
-from bs4 import BeautifulSoup
-from datasets import ClassLabel, Dataset, DatasetInfo, Features, LargeList, List, Value
-from lxml import etree
-from msgspec import json
+from msgspec import Struct, json
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -44,7 +34,7 @@ TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
 
 
 # Structs
-class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+class TypstSymInfo(Struct, kw_only=True, omit_defaults=True):
     char: str
     names: list[str]
     latex_name: str | None = None
@@ -54,12 +44,12 @@ class TypstSymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     alternates: list[str] | None = None
 
 
-class MathWritingDatasetInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+class MathWritingDatasetInfo(Struct, kw_only=True, omit_defaults=True):
     name: str
     unmapped: set[str] | None = None
 
 
-class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
+class DetexifySymInfo(Struct, kw_only=True, omit_defaults=True):
     command: str
     # package: str | None = None
     # mathmode: bool
@@ -68,7 +58,7 @@ class DetexifySymInfo(msgspec.Struct, kw_only=True, omit_defaults=True):
     # css_class: str
 
 
-class MathSymbolSample(msgspec.Struct):
+class MathSymbolSample(Struct):
     label: str
     symbol: Strokes
 
@@ -77,7 +67,9 @@ class MathSymbolSample(msgspec.Struct):
 
 
 def is_invisible(c: str) -> bool:
-    return unicodedata.category(c) in ["Zs", "Cc", "Cf"]
+    from unicodedata import category
+
+    return category(c) in ["Zs", "Cc", "Cf"]
 
 
 @cache
@@ -91,6 +83,10 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     Returns:
         A list of `TypstSymInfo` objects containing details for each symbol.
     """
+
+    import re
+
+    from bs4 import BeautifulSoup
 
     page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
     if not page_path.exists():
@@ -130,7 +126,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     return list(sym_info.values())
 
 
-def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarray:
+def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE):
     """
     Normalizes vector strokes and rasterizes them into a binary NumPy array.
 
@@ -142,6 +138,10 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
         np.ndarray: A (size, size) uint8 array.
                     Background is 0 (black), Strokes are 255 (white).
     """
+
+    import cv2
+    import numpy as np
+
     if not strokes:
         return np.zeros((output_size, output_size), dtype=np.uint8)
 
@@ -185,26 +185,15 @@ def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE) -> np.ndarr
     return canvas
 
 
-def get_dataset_info(dataset_name: str) -> MathWritingDatasetInfo:
-    """Load dataset metadata from the info JSON file.
+@cache
+def get_dataset_classes(dataset: str) -> set[str]:
+    from datasets import load_dataset
 
-    Args:
-        dataset_name: The name of the dataset (e.g., "detexify").
-
-    Returns:
-        A `DataSetInfo` object containing the metadata.
-
-    Raises:
-        FileNotFoundError: If the info file does not exist.
-    """
-    dataset_path = DATASET_ROOT / dataset_name
-    info_path = dataset_path / "dataset_info.json"
-
-    if not info_path.exists():
-        raise FileNotFoundError(f"Could not find dataset info at {info_path}")
-
-    with info_path.open("rb") as f:
-        return msgspec.json.decode(f.read(), type=MathWritingDatasetInfo)
+    classes: set[str] = set()
+    dataset = load_dataset(dataset)  # type: ignore
+    for split in dataset:
+        classes.update(dataset[split].features["label"].names)  # type: ignore
+    return classes
 
 
 @cache
@@ -224,7 +213,7 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
 
     with TEX_TO_TYP_PATH.open("rb") as f:
-        manual_mapping = msgspec.json.decode(f.read(), type=dict[str, str])
+        manual_mapping = json.decode(f.read(), type=dict[str, str])
 
     tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
     return tex_to_typ
@@ -232,6 +221,8 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
 
 @cache
 def get_xml_parser():
+    from lxml import etree
+
     return etree.XMLParser()
 
 
@@ -246,7 +237,7 @@ def map_sym() -> dict[str, TypstSymInfo]:
         A dictionary mapping Detexify IDs to Typst symbol info.
     """
     with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
-        tex_sym_info = msgspec.json.decode(f.read(), type=list[DetexifySymInfo])
+        tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
     tex_to_typ = map_tex_typ()
     return {
         x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
@@ -266,6 +257,9 @@ def parse_inkml_symbol(
         A string (the TeX label) if the label could not be mapped to a Typst symbol.
         None if no label is found.
     """
+
+    from lxml import etree
+
     # parsing
     root = etree.parse(filepath, parser=get_xml_parser()).getroot()
     namespace = {"ink": "http://www.w3.org/2003/InkML"}
@@ -300,7 +294,7 @@ def parse_inkml_symbol(
 
 
 # Dataset creating functions
-def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
+def construct_detexify_df():
     """Constructs a Polars LazyFrame for the Detexify dataset.
 
     Reads the raw JSON data, maps the keys to Typst symbols, filters out
@@ -311,11 +305,16 @@ def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
             - The processed LazyFrame with 'label' and 'strokes' columns.
             - A set of unmapped keys (commands that couldn't be mapped to Typst).
     """
+
+    import polars as pl
+
+    pl.Config.set_engine_affinity("streaming")
+
     key_to_typ = map_sym()
     with (DETEXIFY_DATA_PATH / "detexify.json").open("rb") as f:
         # Schema: list of (key, strokes)
         raw_strokes_t = list[tuple[str, list[list[tuple[float, float, float]]]]]
-        data = msgspec.json.decode(f.read(), type=raw_strokes_t)
+        data = json.decode(f.read(), type=raw_strokes_t)
 
     raw_data_schema = {
         "key": pl.String,
@@ -337,7 +336,7 @@ def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
     processed_lf = raw_lf.join(mapping_lf, on="key", how="left")
 
     # Extract unmapped keys before filtering
-    unmapped_keys = set(
+    unmapped_keys: set[str] = set(
         processed_lf.filter(pl.col("label").is_null())
         .select("key")
         .unique()
@@ -364,7 +363,7 @@ def construct_detexify_df() -> tuple[pl.LazyFrame, set[str] | None]:
     return final_lf, unmapped_keys
 
 
-def construct_mathwriting_df() -> tuple[pl.LazyFrame, set[str] | None]:
+def construct_mathwriting_df():
     """Constructs a Polars LazyFrame for the MathWriting dataset.
 
     Parses InkML files in parallel to extract strokes and labels.
@@ -373,6 +372,9 @@ def construct_mathwriting_df() -> tuple[pl.LazyFrame, set[str] | None]:
             - The processed LazyFrame with 'label' and 'strokes' columns.
             - A set of unmapped labels (TeX commands that couldn't be mapped).
     """
+
+    import polars as pl
+
     label_acc = []
     data_acc = []
     unmapped: set[str] = set()
@@ -408,11 +410,13 @@ def construct_mathwriting_df() -> tuple[pl.LazyFrame, set[str] | None]:
 
 
 # WIP
-def construct_contribute_df() -> pl.LazyFrame:
+def construct_contribute_df():
+    import polars as pl
+
     # 1. Load Data
     with CONTRIB_DATA.open("rb") as f:
         # Schema: list of dicts {sym: str, strokes: json_string}
-        data = msgspec.json.decode(f.read(), type=list[dict[str, str]])
+        data = json.decode(f.read(), type=list[dict[str, str]])
 
     typ_sym_info = get_typst_symbol_info()
     name_to_chr = {name: s.char for s in typ_sym_info for name in s.names}
@@ -431,7 +435,7 @@ def construct_contribute_df() -> pl.LazyFrame:
         # Decode strokes
         .with_columns(
             pl.col("strokes").map_elements(
-                msgspec.json.decode,
+                json.decode,
                 return_dtype=pl.List(pl.List(pl.Array(pl.Float32, 2))),
             )
         )
@@ -451,6 +455,56 @@ def construct_contribute_df() -> pl.LazyFrame:
         # 3. Drop empty samples
         .filter(pl.col("strokes").list.len() > 0)
     )
+
+
+def generate_infer_json(classes: set[str] | None = None) -> None:
+    """Generate JSON files for the infer page and contrib page.
+
+    Args:
+        classes: Optional set of character classes to generate infer.json for.
+                 If None, generates for all available symbols.
+    """
+    sym_info = get_typst_symbol_info()
+    chr_to_sym = {s.char: s for s in sym_info}
+
+    infer_path = DATASET_ROOT / "infer.json"
+    contrib_path = DATASET_ROOT / "contrib.json"
+
+    infer_path.parent.mkdir(parents=True, exist_ok=True)
+    contrib_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not infer_path.exists():
+        infer = []
+        if classes:
+            for c in classes:
+                if c not in chr_to_sym:
+                    continue
+                sym = chr_to_sym[c]
+                info = {"char": sym.char, "names": sym.names}
+                if sym.markup_shorthand and sym.math_shorthand:
+                    info["shorthand"] = sym.markup_shorthand
+                elif sym.markup_shorthand:
+                    info["markupShorthand"] = sym.markup_shorthand
+                elif sym.math_shorthand:
+                    info["mathShorthand"] = sym.math_shorthand
+                infer.append(info)
+        else:
+            for sym in sym_info:
+                info = {"char": sym.char, "names": sym.names}
+                if sym.markup_shorthand and sym.math_shorthand:
+                    info["shorthand"] = sym.markup_shorthand
+                elif sym.markup_shorthand:
+                    info["markupShorthand"] = sym.markup_shorthand
+                elif sym.math_shorthand:
+                    info["mathShorthand"] = sym.math_shorthand
+                infer.append(info)
+        with infer_path.open("wb") as f:
+            f.write(json.encode(infer))
+
+    if not contrib_path.exists():
+        contrib = {n: s.char for s in sym_info for n in s.names}
+        with contrib_path.open("wb") as f:
+            f.write(json.encode(contrib))
 
 
 def create_dataset(
@@ -475,6 +529,17 @@ def create_dataset(
             batch_size: The number of rows per shard.
             file_format: The output file format ("parquet" or "vortex").
     """
+
+    import polars as pl
+    from datasets import (
+        ClassLabel,
+        Dataset,
+        DatasetInfo,
+        Features,
+        LargeList,
+        List,
+        Value,
+    )
 
     print(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
@@ -584,7 +649,7 @@ def create_dataset(
 
             dataset_info = DatasetInfo(description=description)
             dataset = cast(
-                "Dataset",
+                Dataset,  # noqa
                 Dataset.from_polars(data_frame, info=dataset_info)
                 .map(encode_labels, batched=True)
                 .cast(features=global_features),
@@ -617,7 +682,7 @@ def create_dataset(
             if total_rows == 0:
                 return
 
-            num_shards = math.ceil(total_rows / batch_size)
+            num_shards = total_rows // batch_size
             pad_width = len(str(num_shards))
 
             print(
@@ -663,12 +728,12 @@ if __name__ == "__main__":
     symbols_info_path = DATASET_ROOT / "symbols.json"
     if not symbols_info_path.exists():
         with symbols_info_path.open("wb") as f:
-            f.write(msgspec.json.encode(typ_sym_info))
+            f.write(json.encode(typ_sym_info))
 
-    # Use streaming engine as default for less mem and speed
-    pl.Config.set_engine_affinity("streaming")
     dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
     # WIP
     if USE_CONTRIB:
         dataset_names.append("contrib")
     create_dataset(dataset_names=dataset_names)
+
+    generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
