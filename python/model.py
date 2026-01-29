@@ -27,17 +27,17 @@ class TimmModel(L.LightningModule):
         self,
         num_classes: int,
         model_name: ModelName,
+        total_epochs: int,
+        warmup_epochs: int = 5,
         learning_rate: float = 0.002,
-        warmup_rounds: int = 5,
-        total_rounds: int = 20,
         use_compile: bool = False,
         image_size: int = IMG_SIZE,
     ):
         super().__init__()
         self.save_hyperparameters(
             "num_classes",
-            "warmup_rounds",
-            "total_rounds",
+            "warmup_epochs",
+            "total_epochs",
             "image_size",
             "learning_rate",
         )
@@ -62,8 +62,8 @@ class TimmModel(L.LightningModule):
         self.val_acc_top3 = Accuracy(
             task="multiclass", num_classes=num_classes, top_k=3
         )
-        self.warm_up_epochs = warmup_rounds
-        self.total_epochs = total_rounds
+        self.warm_up_epochs = warmup_epochs
+        self.total_epochs = total_epochs
         self.use_compile = use_compile
         self.learning_rate = learning_rate
         self.model_name: str = model_name
@@ -159,6 +159,8 @@ class CNNModel(L.LightningModule):
         self,
         num_classes: int,
         image_size: int,
+        total_epochs: int,
+        warmup_epochs: int = 5,
         use_compile: bool = False,
         learning_rate: float = 1e-3,
     ):
@@ -167,6 +169,8 @@ class CNNModel(L.LightningModule):
             "num_classes",
             "image_size",
             "learning_rate",
+            "total_epochs",
+            "warmup_epochs",
         )
 
         features = nn.Sequential(
@@ -184,7 +188,7 @@ class CNNModel(L.LightningModule):
             nn.Flatten(),
             nn.Linear(32 * 4 * 4, 512),
             nn.ReLU(),
-            nn.Dropout(),
+            nn.Dropout(0.25),
             nn.Linear(512, num_classes),
         )
 
@@ -215,6 +219,8 @@ class CNNModel(L.LightningModule):
             1, 1, image_size, image_size
         )
         self.learning_rate = learning_rate
+        self.total_epoches = total_epochs
+        self.warm_up_epochs = warmup_epochs
 
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)  # type: ignore
@@ -249,8 +255,47 @@ class CNNModel(L.LightningModule):
         self.log("val_top3", self.val_acc_top3(pred, y))
 
     def configure_optimizers(self):
-        optimizer = optim.AdamW(self.parameters(), lr=self.learning_rate)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
+        decay = []
+        no_decay = []
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue
+            # Check for bias, norm, or batchnorm layers to exclude from decay
+            if (
+                param.ndim <= 1
+                or name.endswith(".bias")
+                or "norm" in name
+                or "bn" in name
+            ):
+                no_decay.append(param)
+            else:
+                decay.append(param)
+
+        optim_groups = [
+            {"params": decay, "weight_decay": 0.06},
+            {"params": no_decay, "weight_decay": 0.0},
+        ]
+
+        optimizer = optim.AdamW(
+            optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7
+        )
+
+        warmup_scheduler = LinearLR(
+            optimizer,
+            start_factor=1e-4,
+            end_factor=1.0,
+            total_iters=self.warm_up_epochs,
+        )
+
+        decay_scheduler = CosineAnnealingLR(
+            optimizer, T_max=(self.total_epoches - self.warm_up_epochs), eta_min=1e-6
+        )
+
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, decay_scheduler],
+            milestones=[self.warm_up_epochs],
+        )
 
         return {
             "optimizer": optimizer,
