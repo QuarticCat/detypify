@@ -1,5 +1,6 @@
 """Train the model."""
 
+import argparse
 from os import process_cpu_count
 from pathlib import Path
 from typing import cast
@@ -8,50 +9,94 @@ from dataset import MathSymbolDataModule
 from lightning import Trainer
 from lightning.pytorch.callbacks import EMAWeightAveraging, LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.tuner import Tuner
+from lightning.pytorch.tuner.tuning import Tuner
 from model import CNNModel, ModelName, TimmModel
 from proc_data import DATASET_REPO, get_dataset_classes
 from torch import set_float32_matmul_precision
 from torch.cuda import device_count
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train the model.")
+
     # misc config
-    out_dir = Path("build/train")
-    debug: bool = False
-    dev_run: bool = False  # valid only when debug is True
+    parser.add_argument(
+        "--out-dir", type=str, default="build/train", help="Output directory"
+    )
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument(
+        "--dev-run",
+        action="store_true",
+        help="Fast dev run (valid only when debug is True)",
+    )
 
     # hyper params
-    # use batch size scaler (only single card is supported) to adjust to your hardware
-    init_batch_size = 64
-    warmup_epochs = 3
-    total_epochs = 35
+    parser.add_argument(
+        "--init-batch-size", type=int, default=64, help="Initial batch size"
+    )
+    parser.add_argument(
+        "--warmup-epochs", type=int, default=3, help="Number of warmup epochs"
+    )
+    parser.add_argument(
+        "--total-epochs", type=int, default=35, help="Total number of epochs"
+    )
+    parser.add_argument(
+        "--image-size", type=int, default=128, help="Image size (e.g., 128, 256)"
+    )
 
-    # NOTE: scale up image size may increase model accuracy
-    # maybe more significant on mobilenetv4 models
-    # ref data:
-    # | model | image size | top 1
-    # mobilenetv4_conv_small_035 | 256 | 87%
-    # mobilenetv4_conv_small_035 | 128 | 84%
-    image_size = 128
+    # training options
+    parser.add_argument(
+        "--no-find-batch-size",
+        action="store_true",
+        help="Disable automatic batch size finding",
+    )
+    parser.add_argument(
+        "--no-ema",
+        action="store_true",
+        help="Disable EMA weight averaging \
+            (default enabled, disabled when debug is True)",
+    )
+    parser.add_argument("--ema-decay", type=float, default=0.99, help="EMA decay rate")
+    parser.add_argument(
+        "--ema-start-step", type=int, default=1200, help="Step to start EMA"
+    )
 
-    find_batch_size = True
-    use_ema = True
-    ema_decay = 0.99
-    ema_start_step = 1200
+    # precision
+    parser.add_argument(
+        "--amp-precision",
+        type=str,
+        default="16-mixed",
+        help="Precision: 64, 32, 16-mixed, bf16-mixed",
+    )
 
-    # precision:
-    # Double precision (64, '64' or '64-true'), full precision (32, '32' or '32-true'),
-    # 16bit mixed precision (16, '16', '16-mixed')
-    # or bfloat16 mixed precision ('bf16', 'bf16-mixed').
-    # Can be used on CPU, GPU, TPUs, or HPUs.
-    amp_precision = "16-mixed"
+    # models
+    parser.add_argument(
+        "--timm-models",
+        type=str,
+        nargs="+",
+        default=[
+            "mobilenetv4_conv_small_035",
+            "mobilenetv4_conv_small_050",
+            "mobilenetv4_conv_small",
+        ],
+        help="List of timm models to train",
+    )
 
-    # models to be trainned
-    timm_model_list: list[ModelName] = [
-        "mobilenetv4_conv_small_035",
-        "mobilenetv4_conv_small_050",
-        "mobilenetv4_conv_small",
-    ]
+    args = parser.parse_args()
+
+    # Convert args to variables
+    out_dir = Path(args.out_dir)
+    debug: bool = args.debug
+    dev_run: bool = args.dev_run
+    init_batch_size = args.init_batch_size
+    warmup_epochs = args.warmup_epochs
+    total_epochs = args.total_epochs
+    image_size = args.image_size
+    find_batch_size = not args.no_find_batch_size
+    use_ema = debug and not args.no_ema
+    ema_decay = args.ema_decay
+    ema_start_step = args.ema_start_step
+    amp_precision = args.amp_precision
+    timm_model_list: list[ModelName] = args.timm_models
 
     classes: set[str] = get_dataset_classes(DATASET_REPO)
     models: list[CNNModel | TimmModel] = [
@@ -112,6 +157,7 @@ if __name__ == "__main__":
         # disable compiling as it required fixed batch size
         model.use_compile = False
         # NOTE: don't use fast_dev_run=True with scale batch and lr finder
+        batch_size = init_batch_size
         if not debug and device_count() == 1 and find_batch_size:
             suggested_batch_size = tuner.scale_batch_size(
                 model, datamodule=dm, init_val=init_batch_size
