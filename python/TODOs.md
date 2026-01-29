@@ -6,3 +6,4 @@
 4. [x] Adding arg parser for `train.py`
 5. [x] Fix dataset's `__getitem__`
 6. [ ] Remove `proc_font.py` (also `review_contrib.py`?) @QuaticCat
+7. [ ] Add a custom validation callback hook to visualize wrong guesses.
