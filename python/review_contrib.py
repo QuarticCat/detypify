@@ -4,9 +4,9 @@ import shutil
 from pathlib import Path
 
 import cv2
-import msgspec
+from msgspec import json
 from PIL import Image, ImageDraw, ImageFont
-from proc_data import IMG_SIZE, get_typst_symbol_info, rasterize_strokes
+from proc_data import get_typst_symbol_info, rasterize_strokes
 
 OUT_DIR = Path("build/contrib")
 REF_SIZE = 100  # px
@@ -19,6 +19,7 @@ def bold(s: str) -> str:
 if __name__ == "__main__":
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     OUT_DIR.mkdir(exist_ok=True)
+    img_size = 256
 
     cmd = "bunx wrangler d1 execute detypify --remote \
                 --command='SELECT * FROM samples' --json > build/dataset.json"
@@ -27,13 +28,13 @@ if __name__ == "__main__":
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
     with Path("build/dataset.json").open("rb") as f:
-        samples = msgspec.json.decode(f.read())[0]["results"]
+        samples = json.decode(f.read())[0]["results"]
 
     print("\n### Generating images...")
     name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
-        img = rasterize_strokes(msgspec.json.decode(strokes), IMG_SIZE)
+        img = rasterize_strokes(json.decode(strokes), img_size)
         cv2.imwrite(f"{OUT_DIR}/{sym}-{id_}-{token}.png", img)
 
         if not Path(f"{OUT_DIR}/{sym}-0-0.png").exists():

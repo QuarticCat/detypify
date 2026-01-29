@@ -2,7 +2,6 @@ from typing import Literal
 
 import lightning as L  # noqa
 import torch
-from proc_data import IMG_SIZE
 from timm import create_model
 from torch import nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
@@ -28,10 +27,10 @@ class TimmModel(L.LightningModule):
         num_classes: int,
         model_name: ModelName,
         total_epochs: int,
+        image_size: int,
         warmup_epochs: int = 5,
         learning_rate: float = 0.002,
         use_compile: bool = False,
-        image_size: int = IMG_SIZE,
     ):
         super().__init__()
         self.save_hyperparameters(

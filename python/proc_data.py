@@ -28,7 +28,6 @@ CONTRIB_DATA = Path("build/dataset.json")
 DATASET_REPO = "Cloud0310/detypify-datasets"
 UPLOAD = True
 # Processing
-IMG_SIZE = 224  # px
 # Extra latex to typst mapping.
 TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
 
@@ -126,7 +125,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     return list(sym_info.values())
 
 
-def rasterize_strokes(strokes: Strokes, output_size: int = IMG_SIZE):
+def rasterize_strokes(strokes: Strokes, output_size: int):
     """
     Normalizes vector strokes and rasterizes them into a binary NumPy array.
 
