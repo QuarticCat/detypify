@@ -1,10 +1,15 @@
 from typing import Literal
 
-import lightning as L  # noqa
 import torch
+from lightning import LightningModule
 from timm import create_model
 from torch import nn, optim
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+from torch.optim.lr_scheduler import (
+    CosineAnnealingLR,
+    LinearLR,
+    ReduceLROnPlateau,
+    SequentialLR,
+)
 from torchmetrics import Accuracy
 
 type ModelSize = Literal["small", "medium", "large"]
@@ -19,7 +24,7 @@ type ModelName = Literal[
 ]
 
 
-class TimmModel(L.LightningModule):
+class TimmModel(LightningModule):
     def __init__(
         self,
         num_classes: int,
@@ -55,10 +60,8 @@ class TimmModel(L.LightningModule):
 
         self.criterion = nn.CrossEntropyLoss()
 
-        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        self.val_acc_top3 = Accuracy(
-            task="multiclass", num_classes=num_classes, top_k=3
-        )
+        self.acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
         self.warm_up_epochs = warmup_epochs
         self.total_epochs = total_epochs
         self.use_compile = use_compile
@@ -69,34 +72,33 @@ class TimmModel(L.LightningModule):
         )
 
     def forward(self, x):
+        x = x.to(memory_format=torch.channels_last)
         if self.use_compile:
             return self.model_opt(x)
         return self.model(x)
 
     def training_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        x = x.to(memory_format=torch.channels_last)
-        pred = self.forward(x)
-        loss = self.criterion(pred, y)
-        self.log("train_loss", loss, prog_bar=True)
+        image, image = batch["image"], batch["label"]
+        pred = self.forward(image)
+        loss = self.criterion(pred, image)
+        self.log("train_loss", loss)
+        self.log("train_acc", self.acc_top1(pred, image))
         return loss
 
     def validation_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        x = x.to(memory_format=torch.channels_last)
-        pred = self.forward(x)
-        loss = self.criterion(pred, y)
+        image, label = batch["image"], batch["label"]
+        pred = self.forward(image)
+        loss = self.criterion(pred, label)
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top3", self.val_acc_top3(pred, y))
+        self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
+        self.log("val_top3", self.acc_top3(pred, label))
         return loss
 
     def test_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        x = x.to(memory_format=torch.channels_last)
-        pred = self.forward(x)
-        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top3", self.val_acc_top3(pred, y))
+        image, label = batch["image"], batch["label"]
+        pred = self.forward(image)
+        self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
+        self.log("val_top3", self.acc_top3(pred, label))
 
     def configure_optimizers(self):
         decay = []
@@ -151,7 +153,7 @@ class TimmModel(L.LightningModule):
         }
 
 
-class CNNModel(L.LightningModule):
+class CNNModel(LightningModule):
     def __init__(
         self,
         num_classes: int,
@@ -207,10 +209,8 @@ class CNNModel(L.LightningModule):
         )  # type: ignore
 
         self.criterion = nn.CrossEntropyLoss()
-        self.val_acc = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        self.val_acc_top3 = Accuracy(
-            task="multiclass", num_classes=num_classes, top_k=3
-        )
+        self.acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
         self.use_compile = use_compile
         self.example_input_array: torch.Tensor = torch.randn(
             1, 1, image_size, image_size
@@ -220,7 +220,7 @@ class CNNModel(L.LightningModule):
         self.warm_up_epochs = warmup_epochs
 
     def forward(self, x):
-        x = x.to(memory_format=torch.channels_last)  # type: ignore
+        x = x.to(memory_format=torch.channels_last)
         if self.use_compile:
             x = self.features_opt(x)
             x = self.avgpool(x)
@@ -230,26 +230,27 @@ class CNNModel(L.LightningModule):
         return self.classifier(x)
 
     def training_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        pred = self.forward(x)
-        loss = self.criterion(pred, y)
+        image, label = batch["image"], batch["label"]
+        pred = self.forward(image)
+        loss = self.criterion(pred, label)
+        self.log("train_acc", self.acc_top1(pred, label))
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        pred = self.forward(x)
-        loss = self.criterion(pred, y)
+        image, label = batch["image"], batch["label"]
+        pred = self.forward(image)
+        loss = self.criterion(pred, label)
         self.log("val_loss", loss)
-        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top3", self.val_acc_top3(pred, y))
+        self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
+        self.log("val_top3", self.acc_top3(pred, label))
         return loss
 
     def test_step(self, batch):
-        x, y = batch["image"], batch["label"]
-        pred = self.forward(x)
-        self.log("val_acc", self.val_acc(pred, y), prog_bar=True)
-        self.log("val_top3", self.val_acc_top3(pred, y))
+        image, label = batch["image"], batch["label"]
+        pred = self.forward(image)
+        self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
+        self.log("val_top3", self.acc_top3(pred, label))
 
     def configure_optimizers(self):
         decay = []

@@ -12,7 +12,6 @@ from lightning.pytorch.tuner.tuning import Tuner
 from model import CNNModel, ModelName, TimmModel
 from proc_data import DATASET_REPO, get_dataset_classes
 from torch import set_float32_matmul_precision
-from torch.cuda import device_count
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the model.")
@@ -33,7 +32,7 @@ if __name__ == "__main__":
         "--init-batch-size", type=int, default=64, help="Initial batch size"
     )
     parser.add_argument(
-        "--warmup-epochs", type=int, default=5, help="Number of warmup epochs"
+        "--warmup-epochs", type=int, default=3, help="Number of warmup epochs"
     )
     parser.add_argument(
         "--total-epochs", type=int, default=35, help="Total number of epochs"
@@ -163,7 +162,7 @@ if __name__ == "__main__":
         model.use_compile = False
         # NOTE: don't use fast_dev_run=True with scale batch and lr finder
         batch_size = init_batch_size
-        if not debug and device_count() == 1 and find_batch_size:
+        if not debug and trainer.num_devices == 1 and find_batch_size:
             suggested_batch_size = tuner.scale_batch_size(
                 model, datamodule=dm, init_val=init_batch_size
             )
