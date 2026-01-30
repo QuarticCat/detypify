@@ -477,7 +477,8 @@ def generate_infer_json(classes: set[str] | None = None) -> None:
     if not infer_path.exists():
         infer = []
         if classes:
-            for c in classes:
+            sorted_classes = sorted(classes)
+            for c in sorted_classes:
                 if c not in chr_to_sym:
                     continue
                 sym = chr_to_sym[c]

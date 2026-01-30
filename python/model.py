@@ -7,7 +7,6 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
     LinearLR,
-    ReduceLROnPlateau,
     SequentialLR,
 )
 from torchmetrics import Accuracy
@@ -38,6 +37,7 @@ class TimmModel(LightningModule):
         super().__init__()
         self.save_hyperparameters(
             "num_classes",
+            "model_name",
             "warmup_epochs",
             "total_epochs",
             "image_size",
@@ -99,6 +99,7 @@ class TimmModel(LightningModule):
         pred = self.forward(image)
         self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
         self.log("val_top3", self.acc_top3(pred, label))
+        return pred
 
     def configure_optimizers(self):
         decay = []
@@ -128,8 +129,6 @@ class TimmModel(LightningModule):
 
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=1e-4,
-            end_factor=1.0,
             total_iters=self.warm_up_epochs,
         )
 
@@ -251,6 +250,7 @@ class CNNModel(LightningModule):
         pred = self.forward(image)
         self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
         self.log("val_top3", self.acc_top3(pred, label))
+        return pred
 
     def configure_optimizers(self):
         decay = []
@@ -280,8 +280,6 @@ class CNNModel(LightningModule):
 
         warmup_scheduler = LinearLR(
             optimizer,
-            start_factor=1e-4,
-            end_factor=1.0,
             total_iters=self.warm_up_epochs,
         )
 
