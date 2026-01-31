@@ -15,10 +15,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
-          bun-version: "latest"
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: latest
+          cache: pnpm
 
       - name: Prepare train folder
         run: |
@@ -29,11 +35,11 @@ jobs:
         working-directory: frontend/service
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Prettier check
-        run: bunx prettier --check .
+        run: pnpm exec prettier --check .
 
       - name: Type check
-        run: bun run check
+        run: pnpm run check
         working-directory: frontend/ui

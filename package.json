@@ -1,8 +1,5 @@
 {
     "name": "detypify-frontend",
-    "workspaces": [
-        "frontend/*"
-    ],
     "scripts": {
         "format": "prettier --write ."
     },
