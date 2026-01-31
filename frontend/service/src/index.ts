@@ -14,6 +14,11 @@ export interface SymbolInfo {
     markupShorthand?: string;
 }
 
+export interface DrawOptions {
+    canvasSize?: number;
+    lineWidth?: number;
+}
+
 export type Point = [number, number];
 export type Stroke = Point[];
 export type Strokes = Stroke[];
@@ -33,21 +38,9 @@ export const contribSyms = contribSymsRaw as Record<string, string>;
  */
 export class Detypify {
     private sess: InferenceSession;
-    private canvas: HTMLCanvasElement;
-    private ctx: CanvasRenderingContext2D;
 
     constructor(sess: InferenceSession) {
         this.sess = sess;
-
-        this.canvas = document.createElement("canvas");
-        this.canvas.width = this.canvas.height = 32;
-
-        const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) {
-            throw new Error("Failed to get 2D canvas context.");
-        }
-        this.ctx = ctx;
-        this.ctx.fillStyle = "white";
     }
 
     /**
@@ -58,9 +51,19 @@ export class Detypify {
     }
 
     /**
-     * Normalize strokes and draw to inner canvas.
+     * Normalize strokes and draw them to canvas.
      */
-    draw(strokes: Strokes): HTMLCanvasElement | undefined {
+    draw(strokes: Strokes, options: DrawOptions = {}): HTMLCanvasElement | undefined {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = options.canvasSize ?? 32;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error("Failed to get 2D canvas context.");
+        }
+        ctx.fillStyle = "white";
+        ctx.lineWidth = options.lineWidth ?? 1;
+
         // Find bounding rect.
         let minX = Infinity;
         let maxX = 0;
@@ -76,45 +79,49 @@ export class Detypify {
         }
 
         // Normalize.
-        const canvasWidth = this.canvas.width;
         let width = Math.max(maxX - minX, maxY - minY);
         if (width === 0) return;
         width = width * 1.2 + 20;
         const zeroX = (minX + maxX - width) / 2;
         const zeroY = (minY + maxY - width) / 2;
-        const scale = canvasWidth / width;
+        const scale = canvas.width / width;
 
-        // Draw to inner canvas.
-        this.ctx.fillRect(0, 0, canvasWidth, canvasWidth);
-        this.ctx.translate(0.5, 0.5);
+        // Draw to canvas.
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.translate(0.5, 0.5);
         for (const stroke of strokes) {
-            this.ctx.beginPath();
+            ctx.beginPath();
             for (const [x, y] of stroke) {
-                this.ctx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
+                ctx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
             }
-            this.ctx.stroke();
+            ctx.stroke();
         }
-        this.ctx.translate(-0.5, -0.5);
+        ctx.translate(-0.5, -0.5);
 
-        return this.canvas;
+        return canvas;
     }
 
     /**
      * Inference top `k` candidates.
      */
-    async candidates(strokes: Strokes, k: number): Promise<SymbolInfo[]> {
-        this.draw(strokes);
+    async candidates(strokes: Strokes, k: number, options?: DrawOptions): Promise<SymbolInfo[]> {
+        const canvas = this.draw(strokes, options);
+        if (!canvas) return [];
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error("Failed to get 2D canvas context.");
+        }
 
         // To greyscale.
-        const canvasWidth = this.canvas.width;
-        const rgba = this.ctx.getImageData(0, 0, canvasWidth, canvasWidth).data;
+        const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const grey = new Float32Array(rgba.length / 4);
         for (let i = 0; i < grey.length; ++i) {
             grey[i] = rgba[i * 4] === 255 ? 1 : 0;
         }
 
         // Infer.
-        const tensor = new Tensor("float32", grey, [1, 1, 32, 32]);
+        const tensor = new Tensor("float32", grey, [1, 1, canvas.width, canvas.height]);
         const outputs = await this.sess.run({ [this.sess.inputNames[0]]: tensor });
         const output = Array.from(outputs[this.sess.outputNames[0]].data as Iterable<number>);
 

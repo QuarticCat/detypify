@@ -20,7 +20,9 @@ Let you integrate Detypify into your own projects easily.
 
       - Use `Detypify.create()` to create an instance.
 
-      - Use `instance.candidates(strokes, k)` to inference top `k` candidates.
+      - Use `instance.candidates(strokes, k, options?)` to inference top `k` candidates.
+        - `options.canvasSize`: Canvas size for rendering, defaults to 32px.
+        - `options.lineWidth`: Stroke width for rendering, defaults to 1px.
 
     - `inferSyms`: Symbol metadata used by the model.
 
