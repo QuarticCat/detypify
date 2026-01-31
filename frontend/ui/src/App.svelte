@@ -59,7 +59,7 @@
             {#if activeHash === "#"}
                 <Home {session} />
             {:else if activeHash === "#contrib"}
-                <Contrib {session} />
+                <Contrib />
             {:else if activeHash === "#faq"}
                 <FAQ />
             {:else}

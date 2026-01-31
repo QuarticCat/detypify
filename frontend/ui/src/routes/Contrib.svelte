@@ -4,10 +4,8 @@
     import type { Sample } from "../lib/ContribPanel.svelte";
     import Preview from "../lib/Preview.svelte";
     import type { Strokes } from "detypify-service";
-    import { Detypify } from "detypify-service";
+    import { drawStrokes } from "detypify-service";
     import { Hr, Alert } from "flowbite-svelte";
-
-    const { session }: { session: Detypify } = $props();
 
     let input = $state("");
     let strokes: Strokes = $state([]);
@@ -15,7 +13,7 @@
 
     function draw(strokes: Strokes): string | undefined {
         if (strokes.length === 0) return;
-        return session.draw(strokes)?.toDataURL();
+        return drawStrokes(strokes)?.toDataURL();
     }
 </script>
 

@@ -34,6 +34,57 @@ export const inferSyms = inferSymsRaw as SymbolInfo[];
 export const contribSyms = contribSymsRaw as Record<string, string>;
 
 /**
+ * Normalize strokes and draw them to canvas.
+ */
+export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCanvasElement | undefined {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = options.canvasSize ?? 32;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) {
+        throw new Error("Failed to get 2D canvas context.");
+    }
+    ctx.fillStyle = "white";
+    ctx.lineWidth = options.lineWidth ?? 1;
+
+    // Find bounding rect.
+    let minX = Infinity;
+    let maxX = 0;
+    let minY = Infinity;
+    let maxY = 0;
+    for (const stroke of strokes) {
+        for (const [x, y] of stroke) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        }
+    }
+
+    // Normalize.
+    let width = Math.max(maxX - minX, maxY - minY);
+    if (width === 0) return;
+    width = width * 1.2 + 20;
+    const zeroX = (minX + maxX - width) / 2;
+    const zeroY = (minY + maxY - width) / 2;
+    const scale = canvas.width / width;
+
+    // Draw to canvas.
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.translate(0.5, 0.5);
+    for (const stroke of strokes) {
+        ctx.beginPath();
+        for (const [x, y] of stroke) {
+            ctx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
+        }
+        ctx.stroke();
+    }
+    ctx.translate(-0.5, -0.5);
+
+    return canvas;
+}
+
+/**
  * Typst symbol classifier.
  */
 export class Detypify {
@@ -51,61 +102,10 @@ export class Detypify {
     }
 
     /**
-     * Normalize strokes and draw them to canvas.
-     */
-    draw(strokes: Strokes, options: DrawOptions = {}): HTMLCanvasElement | undefined {
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = options.canvasSize ?? 32;
-
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) {
-            throw new Error("Failed to get 2D canvas context.");
-        }
-        ctx.fillStyle = "white";
-        ctx.lineWidth = options.lineWidth ?? 1;
-
-        // Find bounding rect.
-        let minX = Infinity;
-        let maxX = 0;
-        let minY = Infinity;
-        let maxY = 0;
-        for (const stroke of strokes) {
-            for (const [x, y] of stroke) {
-                minX = Math.min(minX, x);
-                maxX = Math.max(maxX, x);
-                minY = Math.min(minY, y);
-                maxY = Math.max(maxY, y);
-            }
-        }
-
-        // Normalize.
-        let width = Math.max(maxX - minX, maxY - minY);
-        if (width === 0) return;
-        width = width * 1.2 + 20;
-        const zeroX = (minX + maxX - width) / 2;
-        const zeroY = (minY + maxY - width) / 2;
-        const scale = canvas.width / width;
-
-        // Draw to canvas.
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.translate(0.5, 0.5);
-        for (const stroke of strokes) {
-            ctx.beginPath();
-            for (const [x, y] of stroke) {
-                ctx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
-            }
-            ctx.stroke();
-        }
-        ctx.translate(-0.5, -0.5);
-
-        return canvas;
-    }
-
-    /**
      * Inference top `k` candidates.
      */
     async candidates(strokes: Strokes, k: number, options?: DrawOptions): Promise<SymbolInfo[]> {
-        const canvas = this.draw(strokes, options);
+        const canvas = drawStrokes(strokes, options);
         if (!canvas) return [];
 
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
