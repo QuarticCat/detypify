@@ -31,11 +31,6 @@
         const roundedX = Math.round(event.offsetX);
         const roundedY = Math.round(event.offsetY);
         stroke = [[roundedX, roundedY]];
-
-        ctx.beginPath();
-        ctx.moveTo(roundedX, roundedY);
-        ctx.lineTo(roundedX, roundedY);
-        ctx.stroke();
     }
 
     function drawMove(event: PointerEvent) {
