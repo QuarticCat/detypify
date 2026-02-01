@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import cast
 
 import typer
-from callbacks import EMAWeightAveraging, LogWrongGuessesCallback
+from callbacks import EMAWeightAveraging, LogPredictCallback
 from dataset import MathSymbolDataModule
 from lightning import Trainer
 from lightning.pytorch.callbacks import LearningRateMonitor
@@ -35,8 +35,8 @@ if __name__ == "__main__":
         use_ema: bool = typer.Option(
             True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"
         ),
-        ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
-        ema_start_epoch: int = typer.Option(7, help="Epoch to start EMA"),
+        ema_decay: float = typer.Option(0.999, help="EMA decay rate"),
+        ema_start_epoch: int = typer.Option(0, help="Epoch to start EMA"),
         amp_precision: str = typer.Option(
             "bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"
         ),
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             )  # type: ignore
             callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
             if log_wrong_guesses:
-                callbacks.append(LogWrongGuessesCallback(sorted(classes)))
+                callbacks.append(LogPredictCallback(sorted(classes)))
             if final_use_ema:
                 callbacks.append(
                     EMAWeightAveraging(
