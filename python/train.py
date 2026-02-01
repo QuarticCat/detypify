@@ -51,12 +51,6 @@ if __name__ == "__main__":
         ),
     ):
         """Train the model."""
-        # Logic adjustment:
-        # Original code used `use_ema = debug and not args.no_ema`
-        # where no_ema defaulted to False (meaning EMA enabled by default).
-        # This implies EMA was only enabled when debug=True AND no_ema=False.
-        # This seems contradictory to the help text "default enabled",
-        # but we preserve behavior.
 
         final_use_ema = debug and use_ema
 

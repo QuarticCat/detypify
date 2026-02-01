@@ -79,6 +79,7 @@ def main(
     )
 
     print("Starting testing...")
+    torch.set_float32_matmul_precision("high")
     trainer.test(model, datamodule=dm)
     print(f"Testing finished. Logs saved to {out_dir_path}")
 

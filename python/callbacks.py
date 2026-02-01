@@ -1,5 +1,8 @@
 """Self Write Training Callbacks"""
 
+import math
+
+import matplotlib as mpl
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
@@ -8,11 +11,11 @@ from lightning.pytorch.loggers import TensorBoardLogger
 
 
 class LogWrongGuessesCallback(Callback):
-    def __init__(self, classes: list[str], max_images: int = 32) -> None:
+    def __init__(self, classes: list[str], max_batches: int = 10) -> None:
         super().__init__()
         self.classes = classes
-        self.max_images = max_images
-        self.logged_images = 0
+        self.max_batches = max_batches
+        self.logged_batches = 0
 
     def on_test_batch_end(
         self,
@@ -23,7 +26,7 @@ class LogWrongGuessesCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,  # noqa: ARG002
     ) -> None:
-        if self.logged_images >= self.max_images:
+        if self.logged_batches >= self.max_batches:
             return
 
         # Check if outputs is available (requires test_step to return pred)
@@ -42,39 +45,78 @@ class LogWrongGuessesCallback(Callback):
             return
 
         # images transformed as float32, converting back
-        wrong_images: torch.Tensor = image[mask] * 256
+        wrong_images: torch.Tensor = image[mask] * 255
         wrong_images = wrong_images.to(dtype=torch.uint8)
         wrong_preds = preds[mask]
         true_labels = label[mask]
 
-        # Limit the number of images to log
-        num_to_log = min(len(wrong_images), self.max_images - self.logged_images)
+        # Limit the number of images to log per batch (safety cap at 16)
+        num_to_log = min(len(wrong_images), 16)
         wrong_images = wrong_images[:num_to_log]
         wrong_preds = wrong_preds[:num_to_log]
         true_labels = true_labels[:num_to_log]
 
         # Log to TensorBoard if available
         if isinstance(trainer.logger, TensorBoardLogger):
-            # Add text labels
-            captions = []
-            for p, t in zip(wrong_preds, true_labels):
-                pred_name = self.classes[p] if p < len(self.classes) else str(p.item())
-                true_name = self.classes[t] if t < len(self.classes) else str(t.item())
-                captions.append(f"P: {pred_name} | T: {true_name}")
+            mpl.use("Agg")
+            import matplotlib.pyplot as plt
 
             tensorboard = trainer.logger.experiment
-            tensorboard.add_images(
+
+            # Create a grid of plots using matplotlib
+            num_images = len(wrong_images)
+            cols = math.ceil(num_images**0.5)
+            rows = math.ceil(num_images / cols)
+
+            # Adjust figure size based on grid
+            fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
+
+            # Normalize axes to be iterable even if single plot
+            axes_flat = [axes] if num_images == 1 else axes.flatten()
+
+            for i, (img, pred_idx, true_idx) in enumerate(
+                zip(wrong_images, wrong_preds, true_labels)
+            ):
+                ax = axes_flat[i]
+
+                # Image is (C, H, W), usually (1, H, W) for grayscale
+                # Convert to (H, W) numpy for imshow
+                img_np = img.cpu().numpy()
+                if img_np.shape[0] == 1:
+                    img_np = img_np.squeeze(0)
+
+                ax.imshow(img_np, cmap="gray")
+
+                pred_name = (
+                    self.classes[pred_idx]
+                    if pred_idx < len(self.classes)
+                    else str(pred_idx.item())
+                )
+                true_name = (
+                    self.classes[true_idx]
+                    if true_idx < len(self.classes)
+                    else str(true_idx.item())
+                )
+
+                ax.set_title(
+                    f"Truth: {true_name}\nPrediction: {pred_name}", color="red"
+                )
+                ax.axis("off")
+
+            # Hide unused subplots
+            for i in range(num_images, len(axes_flat)):
+                axes_flat[i].axis("off")
+
+            plt.tight_layout()
+
+            tensorboard.add_figure(
                 "wrong_guesses",
-                wrong_images,
-                global_step=batch_idx,  # Use batch_idx or a counter
+                fig,
+                global_step=batch_idx,
             )
+            plt.close(fig)
 
-            # Also log text mapping
-            tensorboard.add_text(
-                "wrong_guesses_text", "  \n".join(captions), global_step=batch_idx
-            )
-
-        self.logged_images += num_to_log
+        self.logged_batches += 1
 
 
 def get_ema_multi_avg_fn(
