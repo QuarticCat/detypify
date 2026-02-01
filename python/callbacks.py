@@ -1,6 +1,7 @@
 """Self Write Training Callbacks"""
 
 import math
+from typing import Literal
 
 import matplotlib as mpl
 import torch
@@ -15,16 +16,13 @@ class LogPredictCallback(Callback):
         self,
         classes: list[str],
         max_batches: int = 10,
-        log_type: str = "wrong",
+        log_type: Literal["wrong", "right", "both"] = "both",
     ) -> None:
         super().__init__()
         self.classes = classes
         self.max_batches = max_batches
         self.log_type = log_type
         self.logged_batches = 0
-
-        if self.log_type not in ["wrong", "right", "both"]:
-            raise ValueError("log_type must be one of ['wrong', 'right', 'both']")
 
     def on_test_batch_end(
         self,
