@@ -4,7 +4,7 @@ from pathlib import Path
 
 import torch
 import typer
-from callbacks import LogWrongGuessesCallback
+from callbacks import LogPredictCallback
 from dataset import MathSymbolDataModule
 from lightning import Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -64,7 +64,7 @@ def main(
 
     # Classes for callback
     classes = get_dataset_classes(DATASET_REPO)
-    callback = LogWrongGuessesCallback(sorted(classes))
+    callback = LogPredictCallback(sorted(classes))
 
     # Logger
     logger = TensorBoardLogger(

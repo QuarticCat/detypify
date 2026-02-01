@@ -10,12 +10,21 @@ from lightning.pytorch.callbacks.weight_averaging import WeightAveraging
 from lightning.pytorch.loggers import TensorBoardLogger
 
 
-class LogWrongGuessesCallback(Callback):
-    def __init__(self, classes: list[str], max_batches: int = 10) -> None:
+class LogPredictCallback(Callback):
+    def __init__(
+        self,
+        classes: list[str],
+        max_batches: int = 10,
+        log_type: str = "wrong",
+    ) -> None:
         super().__init__()
         self.classes = classes
         self.max_batches = max_batches
+        self.log_type = log_type
         self.logged_batches = 0
+
+        if self.log_type not in ["wrong", "right", "both"]:
+            raise ValueError("log_type must be one of ['wrong', 'right', 'both']")
 
     def on_test_batch_end(
         self,
@@ -38,22 +47,28 @@ class LogWrongGuessesCallback(Callback):
 
         preds = torch.argmax(pred_logits, dim=1)
 
-        # Identify wrong guesses
-        mask = preds != label
+        # Identify guesses based on log_type
+        if self.log_type == "wrong":
+            mask = preds != label
+        elif self.log_type == "right":
+            mask = preds == label
+        else:  # "both"
+            # Create a mask of all True with same shape as label
+            mask = torch.ones_like(label, dtype=torch.bool)
 
         if not mask.any():
             return
 
         # images transformed as float32, converting back
-        wrong_images: torch.Tensor = image[mask] * 255
-        wrong_images = wrong_images.to(dtype=torch.uint8)
-        wrong_preds = preds[mask]
+        selected_images: torch.Tensor = image[mask] * 255
+        selected_images = selected_images.to(dtype=torch.uint8)
+        selected_preds = preds[mask]
         true_labels = label[mask]
 
         # Limit the number of images to log per batch (safety cap at 16)
-        num_to_log = min(len(wrong_images), 16)
-        wrong_images = wrong_images[:num_to_log]
-        wrong_preds = wrong_preds[:num_to_log]
+        num_to_log = min(len(selected_images), 16)
+        selected_images = selected_images[:num_to_log]
+        selected_preds = selected_preds[:num_to_log]
         true_labels = true_labels[:num_to_log]
 
         # Log to TensorBoard if available
@@ -64,7 +79,7 @@ class LogWrongGuessesCallback(Callback):
             tensorboard = trainer.logger.experiment
 
             # Create a grid of plots using matplotlib
-            num_images = len(wrong_images)
+            num_images = len(selected_images)
             cols = math.ceil(num_images**0.5)
             rows = math.ceil(num_images / cols)
 
@@ -75,7 +90,7 @@ class LogWrongGuessesCallback(Callback):
             axes_flat = [axes] if num_images == 1 else axes.flatten()
 
             for i, (img, pred_idx, true_idx) in enumerate(
-                zip(wrong_images, wrong_preds, true_labels)
+                zip(selected_images, selected_preds, true_labels)
             ):
                 ax = axes_flat[i]
 
@@ -98,8 +113,12 @@ class LogWrongGuessesCallback(Callback):
                     else str(true_idx.item())
                 )
 
+                # Determine color: red if wrong, green if right
+                is_correct = pred_idx == true_idx
+                title_color = "green" if is_correct else "red"
+
                 ax.set_title(
-                    f"Truth: {true_name}\nPrediction: {pred_name}", color="red"
+                    f"Truth: {true_name}\nPrediction: {pred_name}", color=title_color
                 )
                 ax.axis("off")
 
@@ -109,8 +128,16 @@ class LogWrongGuessesCallback(Callback):
 
             plt.tight_layout()
 
+            # Determine tag name
+            if self.log_type == "wrong":
+                tag = "wrong_predictions"
+            elif self.log_type == "right":
+                tag = "right_predictions"
+            else:
+                tag = "predictions"
+
             tensorboard.add_figure(
-                "wrong_guesses",
+                tag,
                 fig,
                 global_step=batch_idx,
             )
@@ -226,7 +253,7 @@ class EMAWeightAveraging(WeightAveraging):
         decay: float = 0.9999,
         min_decay: float = 0.0,
         use_warmup: bool = True,
-        warmup_gamma: float = 1.0,
+        warmup_gamma: float = 25.0,
         warmup_power: float = 3 / 4,
         update_every_n_steps: int = 1,
         update_starting_at_step: int | None = None,

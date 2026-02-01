@@ -26,7 +26,7 @@ class MathSymbolDataModule(LightningDataModule):
         ]
 
         augmentations = [
-            v2.RandomRotation(15),  # type: ignore
+            v2.RandomRotation(10),  # type: ignore
             v2.RandomAffine(
                 degrees=0,  # type: ignore
                 translate=(0.1, 0.1),
