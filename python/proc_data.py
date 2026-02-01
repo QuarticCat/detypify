@@ -1,14 +1,15 @@
 """Preprocess training datasets, helping functions and related constants/types."""
 
-import argparse
 from concurrent.futures import ProcessPoolExecutor
+from enum import Enum
 from functools import cache
 from os import process_cpu_count
 from pathlib import Path
 from shutil import rmtree as rmdir
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 from urllib.request import urlretrieve
 
+import typer
 from msgspec import Struct, json
 
 type Point = tuple[float, float]
@@ -720,77 +721,77 @@ def create_dataset(
             f.write(json.format(json.encode(dataset_info)))
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Preprocess datasets, generate metadata, and upload results."
-    )
+class DataSetNameEnum(str, Enum):
+    mathwriting = "mathwriting"
+    detexify = "detexify"
+    contrib = "contrib"
 
-    default_dataset_names: list[DataSetName] = ["detexify", "mathwriting"]
-    if USE_CONTRIB:
-        default_dataset_names.append("contrib")
 
-    parser.add_argument(
-        "--skip-convert-data",
-        action="store_true",
-        help="Do not construct or upload local datasets.",
-    )
-    parser.add_argument(
-        "--skip-gen-info",
-        action="store_true",
-        help="Skip writing symbol metadata and infer JSON files.",
-    )
-    parser.add_argument(
-        "--datasets",
-        "-d",
-        type=str,
-        nargs="+",
-        choices=["mathwriting", "detexify", "contrib"],
-        default=default_dataset_names,
-        help="Datasets to process when converting data.",
-    )
-    parser.add_argument(
-        "--include-contrib",
-        action="store_true",
-        help="Append the contrib dataset even if it was not listed explicitly.",
-    )
-    parser.add_argument(
-        "--no-upload",
-        action="store_true",
-        help="Store processed datasets locally instead of uploading to Hugging Face.",
-    )
-    parser.add_argument(
-        "--split-ratio",
-        nargs=3,
-        type=float,
-        metavar=("TRAIN", "TEST", "VAL"),
-        default=(0.8, 0.1, 0.1),
-        help="Train/test/val split ratios for the processed dataset.",
-    )
-    parser.add_argument(
-        "--split-parts",
-        action="store_true",
-        help="Write each split as multiple shards instead of a single file.",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=2000,
-        help="Number of rows per shard when --split-parts is enabled.",
-    )
-    parser.add_argument(
-        "--file-format",
-        choices=["parquet", "vortex"],
-        default="parquet",
-        help="Output format when writing dataset shards locally.",
-    )
+app = typer.Typer()
 
-    args: argparse.Namespace = parser.parse_args()
 
-    convert_data: bool = not args.skip_convert_data
-    gen_info: bool = not args.skip_gen_info
-    datasets_arg: list[DataSetName] = cast("list[DataSetName]", args.datasets)
-    dataset_names: list[DataSetName] = list(dict.fromkeys(datasets_arg))
-    if args.include_contrib and "contrib" not in dataset_names:
+@app.command()
+def main(
+    datasets: Annotated[
+        list[DataSetNameEnum] | None,
+        typer.Option(
+            "--datasets",
+            "-d",
+            help="Datasets to process when converting data.",
+        ),
+    ] = None,
+    skip_convert_data: Annotated[
+        bool, typer.Option(help="Do not construct or upload local datasets.")
+    ] = False,
+    skip_gen_info: Annotated[
+        bool, typer.Option(help="Skip writing symbol metadata and infer JSON files.")
+    ] = False,
+    include_contrib: Annotated[
+        bool,
+        typer.Option(
+            help="Append the contrib dataset even if it was not listed explicitly."
+        ),
+    ] = False,
+    no_upload: Annotated[
+        bool,
+        typer.Option(help="Store processed datasets locally."),
+    ] = False,
+    split_ratio: Annotated[
+        tuple[float, float, float],
+        typer.Option(
+            help="Train/test/val split ratios for the processed dataset.",
+        ),
+    ] = (0.8, 0.1, 0.1),
+    split_parts: Annotated[
+        bool,
+        typer.Option(
+            help="Write each split as multiple shards instead of a single file."
+        ),
+    ] = False,
+    batch_size: Annotated[
+        int,
+        typer.Option(help="Number of rows per shard when --split-parts is enabled."),
+    ] = 2000,
+    file_format: Annotated[
+        Literal["parquet", "vortex"],
+        typer.Option(help="Output format when writing dataset shards locally."),
+    ] = "parquet",
+):
+    """
+    Preprocess datasets, generate metadata, and upload results.
+    """
+    if datasets is None:
+        datasets = [DataSetNameEnum.detexify, DataSetNameEnum.mathwriting]
+        if USE_CONTRIB:
+            datasets.append(DataSetNameEnum.contrib)
+
+    convert_data: bool = not skip_convert_data
+    gen_info: bool = not skip_gen_info
+
+    dataset_names: list[DataSetName] = [
+        cast("DataSetName", d.value) for d in dict.fromkeys(datasets)
+    ]
+    if include_contrib and "contrib" not in dataset_names:
         dataset_names.append("contrib")
     if USE_CONTRIB and "contrib" not in dataset_names:
         dataset_names.append("contrib")
@@ -798,22 +799,24 @@ if __name__ == "__main__":
     if gen_info:
         # Get symbol info.
         typ_sym_info = get_typst_symbol_info()
-        name_to_chr = {x.names[0]: x.char for x in typ_sym_info}
         symbols_info_path = DATASET_ROOT / "symbols.json"
         if not symbols_info_path.exists():
             with symbols_info_path.open("wb") as f:
                 f.write(json.encode(typ_sym_info))
 
     if convert_data:
-        split_ratio: tuple[float, float, float] = tuple(args.split_ratio)
         create_dataset(
             dataset_names=dataset_names,
-            upload=not args.no_upload,
+            upload=not no_upload,
             split_ratio=split_ratio,
-            split_parts=args.split_parts,
-            batch_size=args.batch_size,
-            file_format=args.file_format,
+            split_parts=split_parts,
+            batch_size=batch_size,
+            file_format=file_format,
         )
 
     if gen_info:
         generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
+
+
+if __name__ == "__main__":
+    app()

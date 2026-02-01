@@ -11,12 +11,13 @@ from torch.optim.lr_scheduler import (
 )
 from torchmetrics import Accuracy
 
-type ModelSize = Literal["small", "medium", "large"]
 # Selected models for efficiency, ranked by model size, ascending
 type ModelName = Literal[
+    # optimal ones
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
     "mobilenetv4_conv_small",
+    # for exp
     "mobilenetv4_conv_medium",
     "mobilenetv4_hybrid_medium_075",
     "mobilenetv4_hybrid_medium",
@@ -48,7 +49,7 @@ class TimmModel(LightningModule):
             num_classes=num_classes,
             in_chans=1,
             aa_layer="blurpc",
-            drop_rate=0.25,
+            drop_rate=0.15,
             exportable=True,
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
@@ -78,11 +79,11 @@ class TimmModel(LightningModule):
         return self.model(x)
 
     def training_step(self, batch):
-        image, image = batch["image"], batch["label"]
+        image, label = batch["image"], batch["label"]
         pred = self.forward(image)
-        loss = self.criterion(pred, image)
+        loss = self.criterion(pred, label)
         self.log("train_loss", loss)
-        self.log("train_acc", self.acc_top1(pred, image))
+        self.log("train_acc", self.acc_top1(pred, label))
         return loss
 
     def validation_step(self, batch):
@@ -233,7 +234,7 @@ class CNNModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("train_acc", self.acc_top1(pred, label))
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch):
