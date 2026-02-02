@@ -10,7 +10,7 @@ from typing import Annotated, Literal, cast
 from urllib.request import urlretrieve
 
 import typer
-from msgspec import Struct, json
+from msgspec import Struct, json, yaml
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -31,7 +31,7 @@ DATASET_REPO = "Cloud0310/detypify-datasets"
 UPLOAD = True
 # Processing
 # Extra latex to typst mapping.
-TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.json"
+TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.yaml"
 
 
 # Structs
@@ -212,7 +212,7 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
 
     with TEX_TO_TYP_PATH.open("rb") as f:
-        manual_mapping = json.decode(f.read(), type=dict[str, str])
+        manual_mapping = yaml.decode(f.read(), type=dict[str, str])
 
     tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
     return tex_to_typ
