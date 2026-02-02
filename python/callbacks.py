@@ -1,21 +1,26 @@
 """Self Write Training Callbacks"""
 
-import math
-from typing import Literal
+from __future__ import annotations
 
-import matplotlib as mpl
-import torch
-from lightning import LightningModule, Trainer
-from lightning.pytorch.callbacks import Callback
+from math import ceil
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.callbacks.weight_averaging import WeightAveraging
-from lightning.pytorch.loggers import TensorBoardLogger
+
+if TYPE_CHECKING:
+    from typing import Literal
+
+    from lightning import LightningModule, Trainer
+    from torch import Tensor, device
 
 
 class LogPredictCallback(Callback):
     def __init__(
         self,
         classes: list[str],
-        max_batches: int = 10,
+        max_batches: int = 16,
         log_type: Literal["wrong", "right", "both"] = "both",
     ) -> None:
         super().__init__()
@@ -33,6 +38,8 @@ class LogPredictCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,  # noqa: ARG002
     ) -> None:
+        import torch
+
         if self.logged_batches >= self.max_batches:
             return
 
@@ -58,7 +65,7 @@ class LogPredictCallback(Callback):
             return
 
         # images transformed as float32, converting back
-        selected_images: torch.Tensor = image[mask] * 255
+        selected_images: Tensor = image[mask] * 255
         selected_images = selected_images.to(dtype=torch.uint8)
         selected_preds = preds[mask]
         true_labels = label[mask]
@@ -69,17 +76,20 @@ class LogPredictCallback(Callback):
         selected_preds = selected_preds[:num_to_log]
         true_labels = true_labels[:num_to_log]
 
-        # Log to TensorBoard if available
+        from lightning.pytorch.loggers import TensorBoardLogger
+
         if isinstance(trainer.logger, TensorBoardLogger):
-            mpl.use("Agg")
+            import matplotlib as mpl
             import matplotlib.pyplot as plt
+
+            mpl.use("Agg")
 
             tensorboard = trainer.logger.experiment
 
             # Create a grid of plots using matplotlib
             num_images = len(selected_images)
-            cols = math.ceil(num_images**0.5)
-            rows = math.ceil(num_images / cols)
+            cols = ceil(num_images**0.5)
+            rows = ceil(num_images / cols)
 
             # Adjust figure size based on grid
             fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
@@ -160,11 +170,13 @@ def get_ema_multi_avg_fn(
     This allows you to start EMA immediately (step 0) without initialization bias
     """
 
+    import torch
+
     @torch.no_grad()
     def ema_multi_update(
-        averaged_param_list: list[torch.Tensor],
-        current_param_list: list[torch.Tensor],
-        num_averaged: torch.Tensor,
+        averaged_param_list: list[Tensor],
+        current_param_list: list[Tensor],
+        num_averaged: Tensor,
     ):
         step = num_averaged.item()
 
@@ -246,7 +258,7 @@ class EMAWeightAveraging(WeightAveraging):
 
     def __init__(
         self,
-        device: torch.device | str | int | None = None,
+        device: device | str | int | None = None,
         use_buffers: bool = True,
         decay: float = 0.9999,
         min_decay: float = 0.0,
@@ -306,3 +318,80 @@ class EMAWeightAveraging(WeightAveraging):
                 return True
 
         return False
+
+
+class ExportBestModelToONNX(Callback):
+    """Export the best model checkpoint to ONNX format after training completes.
+
+    This callback finds the best checkpoint saved during training and exports it
+    to ONNX format, making it ready for deployment.
+
+    Args:
+        onnx_dir: Directory where ONNX file will be saved
+        model_name: Name to use for the ONNX file (without extension)
+        checkpoint_callback: The ModelCheckpoint callback used during training.
+            If None, the callback will try to find it automatically.
+        dynamo: Whether to use torch.dynamo for ONNX export (default: True)
+        external_data: Whether to save weights as external data (default: False)
+    """
+
+    def __init__(
+        self,
+        onnx_dir: Path | str,
+        model_name: str,
+        checkpoint_callback: ModelCheckpoint | None = None,
+        dynamo: bool = True,
+        external_data: bool = False,
+    ) -> None:
+        super().__init__()
+        self.onnx_dir = Path(onnx_dir)
+        self.model_name = model_name
+        self.checkpoint_callback = checkpoint_callback
+        self.dynamo = dynamo
+        self.external_data = external_data
+
+    def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Export the best model to ONNX when training finishes."""
+        # Find the checkpoint callback if not provided
+        checkpoint_callback = self.checkpoint_callback
+        if checkpoint_callback is None:
+            for callback in trainer.callbacks:  # type: ignore
+                if isinstance(callback, ModelCheckpoint):
+                    checkpoint_callback = callback
+                    break
+
+        if checkpoint_callback is None:
+            print("Warning: No ModelCheckpoint callback found. Skipping ONNX export.")
+            return
+
+        # Get the best model path
+        best_model_path = checkpoint_callback.best_model_path
+        if not best_model_path:
+            print("Warning: No best model checkpoint available. Skipping ONNX export.")
+            return
+
+        print(f"Loading best checkpoint from: {best_model_path}")
+
+        # Load the best checkpoint
+        pl_module.load_from_checkpoint(best_model_path)
+
+        # Freeze and prepare model for export
+        pl_module.freeze()
+        if hasattr(pl_module, "use_compile"):
+            pl_module.use_compile = False  # type: ignore
+
+        # Create ONNX directory
+        self.onnx_dir.mkdir(parents=True, exist_ok=True)
+        save_path = self.onnx_dir / f"{self.model_name}.onnx"
+
+        print(f"Exporting best model to ONNX: {save_path}")
+
+        # Export to ONNX
+        pl_module.to_onnx(
+            save_path,
+            pl_module.example_input_array,
+            dynamo=self.dynamo,
+            external_data=self.external_data,
+        )
+
+        print(f"Successfully exported best model to: {save_path}")

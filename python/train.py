@@ -1,18 +1,10 @@
 """Train the model."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import cast
 
 import typer
-from callbacks import EMAWeightAveraging, LogPredictCallback
-from dataset import MathSymbolDataModule
-from lightning import Trainer
-from lightning.pytorch.callbacks import LearningRateMonitor
-from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.tuner.tuning import Tuner
-from model import CNNModel, TimmModel, TimmModelName
-from proc_data import DATASET_REPO, get_dataset_classes
-from torch import set_float32_matmul_precision
 
 if __name__ == "__main__":
 
@@ -55,6 +47,15 @@ if __name__ == "__main__":
         ),
     ):
         """Train the model."""
+        # Lazy import
+        from dataset import MathSymbolDataModule
+        from lightning import Trainer
+        from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+        from lightning.pytorch.loggers import TensorBoardLogger
+        from lightning.pytorch.tuner.tuning import Tuner
+        from model import CNNModel, TimmModel
+        from proc_data import DATASET_REPO, get_dataset_classes
+        from torch import set_float32_matmul_precision
 
         out_dir_path = Path(out_dir)
 
@@ -74,7 +75,7 @@ if __name__ == "__main__":
                 model_instances.append(
                     TimmModel(
                         num_classes=len(classes),
-                        model_name=cast("TimmModelName", model_name),
+                        model_name=model_name,  # type: ignore[arg-type]
                         warmup_epochs=warmup_epochs,
                         total_epochs=total_epochs,
                         image_size=image_size,
@@ -92,15 +93,22 @@ if __name__ == "__main__":
             model_name_str = (
                 model.__class__.__name__
                 if model.__class__.__name__ != "TimmModel"
-                else cast("str", model.model_name)
+                else str(model.model_name)
             )
             logger = TensorBoardLogger(
                 save_dir=out_dir_path, name=model_name_str, default_hp_metric=False
             )  # type: ignore
             callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
+
+            # Lazy import callbacks only when needed
             if log_pred:
+                from callbacks import LogPredictCallback
+
                 callbacks.append(LogPredictCallback(sorted(classes)))
+
             if use_ema:
+                from callbacks import EMAWeightAveraging
+
                 callbacks.append(
                     EMAWeightAveraging(
                         decay=ema_decay,
@@ -108,6 +116,30 @@ if __name__ == "__main__":
                         use_warmup=ema_warmup,
                     )
                 )
+
+            # Add checkpoint callback to save best model
+            checkpoint_callback = ModelCheckpoint(
+                dirpath=out_dir_path / "checkpoints" / model_name_str,
+                filename="best-{epoch:02d}-{val_acc:.4f}",
+                monitor="val_acc",
+                mode="max",
+                save_top_k=1,
+                save_last=True,
+            )
+            callbacks.append(checkpoint_callback)
+
+            # Add ONNX export callback for best model
+            if not debug:
+                from callbacks import ExportBestModelToONNX
+
+                callbacks.append(
+                    ExportBestModelToONNX(
+                        onnx_dir=out_dir_path / "onnx",
+                        model_name=model_name_str,
+                        checkpoint_callback=checkpoint_callback,
+                    )
+                )
+
             trainer = Trainer(
                 max_epochs=total_epochs,
                 default_root_dir=out_dir_path,
@@ -145,18 +177,5 @@ if __name__ == "__main__":
             model.use_compile = True
             trainer.fit(model, datamodule=dm)
             trainer.test(model, datamodule=dm)
-
-            if not debug:
-                model.freeze()
-                model.use_compile = False
-                # Export ONNX.
-                save_path = out_dir_path / "onnx" / f"{model_name_str}.onnx"
-                save_path.parent.mkdir(parents=True, exist_ok=True)
-                model.to_onnx(
-                    save_path,
-                    model.example_input_array,
-                    dynamo=True,
-                    external_data=False,
-                )
 
     typer.run(main)
