@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.callbacks.weight_averaging import WeightAveraging
+from model import CNNModel, TimmModel
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -373,12 +374,18 @@ class ExportBestModelToONNX(Callback):
         print(f"Loading best checkpoint from: {best_model_path}")
 
         # Load the best checkpoint
-        pl_module.load_from_checkpoint(best_model_path)
+        model_type = type(pl_module)
+        if model_type == CNNModel:
+            best_model = model_type.load_from_checkpoint(best_model_path)
+        elif model_type == TimmModel:
+            best_model = model_type.load_from_checkpoint(
+                best_model_path, model_name=self.model_name
+            )
 
         # Freeze and prepare model for export
-        pl_module.freeze()
-        if hasattr(pl_module, "use_compile"):
-            pl_module.use_compile = False  # type: ignore
+        best_model.freeze()
+        if hasattr(best_model, "use_compile"):
+            best_model.use_compile = False  # type: ignore
 
         # Create ONNX directory
         self.onnx_dir.mkdir(parents=True, exist_ok=True)
@@ -387,9 +394,9 @@ class ExportBestModelToONNX(Callback):
         print(f"Exporting best model to ONNX: {save_path}")
 
         # Export to ONNX
-        pl_module.to_onnx(
+        best_model.to_onnx(
             save_path,
-            pl_module.example_input_array,
+            best_model.example_input_array,
             dynamo=self.dynamo,
             external_data=self.external_data,
         )
