@@ -37,10 +37,8 @@ if __name__ == "__main__":
         ),
         models: list[str] = typer.Option(
             [
-                "CNN",
                 "mobilenetv4_conv_small_035",
                 "mobilenetv4_conv_small_050",
-                "mobilenetv4_conv_small",
             ],
             "--models",
             help="List of models to train (use 'CNNModel' for built-in CNN)",
