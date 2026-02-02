@@ -11,6 +11,7 @@ if __name__ == "__main__":
     def main(
         out_dir: str = typer.Option("build/train", help="Output directory"),
         debug: bool = typer.Option(False, help="Enable debug mode"),
+        profiling: bool = typer.Option(False, help="Enable performance profiler."),
         dev_run: bool = typer.Option(
             False, help="Fast dev run (valid only when debug is True)"
         ),
@@ -144,6 +145,7 @@ if __name__ == "__main__":
                 logger=logger,
                 fast_dev_run=debug and dev_run,
                 precision=amp_precision,  # type: ignore
+                profiler="simple" if profiling else None,
                 callbacks=callbacks,
             )
 
