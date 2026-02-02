@@ -20,7 +20,7 @@ if __name__ == "__main__":
         ),
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
-        total_epochs: int = typer.Option(35, help="Total number of epochs"),
+        total_epochs: int = typer.Option(40, help="Total number of epochs"),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
         find_batch_size: bool = typer.Option(
             True, help="Enable/Disable automatic batch size finding"
@@ -29,7 +29,7 @@ if __name__ == "__main__":
             True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"
         ),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
-        ema_start_epoch: int = typer.Option(10, help="Epoch to start EMA"),
+        ema_start_epoch: int = typer.Option(5, help="Epoch to start EMA"),
         ema_warmup: bool = typer.Option(
             True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."
         ),
