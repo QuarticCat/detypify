@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import (
 from torchmetrics import Accuracy
 
 # Selected models for efficiency, ranked by model size, ascending
-type ModelName = Literal[
+type TimmModelName = Literal[
     # optimal ones
     "mobilenetv4_conv_small_035",
     "mobilenetv4_conv_small_050",
@@ -28,7 +28,7 @@ class TimmModel(LightningModule):
     def __init__(
         self,
         num_classes: int,
-        model_name: ModelName,
+        model_name: TimmModelName,
         total_epochs: int,
         image_size: int,
         warmup_epochs: int = 5,
@@ -49,6 +49,7 @@ class TimmModel(LightningModule):
             num_classes=num_classes,
             in_chans=1,
             aa_layer="blurpc",
+            # norm_layer=nn.RMSNorm, # may increase infer speed slightly
             drop_rate=0.15,
             exportable=True,
         )
@@ -216,7 +217,7 @@ class CNNModel(LightningModule):
             1, 1, image_size, image_size
         )
         self.learning_rate = learning_rate
-        self.total_epoches = total_epochs
+        self.total_epochs = total_epochs
         self.warm_up_epochs = warmup_epochs
 
     def forward(self, x):
@@ -285,7 +286,7 @@ class CNNModel(LightningModule):
         )
 
         decay_scheduler = CosineAnnealingLR(
-            optimizer, T_max=(self.total_epoches - self.warm_up_epochs), eta_min=1e-6
+            optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=1e-6
         )
 
         scheduler = SequentialLR(

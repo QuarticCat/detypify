@@ -10,7 +10,7 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.tuner.tuning import Tuner
-from model import CNNModel, ModelName, TimmModel
+from model import CNNModel, TimmModel, TimmModelName
 from proc_data import DATASET_REPO, get_dataset_classes
 from torch import set_float32_matmul_precision
 
@@ -22,8 +22,8 @@ if __name__ == "__main__":
         dev_run: bool = typer.Option(
             False, help="Fast dev run (valid only when debug is True)"
         ),
-        log_wrong_guesses: bool = typer.Option(
-            False, help="Logging wrong guesses to logger for review."
+        log_pred: bool = typer.Option(
+            True, help="Logging predictions to logger for review."
         ),
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
@@ -35,48 +35,51 @@ if __name__ == "__main__":
         use_ema: bool = typer.Option(
             True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"
         ),
-        ema_decay: float = typer.Option(0.999, help="EMA decay rate"),
-        ema_start_epoch: int = typer.Option(0, help="Epoch to start EMA"),
+        ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
+        ema_start_epoch: int = typer.Option(10, help="Epoch to start EMA"),
+        ema_warmup: bool = typer.Option(
+            True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."
+        ),
         amp_precision: str = typer.Option(
             "bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"
         ),
-        timm_models: list[str] = typer.Option(
+        models: list[str] = typer.Option(
             [
+                "CNN",
                 "mobilenetv4_conv_small_035",
                 "mobilenetv4_conv_small_050",
                 "mobilenetv4_conv_small",
             ],
-            "--timm-models",
-            help="List of timm models to train",
+            "--models",
+            help="List of models to train (use 'CNNModel' for built-in CNN)",
         ),
     ):
         """Train the model."""
 
-        final_use_ema = debug and use_ema
-
         out_dir_path = Path(out_dir)
 
-        # timm_model_list logic
-        timm_model_list: list[ModelName] = cast("list[ModelName]", timm_models)
-
         classes: set[str] = get_dataset_classes(DATASET_REPO)
-        models: list[CNNModel | TimmModel] = [
-            CNNModel(
-                num_classes=len(classes),
-                image_size=image_size,
-                warmup_epochs=warmup_epochs,
-                total_epochs=total_epochs,
-            ),
-        ]
-        for model_name in timm_model_list:
-            model = TimmModel(
-                num_classes=len(classes),
-                model_name=model_name,
-                warmup_epochs=warmup_epochs,
-                total_epochs=total_epochs,
-                image_size=image_size,
-            )
-            models.append(model)
+        model_instances: list[CNNModel | TimmModel] = []
+        for model_name in models:
+            if model_name == "CNN":
+                model_instances.append(
+                    CNNModel(
+                        num_classes=len(classes),
+                        image_size=image_size,
+                        total_epochs=total_epochs,
+                        warmup_epochs=warmup_epochs,
+                    )
+                )
+            else:
+                model_instances.append(
+                    TimmModel(
+                        num_classes=len(classes),
+                        model_name=cast("TimmModelName", model_name),
+                        warmup_epochs=warmup_epochs,
+                        total_epochs=total_epochs,
+                        image_size=image_size,
+                    )
+                )
 
         # define data module
         dm = MathSymbolDataModule(
@@ -84,7 +87,7 @@ if __name__ == "__main__":
             image_size=image_size,
         )
 
-        for model in models:
+        for model in model_instances:
             set_float32_matmul_precision("high")
             model_name_str = (
                 model.__class__.__name__
@@ -95,12 +98,14 @@ if __name__ == "__main__":
                 save_dir=out_dir_path, name=model_name_str, default_hp_metric=False
             )  # type: ignore
             callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
-            if log_wrong_guesses:
+            if log_pred:
                 callbacks.append(LogPredictCallback(sorted(classes)))
-            if final_use_ema:
+            if use_ema:
                 callbacks.append(
                     EMAWeightAveraging(
-                        decay=ema_decay, update_starting_at_epoch=ema_start_epoch
+                        decay=ema_decay,
+                        update_starting_at_epoch=ema_start_epoch,
+                        use_warmup=ema_warmup,
                     )
                 )
             trainer = Trainer(

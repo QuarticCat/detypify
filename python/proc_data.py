@@ -65,8 +65,6 @@ class MathSymbolSample(Struct):
 
 
 # Helper functions
-
-
 def is_invisible(c: str) -> bool:
     from unicodedata import category
 
