@@ -1,20 +1,12 @@
-from functools import partial
 from os import process_cpu_count
+from typing import Literal
 
 import torch
-from datasets import Array2D, Value, load_dataset
+from datasets import Array2D, Dataset, DatasetDict, fingerprint, load_dataset
 from lightning import LightningDataModule
 from proc_data import DATASET_REPO, rasterize_strokes
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
-
-
-def preprocess_images(batch, image_size):
-    """Preprocess function for datasets.map - defined at module level for caching."""
-    batch["image"] = [
-        rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]
-    ]
-    return batch
 
 
 class MathSymbolDataModule(LightningDataModule):
@@ -28,7 +20,6 @@ class MathSymbolDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
-        self.preprocess = partial(preprocess_images, image_size=self.image_size)
 
         base_transforms = [
             v2.ToImage(),
@@ -36,9 +27,9 @@ class MathSymbolDataModule(LightningDataModule):
         ]
 
         augmentations = [
-            v2.RandomRotation(10),  # type: ignore
+            v2.RandomRotation(10),  # type: ignore[arg-type]
             v2.RandomAffine(
-                degrees=0,  # type: ignore
+                degrees=0,  # type: ignore[arg-type]
                 translate=(0.1, 0.1),
                 shear=10,
             ),
@@ -68,40 +59,41 @@ class MathSymbolDataModule(LightningDataModule):
             batch["image"] = images
             return batch
 
-        if stage == "fit":
-            self.train_dataset = (
-                dataset["train"]
-                .map(self.preprocess, batched=True, remove_columns="strokes")
+        def process_dataset(
+            ds_split: Dataset, transform_type: Literal["eval", "train"]
+        ) -> DatasetDict:
+            def _rasterize_strokes_batched(batch, image_size):
+                batch["image"] = [
+                    rasterize_strokes(strokes, image_size)
+                    for strokes in batch["strokes"]
+                ]
+                return batch
+
+            return (
+                ds_split.map(
+                    _rasterize_strokes_batched,
+                    batched=True,
+                    remove_columns="strokes",
+                    num_proc=self.num_workers,
+                    new_fingerprint=fingerprint.Hasher.hash(self.image_size),
+                    fn_kwargs={"image_size": self.image_size},
+                )
                 .cast_column(
                     "image",
                     Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
                 )
                 .with_format("torch")
-                .with_transform(train_transform)
-            )
-            self.val_dataset = (
-                dataset["val"]
-                .map(self.preprocess, batched=True, remove_columns="strokes")
-                .cast_column(
-                    "image",
-                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
+                .with_transform(
+                    train_transform if transform_type == "train" else eval_transform
                 )
-                .with_format("torch")
-                .with_transform(eval_transform)
             )
 
+        if stage == "fit":
+            self.train_dataset = process_dataset(dataset["train"], "train")
+            self.val_dataset = process_dataset(dataset["val"], "eval")
+
         if stage == "test" or stage is None:
-            self.test_dataset = (
-                dataset["test"]
-                .map(self.preprocess, batched=True, remove_columns="strokes")
-                .cast_column("label", Value("uint32"))
-                .cast_column(
-                    "image",
-                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
-                )
-                .with_format("torch")
-                .with_transform(eval_transform)
-            )
+            self.test_dataset = process_dataset(dataset["test"], "eval")
 
     def train_dataloader(self):
         return DataLoader(
