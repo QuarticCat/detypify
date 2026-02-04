@@ -25,7 +25,7 @@ if __name__ == "__main__":
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
         find_batch_size: bool = typer.Option(
-            True, help="Enable/Disable automatic batch size finding"
+            False, help="Enable/Disable automatic batch size finding"
         ),
         use_ema: bool = typer.Option(
             True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"
