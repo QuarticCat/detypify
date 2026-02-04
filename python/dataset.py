@@ -20,6 +20,24 @@ class MathSymbolDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.image_size = image_size
         self.dataset_repo = DATASET_REPO
+        from torch import float32 as t_float32
+        from torchvision.transforms import v2
+
+        self.eval_transform = v2.Compose(
+            [v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)]
+        )
+        self.train_transform = v2.Compose(
+            [
+                v2.ToImage(),
+                # augmentations
+                v2.RandomAffine(
+                    degrees=10,  # type: ignore[arg-type]
+                    translate=(0.1, 0.1),
+                    shear=10,
+                ),
+                v2.ToDtype(dtype=t_float32, scale=True),
+            ]
+        )
 
     @override
     def prepare_data(self):
@@ -99,43 +117,16 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def on_after_batch_transfer(self, batch, dataloader_idx):
-        # the data should be transferred to the right device automatically
-        from torch import Tensor
-        from torch import float32 as t_float32
-        from torch import uint8 as t_uint8
-        from torchvision.transforms import v2
-
-        eval_transform = v2.Compose(
-            [v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)]
-        )
-        train_transform = v2.Compose(
-            [
-                v2.ToImage(),
-                # augmentations
-                v2.RandomRotation(10),  # type: ignore[arg-type]
-                v2.RandomAffine(
-                    degrees=0,  # type: ignore[arg-type]
-                    translate=(0.1, 0.1),
-                    shear=10,
-                ),
-                v2.ToDtype(dtype=t_float32, scale=True),
-            ]
-        )
-
-        def apply_transform(batch, transform: v2.Compose):
-            # make sure that the format is torch.Tensor
-            assert isinstance(batch["image"], Tensor)
-            images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
-            images = transform(images)
-            batch["image"] = images
-            return batch
-
-        if self.trainer:
+        # when batch is not a dict, means its not from dataloader, do nothing.
+        if isinstance(batch, dict) and self.trainer:
             from lightning.pytorch.trainer.states import RunningStage
+            from torch import uint8 as t_uint8
 
+            original_images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
             match self.trainer.state.stage:
                 case RunningStage.TRAINING:
-                    batch["image"] = apply_transform(batch["image"], train_transform)
+                    batch["image"] = self.train_transform(original_images)
                 case _:
-                    batch["image"] = apply_transform(batch["image"], eval_transform)
+                    batch["image"] = self.eval_transform(original_images)
+
         return batch
