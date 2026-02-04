@@ -49,7 +49,6 @@ class TimmModel(LightningModule):
             num_classes=num_classes,
             in_chans=1,
             aa_layer="blurpc",
-            # norm_layer=nn.RMSNorm, # may increase infer speed slightly
             drop_rate=0.15,
             exportable=True,
         )

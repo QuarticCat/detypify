@@ -135,8 +135,9 @@ if __name__ == "__main__":
                 }
             )
 
-            with train_args_path.open("wb") as f:
-                f.write(yaml.encode(current_args))
+            if not debug:
+                with train_args_path.open("wb") as f:
+                    f.write(yaml.encode(current_args))
 
             callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
 
