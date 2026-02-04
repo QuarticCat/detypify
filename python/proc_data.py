@@ -6,7 +6,7 @@ from functools import cache
 from os import process_cpu_count
 from pathlib import Path
 from shutil import rmtree as rmdir
-from typing import Annotated, Literal, cast
+from typing import Literal, cast
 from urllib.request import urlretrieve
 
 import typer
@@ -25,7 +25,6 @@ DATASET_ROOT = Path("build/dataset")
 EXTERNAL_DATA_PATH = Path("build/raw_data")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
-USE_CONTRIB = False
 CONTRIB_DATA = Path("build/dataset.json")
 DATASET_REPO = "Cloud0310/detypify-datasets"
 UPLOAD = True
@@ -725,63 +724,51 @@ class DataSetNameEnum(str, Enum):
     contrib = "contrib"
 
 
-app = typer.Typer()
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 @app.command()
 def main(
-    datasets: Annotated[
-        list[DataSetNameEnum] | None,
-        typer.Option(
-            "--datasets",
-            "-d",
-            help="Datasets to process when converting data.",
-        ),
-    ] = None,
-    skip_convert_data: Annotated[
-        bool, typer.Option(help="Do not construct or upload local datasets.")
-    ] = False,
-    skip_gen_info: Annotated[
-        bool, typer.Option(help="Skip writing symbol metadata and infer JSON files.")
-    ] = False,
-    include_contrib: Annotated[
-        bool,
-        typer.Option(
-            help="Append the contrib dataset even if it was not listed explicitly."
-        ),
-    ] = False,
-    no_upload: Annotated[
-        bool,
-        typer.Option(help="Store processed datasets locally."),
-    ] = False,
-    split_ratio: Annotated[
-        tuple[float, float, float],
-        typer.Option(
-            help="Train/test/val split ratios for the processed dataset.",
-        ),
-    ] = (0.8, 0.1, 0.1),
-    split_parts: Annotated[
-        bool,
-        typer.Option(
-            help="Write each split as multiple shards instead of a single file."
-        ),
-    ] = False,
-    batch_size: Annotated[
-        int,
-        typer.Option(help="Number of rows per shard when --split-parts is enabled."),
-    ] = 2000,
-    file_format: Annotated[
-        Literal["parquet", "vortex"],
-        typer.Option(help="Output format when writing dataset shards locally."),
-    ] = "parquet",
+    datasets: list[DataSetNameEnum] = typer.Option(
+        [DataSetNameEnum.detexify, DataSetNameEnum.mathwriting],
+        "--datasets",
+        "-d",
+        help="Datasets to process when converting data.",
+    ),
+    skip_convert_data: bool = typer.Option(
+        False, help="Do not construct or upload local datasets."
+    ),
+    skip_gen_info: bool = typer.Option(
+        False, help="Skip writing symbol metadata and infer JSON files."
+    ),
+    include_contrib: bool = typer.Option(
+        False,
+        help="Append the contrib dataset even if it was not listed explicitly.",
+    ),
+    no_upload: bool = typer.Option(
+        False,
+        help="Store processed datasets locally.",
+    ),
+    split_ratio: tuple[float, float, float] = typer.Option(
+        (0.8, 0.1, 0.1),
+        help="Train/test/val split ratios for the processed dataset.",
+    ),
+    split_parts: bool = typer.Option(
+        False,
+        help="Write each split as multiple shards instead of a single file.",
+    ),
+    batch_size: int = typer.Option(
+        2000,
+        help="Number of rows per shard when --split-parts is enabled.",
+    ),
+    file_format: str = typer.Option(
+        "parquet",
+        help="Output format(parquet/vortex) when writing dataset shards locally.",
+    ),
 ):
     """
     Preprocess datasets, generate metadata, and upload results.
     """
-    if datasets is None:
-        datasets = [DataSetNameEnum.detexify, DataSetNameEnum.mathwriting]
-        if USE_CONTRIB:
-            datasets.append(DataSetNameEnum.contrib)
 
     convert_data: bool = not skip_convert_data
     gen_info: bool = not skip_gen_info
@@ -790,8 +777,6 @@ def main(
         cast("DataSetName", d.value) for d in dict.fromkeys(datasets)
     ]
     if include_contrib and "contrib" not in dataset_names:
-        dataset_names.append("contrib")
-    if USE_CONTRIB and "contrib" not in dataset_names:
         dataset_names.append("contrib")
 
     if gen_info:

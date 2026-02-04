@@ -11,7 +11,10 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from model import CNNModel, TimmModel
 from proc_data import DATASET_REPO, get_dataset_classes
 
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
+
+@app.command()
 def main(
     checkpoint: str = typer.Argument(..., help="Path to checkpoint file"),
     model_type: str = typer.Option(
@@ -85,4 +88,4 @@ def main(
 
 
 if __name__ == "__main__":
-    typer.run(main)
+    app()
