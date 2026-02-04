@@ -7,7 +7,9 @@ from pathlib import Path
 import typer
 
 if __name__ == "__main__":
+    app = typer.Typer(pretty_exceptions_show_locals=False)
 
+    @app.command()
     def main(
         out_dir: str = typer.Option("build/train", help="Output directory"),
         debug: bool = typer.Option(False, help="Enable debug mode"),
