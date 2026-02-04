@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from msgspec import yaml
 
 if __name__ == "__main__":
     app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -48,6 +49,26 @@ if __name__ == "__main__":
         ),
     ):
         """Train the model."""
+        # Collect all input arguments
+        args_dict = {
+            "out_dir": out_dir,
+            "debug": debug,
+            "profiling": profiling,
+            "dev_run": dev_run,
+            "log_pred": log_pred,
+            "init_batch_size": init_batch_size,
+            "warmup_epochs": warmup_epochs,
+            "total_epochs": total_epochs,
+            "image_size": image_size,
+            "find_batch_size": find_batch_size,
+            "use_ema": use_ema,
+            "ema_decay": ema_decay,
+            "ema_start_epoch": ema_start_epoch,
+            "ema_warmup": ema_warmup,
+            "amp_precision": amp_precision,
+            "models": models,
+        }
+
         # Lazy import
         from dataset import MathSymbolDataModule
         from lightning import Trainer
@@ -102,6 +123,21 @@ if __name__ == "__main__":
             logger = TensorBoardLogger(
                 save_dir=out_dir_path, name=model_name_str, default_hp_metric=False
             )  # type: ignore
+
+            train_args_path = Path(logger.log_dir) / "training_args.yaml"
+            train_args_path.parent.mkdir(parents=True, exist_ok=True)
+
+            current_args = args_dict.copy()
+            current_args.update(
+                {
+                    "model_name": model_name_str,
+                    "num_classes": len(classes),
+                }
+            )
+
+            with train_args_path.open("wb") as f:
+                f.write(yaml.encode(current_args))
+
             callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
 
             # Lazy import callbacks only when needed
@@ -177,6 +213,14 @@ if __name__ == "__main__":
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path)  # type: ignore
                 model.hparams.learning_rate = lr_finder.suggestion()  # type: ignore
+
+            current_args["final_batch_size"] = batch_size
+            lr = model.hparams.get("learning_rate")
+            if lr is not None:
+                current_args["suggested_learning_rate"] = lr
+
+            with train_args_path.open("wb") as f:
+                f.write(yaml.encode(current_args))
 
             # training
             model.use_compile = True
