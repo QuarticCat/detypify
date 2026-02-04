@@ -57,6 +57,7 @@ if __name__ == "__main__":
         from model import CNNModel, TimmModel
         from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
+        from torch.cuda import get_device_properties
 
         out_dir_path = Path(out_dir)
 
@@ -89,8 +90,10 @@ if __name__ == "__main__":
             image_size=image_size,
         )
 
+        # ampere or later graphics only
+        if get_device_properties(0).major >= 8:
+            set_float32_matmul_precision("medium")
         for model in model_instances:
-            set_float32_matmul_precision("high")
             model_name_str = (
                 model.__class__.__name__
                 if model.__class__.__name__ != "TimmModel"
@@ -180,4 +183,4 @@ if __name__ == "__main__":
             trainer.fit(model, datamodule=dm)
             trainer.test(model, datamodule=dm)
 
-    typer.run(main)
+    app()
