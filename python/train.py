@@ -31,6 +31,8 @@ if __name__ == "__main__":
         ema_warmup: bool = typer.Option(
             True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."
         ),
+        ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
+        ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option(
             "bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"
         ),
@@ -60,6 +62,8 @@ if __name__ == "__main__":
             "ema_decay": ema_decay,
             "ema_start_epoch": ema_start_epoch,
             "ema_warmup": ema_warmup,
+            "ema_warmup_gamma": ema_warmup_gamma,
+            "ema_warmup_power": ema_warmup_power,
             "amp_precision": amp_precision,
             "models": models,
         }
@@ -122,7 +126,9 @@ if __name__ == "__main__":
                 save_dir=out_dir_path, name=model_name_str, default_hp_metric=False
             )  # type: ignore
 
-            train_args_path = Path(logger.log_dir) / "training_args.yaml"
+            final_output_dir = Path(logger.log_dir)
+            checkpoints_dir = final_output_dir / "ckpts"
+            train_args_path = final_output_dir / "training_args.yaml"
             train_args_path.parent.mkdir(parents=True, exist_ok=True)
 
             current_args = args_dict.copy()
@@ -153,13 +159,15 @@ if __name__ == "__main__":
                         decay=ema_decay,
                         update_starting_at_epoch=ema_start_epoch,
                         use_warmup=ema_warmup,
+                        warmup_gamma=ema_warmup_gamma,
+                        warmup_power=ema_warmup_power,
                     )
                 )
 
             # Add checkpoint callback to save best model
             checkpoint_callback = ModelCheckpoint(
-                dirpath=out_dir_path / "checkpoints" / model_name_str,
-                save_weights_only=False,
+                dirpath=checkpoints_dir,
+                save_weights_only=True,
                 filename="best-{epoch:02d}-{val_acc:.4f}",
                 monitor="val_acc",
                 mode="max",
@@ -174,7 +182,7 @@ if __name__ == "__main__":
 
                 callbacks.append(
                     ExportBestModelToONNX(
-                        onnx_dir=out_dir_path / "onnx",
+                        save_dir=checkpoints_dir,
                         model_name=model_name_str,
                         checkpoint_callback=checkpoint_callback,
                     )
@@ -205,11 +213,11 @@ if __name__ == "__main__":
                 )
             print(f"The final batch size is {batch_size}.")
             if not debug and not dev_run:
-                lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-5)
-                fig = lr_finder.plot(suggest=True)  # type: ignore
-                save_path = (
-                    out_dir_path / "lr_find" / f"{model_name_str}_{image_size}.svg"
+                lr_finder = tuner.lr_find(
+                    model, datamodule=dm, min_lr=1e-4, max_lr=1e-3
                 )
+                fig = lr_finder.plot(suggest=True)  # type: ignore
+                save_path = final_output_dir / f"lr_{batch_size}_{image_size}.svg"
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path)  # type: ignore
                 model.hparams.learning_rate = lr_finder.suggestion()  # type: ignore
