@@ -160,7 +160,7 @@ def get_ema_multi_avg_fn(
     decay: float = 0.995,
     use_warmup: bool = True,
     min_decay: float = 0.0,
-    warmup_gamma: float = 1.0,
+    warmup_gamma: float = 25.0,
     warmup_power: float = 0.7,
 ):
     """
@@ -341,14 +341,14 @@ class ExportBestModelToONNX(Callback):
 
     def __init__(
         self,
-        onnx_dir: Path | str,
+        save_dir: Path,
         model_name: str,
         checkpoint_callback: ModelCheckpoint | None = None,
         dynamo: bool = True,
         external_data: bool = False,
     ) -> None:
         super().__init__()
-        self.onnx_dir = Path(onnx_dir)
+        self.save_dir = Path(save_dir)
         self.model_name = model_name
         self.checkpoint_callback = checkpoint_callback
         self.dynamo = dynamo
@@ -370,8 +370,8 @@ class ExportBestModelToONNX(Callback):
             return
 
         # Get the best model path
-        best_model_path = checkpoint_callback.best_model_path
-        if not best_model_path:
+        best_model_path = Path(checkpoint_callback.best_model_path)
+        if not best_model_path.exists():
             print("Warning: No best model checkpoint available. Skipping ONNX export.")
             return
 
@@ -397,8 +397,7 @@ class ExportBestModelToONNX(Callback):
             best_model.use_compile = False  # type: ignore
 
         # Create ONNX directory
-        self.onnx_dir.mkdir(parents=True, exist_ok=True)
-        save_path = self.onnx_dir / f"{self.model_name}.onnx"
+        save_path = self.save_dir / f"{best_model_path.stem}.onnx"
 
         print(f"Exporting best model to ONNX: {save_path}")
 

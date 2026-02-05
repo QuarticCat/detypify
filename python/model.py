@@ -34,7 +34,7 @@ class BaseModel(LightningModule):
         image_size: int,
         total_epochs: int,
         warmup_epochs: int = 5,
-        learning_rate: float = 1e-3,
+        learning_rate: float = 4e-4,
         use_compile: bool = False,
     ):
         super().__init__()
