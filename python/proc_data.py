@@ -85,6 +85,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     import re
 
     page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
+    page_path.parent.mkdir(exist_ok=True, parents=True)
     if not page_path.exists():
         urlretrieve("https://typst.app/docs/reference/symbols/sym/", page_path)
     with page_path.open() as f:
@@ -784,6 +785,7 @@ def main(
         typ_sym_info = get_typst_symbol_info()
         symbols_info_path = DATASET_ROOT / "symbols.json"
         if not symbols_info_path.exists():
+            symbols_info_path.parent.mkdir(parents=True, exist_ok=True)
             with symbols_info_path.open("wb") as f:
                 f.write(json.encode(typ_sym_info))
 
