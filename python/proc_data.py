@@ -1,13 +1,9 @@
 """Preprocess training datasets, helping functions and related constants/types."""
 
-from concurrent.futures import ProcessPoolExecutor
 from enum import Enum
 from functools import cache
-from os import process_cpu_count
 from pathlib import Path
-from shutil import rmtree as rmdir
 from typing import Literal, cast
-from urllib.request import urlretrieve
 
 import typer
 from msgspec import Struct, json, yaml
@@ -83,6 +79,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     """
 
     import re
+    from urllib.request import urlretrieve
 
     page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
     page_path.parent.mkdir(exist_ok=True, parents=True)
@@ -185,13 +182,13 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
 
 
 @cache
-def get_dataset_classes(dataset: str) -> set[str]:
+def get_dataset_classes(dataset_name: str) -> set[str]:
     from datasets import load_dataset
 
     classes: set[str] = set()
-    dataset = load_dataset(dataset)  # type: ignore
+    dataset = load_dataset(dataset_name)
     for split in dataset:
-        classes.update(dataset[split].features["label"].names)  # type: ignore
+        classes.update(dataset[split].features["label"].names)
     return classes
 
 
@@ -372,6 +369,8 @@ def construct_mathwriting_df():
             - A set of unmapped labels (TeX commands that couldn't be mapped).
     """
 
+    from concurrent.futures import ProcessPoolExecutor
+
     import polars as pl
 
     label_acc = []
@@ -544,10 +543,6 @@ def create_dataset(
 
     print(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
-    # ---------------------------------------------------------
-    # 2. Dispatcher: Construct LazyFrame & Unmapped Set
-    # ---------------------------------------------------------
-
     lfs = []
     unmapped: dict[DataSetName, set[str]] = {}
     for dataset_name in dataset_names:
@@ -570,18 +565,15 @@ def create_dataset(
                 raise ValueError(f"Unknown dataset name: {dataset_name}")
     lf = pl.concat(lfs)
 
-    # ---------------------------------------------------------
-    # 3. Preparation & Splitting Logic
-    # ---------------------------------------------------------
     dataset_path = DATASET_ROOT
     split_names: list[SplitName] = ["train", "test", "val"]
 
-    # Clean/Create Directories
+    from shutil import rmtree as rmdir
+
     if dataset_path.exists():
         rmdir(dataset_path)
     dataset_path.mkdir(parents=True, exist_ok=True)
 
-    # Calculate Split Thresholds
     train_r, test_r, _ = split_ratio
     t1 = train_r
     t2 = train_r + test_r
@@ -642,6 +634,8 @@ def create_dataset(
                     class_feature.str2int(label) for label in batch["label"]
                 ]
                 return batch
+
+            from os import process_cpu_count
 
             description = (
                 "Detypify dataset, "

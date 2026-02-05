@@ -1,11 +1,6 @@
 """Train the model."""
 
-from __future__ import annotations
-
-from pathlib import Path
-
 import typer
-from msgspec import yaml
 
 if __name__ == "__main__":
     app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -70,12 +65,15 @@ if __name__ == "__main__":
         }
 
         # Lazy import
+        from pathlib import Path
+
         from dataset import MathSymbolDataModule
         from lightning import Trainer
         from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
         from lightning.pytorch.loggers import TensorBoardLogger
         from lightning.pytorch.tuner.tuning import Tuner
         from model import CNNModel, TimmModel
+        from msgspec import yaml
         from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
         from torch.cuda import get_device_properties
@@ -111,7 +109,7 @@ if __name__ == "__main__":
             image_size=image_size,
         )
 
-        # ampere or later graphics only
+        # for Ampere or later NVIDIA graphics only
         if get_device_properties(0).major >= 8:
             set_float32_matmul_precision("medium")
         for model in model_instances:

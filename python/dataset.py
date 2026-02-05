@@ -11,17 +11,17 @@ class MathSymbolDataModule(LightningDataModule):
         self,
         image_size: int,
         batch_size: int = 64,
-        num_workers: int = process_cpu_count(),
+        num_workers: int = process_cpu_count() or 1,
     ):
         from proc_data import DATASET_REPO
+        from torch import float32 as t_float32
+        from torchvision.transforms import v2
 
         super().__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
         self.dataset_repo = DATASET_REPO
-        from torch import float32 as t_float32
-        from torchvision.transforms import v2
 
         self.eval_transform = v2.Compose(
             [v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)]

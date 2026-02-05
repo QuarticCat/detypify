@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from math import ceil
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.callbacks.weight_averaging import WeightAveraging
-from model import CNNModel, TimmModel
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -30,14 +28,15 @@ class LogPredictCallback(Callback):
         self.log_type = log_type
         self.logged_batches = 0
 
+    @override
     def on_test_batch_end(
         self,
         trainer: Trainer,
-        pl_module: LightningModule,  # noqa: ARG002
+        pl_module: LightningModule,
         outputs,
         batch,
         batch_idx: int,
-        dataloader_idx: int = 0,  # noqa: ARG002
+        dataloader_idx: int = 0,
     ) -> None:
         import torch
 
@@ -80,6 +79,8 @@ class LogPredictCallback(Callback):
         from lightning.pytorch.loggers import TensorBoardLogger
 
         if isinstance(trainer.logger, TensorBoardLogger):
+            from math import ceil
+
             import matplotlib as mpl
             import matplotlib.pyplot as plt
 
@@ -255,6 +256,7 @@ class EMAWeightAveraging(WeightAveraging):
 
     Note:
         Like WeightAveraging, this callback doesn't support sharded models and may
+        experience memory increases due to storing averaged parameters.
     """
 
     def __init__(
@@ -284,6 +286,7 @@ class EMAWeightAveraging(WeightAveraging):
         self.update_starting_at_step = update_starting_at_step
         self.update_starting_at_epoch = update_starting_at_epoch
 
+    @override
     def should_update(
         self, step_idx: int | None = None, epoch_idx: int | None = None
     ) -> bool:
@@ -351,6 +354,7 @@ class ExportBestModelToONNX(Callback):
         self.dynamo = dynamo
         self.external_data = external_data
 
+    @override
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Export the best model to ONNX when training finishes."""
         # Find the checkpoint callback if not provided
@@ -375,12 +379,17 @@ class ExportBestModelToONNX(Callback):
 
         # Load the best checkpoint
         model_type = type(pl_module)
+        from model import CNNModel, TimmModel
+
         if model_type == CNNModel:
             best_model = model_type.load_from_checkpoint(best_model_path)
         elif model_type == TimmModel:
             best_model = model_type.load_from_checkpoint(
                 best_model_path, model_name=self.model_name
             )
+        else:
+            print(f"Warning: Unknown model type {model_type}. Skipping ONNX export.")
+            return
 
         # Freeze and prepare model for export
         best_model.freeze()
