@@ -161,6 +161,7 @@ if __name__ == "__main__":
             # Add checkpoint callback to save best model
             checkpoint_callback = ModelCheckpoint(
                 dirpath=out_dir_path / "checkpoints" / model_name_str,
+                save_weights_only=False,
                 filename="best-{epoch:02d}-{val_acc:.4f}",
                 monitor="val_acc",
                 mode="max",
