@@ -80,7 +80,7 @@ if __name__ == "__main__":
         from msgspec import yaml
         from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
-        from torch.cuda import get_device_properties
+        from torch.cuda import get_device_properties, is_available
 
         out_dir_path = Path(out_dir)
 
@@ -114,8 +114,15 @@ if __name__ == "__main__":
         )
 
         # for Ampere or later NVIDIA graphics only
-        if get_device_properties(0).major >= 8:
-            set_float32_matmul_precision("medium")
+        if is_available():
+            if get_device_properties(0).major >= 8:
+                # set matmul precision for speed
+                set_float32_matmul_precision("medium")
+            else:
+                # 20 series graphics don't support bf16 format precision
+                if amp_precision == "bf16-mixed":
+                    amp_precision = "16-mixed"
+                    args_dict["amp_precision"] = amp_precision
         for model in model_instances:
             model_name_str = (
                 model.__class__.__name__
