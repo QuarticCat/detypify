@@ -45,35 +45,30 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def setup(self, stage: str | None = None):
-        from datasets import Array2D, DatasetDict
+        from datasets import Array2D
         from proc_data import rasterize_strokes
 
-        dataset = load_dataset(self.dataset_repo)
+        def _rasterize_strokes_batched(batch, image_size):
+            batch["image"] = [
+                rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]
+            ]
+            return batch
 
-        def process_dataset(ds_split: DatasetDict) -> DatasetDict:
-            def _rasterize_strokes_batched(batch, image_size):
-                batch["image"] = [
-                    rasterize_strokes(strokes, image_size)
-                    for strokes in batch["strokes"]
-                ]
-                return batch
-
-            return (
-                ds_split.map(
-                    _rasterize_strokes_batched,
-                    batched=True,
-                    remove_columns="strokes",
-                    num_proc=self.num_workers,
-                    fn_kwargs={"image_size": self.image_size},
-                )
-                .cast_column(
-                    "image",
-                    Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
-                )
-                .with_format("torch")
+        dataset = (
+            load_dataset(self.dataset_repo)
+            .map(
+                _rasterize_strokes_batched,
+                batched=True,
+                remove_columns="strokes",
+                num_proc=self.num_workers,
+                fn_kwargs={"image_size": self.image_size},
             )
-
-        dataset = process_dataset(dataset)
+            .cast_column(
+                "image",
+                Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
+            )
+            .with_format("torch")
+        )
 
         if stage == "fit":
             self.train_dataset = dataset["train"]
