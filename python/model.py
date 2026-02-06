@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import Literal, override
 
 import torch
+import torch_tensorrt  # noqa: F401
 from lightning import LightningModule
 from timm import create_model
 from torch import Tensor, nn, optim
@@ -165,8 +166,10 @@ class TimmModel(BaseModel):
             exportable=True,
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
+
         self.model_opt = torch.compile(
             self.model,
+            backend="tensorrt",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
@@ -234,11 +237,13 @@ class CNNModel(BaseModel):
         # so add it as seperate optimized module
         self.features_opt = torch.compile(
             self.features,
+            backend="tensorrt",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
         self.classifier_opt = torch.compile(
             self.classifier,
+            backend="tensorrt",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
