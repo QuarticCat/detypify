@@ -50,6 +50,15 @@ uv sync --extra=data
 
 ### Data Preprocessing
 
+> [!NOTE]
+> For training the first time, at least **generate testing info** is needed.
+
+To generate data for testing without full dataset processing:
+
+```bash
+uv run --extra=data proc_data.py --skip-convert-data
+```
+
 To compose the dataset (Detexify + MathWriting) and upload it to Hugging Face:
 
 ```bash
@@ -60,12 +69,6 @@ To prepare data locally without uploading (useful for debugging):
 
 ```bash
 uv run --extra=data proc_data.py --no-upload --split-parts
-```
-
-To generate data for worker/frontend review without full dataset processing:
-
-```bash
-uv run --extra=data proc_data.py --skip-convert-data
 ```
 
 To include the contributed dataset (requires `build/dataset.json`):
@@ -82,6 +85,11 @@ uv run --extra=data proc_data.py --help
 
 ### Model Training
 
+>[!NOTE]
+> The ema gamma and decay params are crucial things to change if you're meeting with
+> accuracy low problem.
+> By default, these options are tuned for batch size 128 as default.
+
 To train the default models (defined in `train.py`):
 
 ```bash
@@ -89,20 +97,19 @@ uv run train.py --total-epochs 35 --image-size 224
 ```
 
 You can specify models to be trained:
-
 ```bash
-uv run train.py --models mobilenetv4_conv_small_050 --models mobilenetv4_conv_small
+uv run train.py --models mobilenetv4_conv_small_035 --models mobilenetv4_conv_small_050
 ```
 
 The script will:
 1. Automatically find the optimal batch size (can be disabled with `--no-find-batch-size`).
 2. Find the optimal learning rate.
 3. Train the models.
-4. Export them to `build/train/onnx`.
+4. Export checkpoints them to `build/train/{model_name}/ckpts`.
 
 **Key Options:**
 - `--out-dir`: Output directory (default: `build/train`).
-- `--ema-start-epoch`: Epoch to start EMA (default: 10).
+- `--ema-start-epoch`: Epoch to start EMA (default: 5).
 - `--log-pred`: Enable logging of predictions (default: True).
 
 To view the training/test logs:
