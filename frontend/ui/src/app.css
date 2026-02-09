@@ -34,10 +34,7 @@
 @layer base {
     @font-face {
         font-family: NewCMMath-Detypify;
-        font-weight: 400;
-        font-display: swap;
         src:
-            local(NewComputerModernMath-Regular),
             local(NewComputerModernMath),
             url(/NewCMMath-Detypify.woff2) format("woff2");
     }

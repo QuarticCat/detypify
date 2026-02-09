@@ -29,7 +29,6 @@ data = [
   "polars>=1.34.0",
   "vortex-data>=0.58.0",
   "huggingface-hub>=1.3.3",
-  "fonttools[woff]>=4.61.1",
 ]
 
 [dependency-groups]
@@ -51,9 +50,6 @@ dev = [
   "viztracer>=1.1.1",
   # lsp, type checker
   "zuban",
-]
-data = [
-  "fonttools[woff]>=4.61.1",
 ]
 
 [tool.pyrefly]

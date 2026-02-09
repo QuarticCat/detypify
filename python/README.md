@@ -20,9 +20,6 @@ This directory contains scripts for data preprocessing, model training, and asse
   - `CNNModel`: A simple custom CNN for comparison or smaller tasks.
 - `dataset.py`: Data loading and augmentation.
   - `MathSymbolDataModule`: Handles downloading from Hugging Face, rasterizing strokes, and applying real-time augmentations (rotation, affine transforms).
-- `proc_font.py`: Font subsetting utility.
-  - Subsets the `NewCMMath` font to include only the characters used by Detypify, reducing bundle size for the web interface.
-  - Requires `external/NewCMMath-Regular.otf` to be present.
 - `review_contrib.py`: Utility to review and incorporate community-contributed symbol samples from the D1 database (Maintainer only).
 - `tex_to_typ.json`: Manual mapping overrides for LaTeX to Typst symbol names.
 - `callbacks.py`: Custom callbacks for model training:
@@ -42,7 +39,7 @@ For training only, install dependencies with:
 uv sync
 ```
 
-If you're interested in processing data (includes data processing, font processing):
+If you're interested in processing data:
 
 ```bash
 uv sync --extra=data
@@ -133,14 +130,3 @@ For CNN models:
 ```bash
 uv run python/test_model.py path/to/checkpoint.ckpt --model-type cnn
 ```
-
-### Font Subsetting
-
-To generate the subsetted font for the web interface:
-
-```bash
-# Ensure external/NewCMMath-Regular.otf exists
-uv run --extra=data proc_font.py
-```
-
-This will create `build/font/NewCMMath-Detypify.woff2`.
