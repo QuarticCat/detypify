@@ -38,20 +38,21 @@ export const contribSyms = contribSymsRaw as Record<string, string>;
  */
 export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCanvasElement | undefined {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = options.canvasSize ?? 32;
+    canvas.width = canvas.height = options.canvasSize ?? 224;
 
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
         throw new Error("Failed to get 2D canvas context.");
     }
-    ctx.fillStyle = "white";
-    ctx.lineWidth = options.lineWidth ?? 1;
+    ctx.fillStyle = "black";
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = options.lineWidth ?? Math.max(1, Math.floor(canvas.width / 25));
 
     // Find bounding rect.
     let minX = Infinity;
-    let maxX = 0;
+    let maxX = -Infinity;
     let minY = Infinity;
-    let maxY = 0;
+    let maxY = -Infinity;
     for (const stroke of strokes) {
         for (const [x, y] of stroke) {
             minX = Math.min(minX, x);
@@ -62,12 +63,12 @@ export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCa
     }
 
     // Normalize.
+    const padding = 10;
+    const targetSize = canvas.width - 2 * padding;
     let width = Math.max(maxX - minX, maxY - minY);
-    if (width === 0) return;
-    width = width * 1.2 + 20;
-    const zeroX = (minX + maxX - width) / 2;
-    const zeroY = (minY + maxY - width) / 2;
-    const scale = canvas.width / width;
+    const scale = width > 1e-6 ? targetSize / width : 1;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
 
     // Draw to canvas.
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -75,7 +76,9 @@ export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCa
     for (const stroke of strokes) {
         ctx.beginPath();
         for (const [x, y] of stroke) {
-            ctx.lineTo(Math.round((x - zeroX) * scale), Math.round((y - zeroY) * scale));
+            const targetX = (x - centerX) * scale + canvas.width / 2;
+            const targetY = (y - centerY) * scale + canvas.width / 2;
+            ctx.lineTo(Math.round(targetX), Math.round(targetY));
         }
         ctx.stroke();
     }
@@ -117,7 +120,7 @@ export class Detypify {
         const rgba = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const grey = new Float32Array(rgba.length / 4);
         for (let i = 0; i < grey.length; ++i) {
-            grey[i] = rgba[i * 4] === 255 ? 1 : 0;
+            grey[i] = rgba[i * 4] / 255;
         }
 
         // Infer.
