@@ -10,16 +10,10 @@
 ## Features
 
 - **PWA**: installable and works offline
-- **Tiny model**: 1.3 MiB (ONNX), fast to load and run
+- **Tiny model**: fast to load and run
 - **Decent symbol set**: support 400+ symbols
 
-
 You can also use it in [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
-
-## Associated Repos
-
-- [detypify-datasets](https://huggingface.co/datasets/Cloud0310/detypify-datasets): Pre-processed datasets and instructions on how to pre-process data by yourself
-
 
 ## Development
 
