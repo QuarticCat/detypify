@@ -22,6 +22,7 @@ export default defineConfig({
                         options: { cacheName: "wasm-cache" },
                     },
                 ],
+                maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
             },
             manifest: {
                 name: "Detypify",
