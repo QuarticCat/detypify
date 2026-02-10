@@ -1,27 +1,34 @@
 # Detypify Service
 
-Let you integrate Detypify into your own projects easily.
+Integrate Detypify into your own projects.
 
-## Getting Started
+## Example
 
-1. Install it as a dependency.
+```typescript
+import { Detypify, inferSyms } from "detypify-service";
 
-    ```console
-    $ bun add detypify-service
-    ```
+const session = await Detypify.create();
+const storkes = [[[0, 0], [1, 1]]];
+const scores = await session.infer(strokes);
+const candidates = Array.from(scores.keys());
+candidates.sort((a, b) => scores[b] - scores[a]);
+console.log(inferSyms[candidates[0]]);
+```
 
-1. This javascript module exports:
+## API Reference
 
-    - `ortEnv`: Re-export of [`onnxruntime-web.env`](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html). Used to configure onnxruntime.
+- `ortEnv`: Re-export of [`onnxruntime-web.env`](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html). Used to configure onnxruntime.
 
-      Note: Recent `onnxruntime-web` builds ship bundled wasm by default; use the `onnxruntime-web-use-extern-wasm` export condition to opt into external wasm loading (see the official `exports` in https://github.com/microsoft/onnxruntime/blob/main/js/web/package.json).
+  Note: Recent `onnxruntime-web` builds ship bundled wasm by default; use the `onnxruntime-web-use-extern-wasm` export condition to opt into external wasm loading (see the official `exports` in https://github.com/microsoft/onnxruntime/blob/main/js/web/package.json).
 
-    - `Detypify`: The main type.
+- `inferSyms`: Model's output symbol data.
 
-      - Use `Detypify.create()` to create an instance.
+- `contribSyms`: Mapping from Typst symbol names to characters.
 
-      - Use `instance.infer(strokes)` to inference scores of each symbol.
+- `Detypify`: The main type.
 
-    - `inferSyms`: Model's output symbol data.
+  - Use `Detypify.create()` to create an instance.
 
-    - `contribSyms`: Mapping from Typst symbol names to characters.
+  - Use `instance.infer(strokes)` to inference scores of each symbol.
+
+    The higher `scores[i]` is, the more likely your strokes is `inferSyms[i]`.

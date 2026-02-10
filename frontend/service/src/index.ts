@@ -99,6 +99,8 @@ export class Detypify {
 
     /**
      * Inference scores of each symbol.
+     *
+     * The higher `scores[i]` is, the more likely your strokes is `inferSyms[i]`.
      */
     async infer(strokes: Strokes): Promise<Float32Array> {
         const canvas = drawStrokes(strokes);
