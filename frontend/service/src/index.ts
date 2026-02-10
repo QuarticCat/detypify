@@ -1,8 +1,8 @@
 import contribSymsRaw from "../train/contrib.json";
 import inferSymsRaw from "../train/infer.json";
-import { InferenceSession, Tensor } from "onnxruntime-web";
+import { InferenceSession, Tensor } from "onnxruntime-web/wasm";
 
-export { env as ortEnv } from "onnxruntime-web";
+export { env as ortEnv } from "onnxruntime-web/wasm";
 
 const modelUrl = new URL("../train/model.onnx", import.meta.url).href;
 
