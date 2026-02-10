@@ -3,7 +3,8 @@
     import Canvas from "../lib/Canvas.svelte";
     import type { Strokes } from "detypify-service";
     import { Detypify, inferSyms } from "detypify-service";
-    import { Alert } from "flowbite-svelte";
+    import { Alert, Button } from "flowbite-svelte";
+    import { fly } from "svelte/transition";
 
     const { session }: { session: Detypify } = $props();
 
@@ -11,8 +12,10 @@
     let candidates: number[] = $state([]);
     let numToShow = $state(5);
 
-    // Every time stroke changes, calculate candidates.
+    // Every time stroke changes, reset numToShow and infer candidates.
     $effect(() => {
+        numToShow = 5;
+
         if (strokes.length === 0) {
             candidates = [];
             return;
@@ -39,4 +42,13 @@
     {#each candidates.slice(0, numToShow) as i (i)}
         <Candidate info={inferSyms[i]} />
     {/each}
+    {#if candidates.length > 0}
+        <div
+            in:fly|local={{ x: 20, duration: 50, delay: 50 }}
+            out:fly|local={{ x: 20, duration: 50 }}
+            class="w-fit self-center"
+        >
+            <Button outline size="sm" onclick={() => (numToShow += 5)}>Show More</Button>
+        </div>
+    {/if}
 </div>
