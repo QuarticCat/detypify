@@ -67,7 +67,6 @@ export function drawStrokes(strokes: Strokes): HTMLCanvasElement | undefined {
 
     // Draw to canvas.
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.translate(0.5, 0.5);
     for (const stroke of strokes) {
         ctx.beginPath();
         for (const [x, y] of stroke) {
@@ -77,7 +76,6 @@ export function drawStrokes(strokes: Strokes): HTMLCanvasElement | undefined {
         }
         ctx.stroke();
     }
-    ctx.translate(-0.5, -0.5);
 
     return canvas;
 }
