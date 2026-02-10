@@ -20,8 +20,8 @@ Let you integrate Detypify into your own projects easily.
 
       - Use `Detypify.create()` to create an instance.
 
-      - Use `instance.candidates(strokes, k)` to inference top `k` candidates.
+      - Use `instance.infer(strokes)` to inference scores of each symbol.
 
-    - `inferSyms`: Symbol metadata used by the model.
+    - `inferSyms`: Model's output symbol data.
 
     - `contribSyms`: Mapping from Typst symbol names to characters.

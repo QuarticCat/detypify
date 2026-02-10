@@ -19,7 +19,7 @@ export type Stroke = Point[];
 export type Strokes = Stroke[];
 
 /**
- * Symbol metadata used by the model.
+ * Model's output symbol data.
  */
 export const inferSyms = inferSymsRaw as SymbolInfo[];
 
@@ -98,11 +98,13 @@ export class Detypify {
     }
 
     /**
-     * Inference top `k` candidates.
+     * Inference scores of each symbol.
      */
-    async candidates(strokes: Strokes, k: number): Promise<SymbolInfo[]> {
+    async infer(strokes: Strokes): Promise<Float32Array> {
         const canvas = drawStrokes(strokes);
-        if (!canvas) return [];
+        if (!canvas) {
+            throw new Error("Failed to draw strokes.");
+        }
 
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (!ctx) {
@@ -119,11 +121,6 @@ export class Detypify {
         // Infer.
         const tensor = new Tensor("float32", grey, [1, 1, canvas.width, canvas.height]);
         const outputs = await this.sess.run({ [this.sess.inputNames[0]]: tensor });
-        const output = Array.from(outputs[this.sess.outputNames[0]].data as Iterable<number>);
-
-        // Select top K.
-        const withIdx = output.map((x, i) => [x, i] as const);
-        withIdx.sort((a, b) => b[0] - a[0]);
-        return withIdx.slice(0, k).map(([, i]) => inferSyms[i]);
+        return outputs[this.sess.outputNames[0]].data as Float32Array;
     }
 }

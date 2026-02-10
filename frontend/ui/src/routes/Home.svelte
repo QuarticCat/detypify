@@ -1,22 +1,28 @@
 <script lang="ts">
     import Candidate from "../lib/Candidate.svelte";
     import Canvas from "../lib/Canvas.svelte";
-    import type { Strokes, SymbolInfo } from "detypify-service";
-    import { Detypify } from "detypify-service";
+    import type { Strokes } from "detypify-service";
+    import { Detypify, inferSyms } from "detypify-service";
     import { Alert } from "flowbite-svelte";
 
     const { session }: { session: Detypify } = $props();
 
     let strokes: Strokes = $state([]);
-    let candidates: SymbolInfo[] = $state([]);
+    let candidates: number[] = $state([]);
+    let numToShow = $state(5);
 
     // Every time stroke changes, calculate candidates.
     $effect(() => {
-        if (strokes.length > 0) {
-            session.candidates(strokes, 5).then((res) => (candidates = res));
-        } else {
+        if (strokes.length === 0) {
             candidates = [];
+            return;
         }
+
+        session.infer(strokes).then((scores) => {
+            const keys = Array.from(scores.keys());
+            keys.sort((a, b) => scores[b] - scores[a]);
+            candidates = keys;
+        });
     });
 </script>
 
@@ -30,7 +36,7 @@
 </div>
 
 <div class="ui-sub-container w-100">
-    {#each candidates as info}
-        <Candidate {info} />
+    {#each candidates.slice(0, numToShow) as i (i)}
+        <Candidate info={inferSyms[i]} />
     {/each}
 </div>
