@@ -31,7 +31,7 @@ export const contribSyms = contribSymsRaw as Record<string, string>;
 /**
  * Normalize strokes and draw them to canvas.
  */
-export function drawStrokes(strokes: Strokes): HTMLCanvasElement | undefined {
+export function drawStrokes(strokes: Strokes): HTMLCanvasElement {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = 224;
 
@@ -104,10 +104,6 @@ export class Detypify {
      */
     async infer(strokes: Strokes): Promise<Float32Array> {
         const canvas = drawStrokes(strokes);
-        if (!canvas) {
-            throw new Error("Failed to draw strokes.");
-        }
-
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (!ctx) {
             throw new Error("Failed to get 2D canvas context.");
