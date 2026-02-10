@@ -17,9 +17,9 @@ export default defineConfig({
                 globPatterns: ["**/*.{js,css,html,ico,png,svg,onnx,woff2}"],
                 runtimeCaching: [
                     {
-                        urlPattern: ({ url }) => url.pathname.endsWith(".wasm"),
+                        urlPattern: ({ url }) => url.pathname.includes("onnxruntime-web"),
                         handler: "CacheFirst",
-                        options: { cacheName: "wasm-cache" },
+                        options: { cacheName: "ort-cache" },
                     },
                 ],
                 maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
