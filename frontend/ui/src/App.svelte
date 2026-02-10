@@ -55,7 +55,7 @@
     </div>
 {:then session}
     {#key activeHash}
-        <div class="ui-container" out:fade={{ duration: 50 }} in:fade={{ duration: 50, delay: 50 }}>
+        <div class="ui-container" in:fade={{ duration: 50, delay: 50 }} out:fade={{ duration: 50 }}>
             {#if activeHash === "#"}
                 <Home {session} />
             {:else if activeHash === "#contrib"}
