@@ -14,11 +14,6 @@ export interface SymbolInfo {
     markupShorthand?: string;
 }
 
-export interface DrawOptions {
-    canvasSize?: number;
-    lineWidth?: number;
-}
-
 export type Point = [number, number];
 export type Stroke = Point[];
 export type Strokes = Stroke[];
@@ -36,9 +31,9 @@ export const contribSyms = contribSymsRaw as Record<string, string>;
 /**
  * Normalize strokes and draw them to canvas.
  */
-export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCanvasElement | undefined {
+export function drawStrokes(strokes: Strokes): HTMLCanvasElement | undefined {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = options.canvasSize ?? 224;
+    canvas.width = canvas.height = 224;
 
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
@@ -46,7 +41,7 @@ export function drawStrokes(strokes: Strokes, options: DrawOptions = {}): HTMLCa
     }
     ctx.fillStyle = "black";
     ctx.strokeStyle = "white";
-    ctx.lineWidth = options.lineWidth ?? Math.max(1, Math.floor(canvas.width / 25));
+    ctx.lineWidth = 8;
 
     // Find bounding rect.
     let minX = Infinity;
@@ -107,8 +102,8 @@ export class Detypify {
     /**
      * Inference top `k` candidates.
      */
-    async candidates(strokes: Strokes, k: number, options?: DrawOptions): Promise<SymbolInfo[]> {
-        const canvas = drawStrokes(strokes, options);
+    async candidates(strokes: Strokes, k: number): Promise<SymbolInfo[]> {
+        const canvas = drawStrokes(strokes);
         if (!canvas) return [];
 
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
