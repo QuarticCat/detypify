@@ -3,6 +3,7 @@ __pycache__/
 
 node_modules/
 .wrangler/
+.cache/
 
 build/
 train/

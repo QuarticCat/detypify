@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const FONT_URL = "https://mirrors.ctan.org/fonts/newcomputermodern/otf/NewCMMath-Regular.otf";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const cacheDir = path.join(root, "node_modules", ".cache", "detypify-fonts");
+const cacheDir = path.join(root, ".cache");
 const fontPath = path.join(cacheDir, "NewCMMath-Regular.otf");
 const textPath = path.join(cacheDir, "NewCMMath-Detypify.txt");
 const outputDir = path.join(root, "public");

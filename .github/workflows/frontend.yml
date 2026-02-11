@@ -31,11 +31,17 @@ jobs:
           node-version: latest
           cache: pnpm
 
+      - name: Cache postinstall artifacts
+        uses: actions/cache@v5
+        with:
+          path: frontend/ui/.cache
+          key: ${{ runner.os }}-frontend-postinstall-cache
+
       - name: Prepare train folder
         run: |
           mkdir -p train
-          echo '{}' > train/infer.json
-          echo '[]' > train/contrib.json
+          echo '[]' > train/infer.json
+          echo '{}' > train/contrib.json
           echo '??' > train/model.onnx
         working-directory: frontend/service
 
