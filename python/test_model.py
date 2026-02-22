@@ -17,9 +17,7 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 @app.command()
 def main(
     checkpoint: str = typer.Argument(..., help="Path to checkpoint file"),
-    model_type: str = typer.Option(
-        ..., "--model-type", help="Model type (timm or cnn)"
-    ),
+    model_type: str = typer.Option(..., "--model-type", help="Model type (timm or cnn)"),
     model_name: str = typer.Option(
         None,
         "--model-name",
@@ -70,9 +68,7 @@ def main(
     callback = LogPredictCallback(sorted(classes))
 
     # Logger
-    logger = TensorBoardLogger(
-        save_dir=out_dir_path, name="test_log", default_hp_metric=False
-    )  # type: ignore
+    logger = TensorBoardLogger(save_dir=out_dir_path, name="test_log", default_hp_metric=False)  # type: ignore
 
     trainer = Trainer(
         default_root_dir=out_dir_path,

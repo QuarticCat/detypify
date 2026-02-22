@@ -174,9 +174,7 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     # thinker stroke for better feature extraction
     thickness_factor = 25
     thickness = max(1, output_size // thickness_factor)
-    cv2.polylines(
-        canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness
-    )
+    cv2.polylines(canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness)
 
     return canvas
 
@@ -235,9 +233,7 @@ def map_sym() -> dict[str, TypstSymInfo]:
     with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
         tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
     tex_to_typ = map_tex_typ()
-    return {
-        x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ
-    }
+    return {x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ}
 
 
 def parse_inkml_symbol(
@@ -333,12 +329,7 @@ def construct_detexify_df():
 
     # Extract unmapped keys before filtering
     unmapped_keys: set[str] = set(
-        processed_lf.filter(pl.col("label").is_null())
-        .select("key")
-        .unique()
-        .collect()
-        .get_column("key")
-        .to_list()
+        processed_lf.filter(pl.col("label").is_null()).select("key").unique().collect().get_column("key").to_list()
     )
     final_lf = (
         processed_lf.filter(pl.col("label").is_not_null())
@@ -347,9 +338,7 @@ def construct_detexify_df():
                 pl.col("label"),
                 pl.col("strokes")
                 # Drop time (keep only x, y)
-                .list.eval(
-                    pl.element().list.eval(pl.element().arr.head(2).list.to_array(2))
-                ),
+                .list.eval(pl.element().list.eval(pl.element().arr.head(2).list.to_array(2))),
             ]
         )
         # 3. Drop empty samples
@@ -399,9 +388,7 @@ def construct_mathwriting_df():
         "strokes": pl.List(pl.List(pl.Array(pl.Float32, 2))),
     }
 
-    final_lf = pl.DataFrame(
-        {"label": label_acc, "strokes": data_acc}, schema=pl_schema
-    ).lazy()
+    final_lf = pl.DataFrame({"label": label_acc, "strokes": data_acc}, schema=pl_schema).lazy()
     del label_acc, data_acc
 
     return final_lf, unmapped
@@ -596,20 +583,12 @@ def create_dataset(
     )
     print("  -> Generating metadata...")
     # Use base_lf (materialized view logic) for fast stats
-    stats_df = (
-        base_lf.select(pl.col("label"))
-        .collect()
-        .get_column("label")
-        .value_counts()
-        .sort("label")
-    )
+    stats_df = base_lf.select(pl.col("label")).collect().get_column("label").value_counts().sort("label")
     global_labels = stats_df["label"].to_list()
 
     # Split and shuffle data
     train_lf = base_lf.filter(pl.col("idx") < (pl.col("n") * t1))
-    test_lf = base_lf.filter(
-        (pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2))
-    )
+    test_lf = base_lf.filter((pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2)))
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
 
     train_lf = train_lf.drop(["n", "idx"]).sort("label").collect()
@@ -630,21 +609,16 @@ def create_dataset(
         ):
             def encode_labels(batch):
                 class_feature = global_features["label"]
-                batch["label"] = [
-                    class_feature.str2int(label) for label in batch["label"]
-                ]
+                batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
                 return batch
 
             from os import process_cpu_count
 
-            description = (
-                "Detypify dataset, "
-                "composed by mathwriting, detexify and contributed datasets"
-            )
+            description = "Detypify dataset, composed by mathwriting, detexify and contributed datasets"
 
             dataset_info = DatasetInfo(description=description)
             dataset = cast(
-                Dataset,  # noqa
+                Dataset,
                 Dataset.from_polars(data_frame, info=dataset_info)
                 .map(encode_labels, batched=True)
                 .cast(features=global_features),
@@ -680,10 +654,7 @@ def create_dataset(
             num_shards = total_rows // batch_size
             pad_width = len(str(num_shards))
 
-            print(
-                f"  -> Writing {total_rows} rows to"
-                f"{output_dir.name} ({num_shards} shards)."
-            )
+            print(f"  -> Writing {total_rows} rows to{output_dir.name} ({num_shards} shards).")
 
             for i, start_idx in enumerate(range(0, total_rows, batch_size)):
                 chunk = df.slice(start_idx, batch_size)
@@ -696,9 +667,7 @@ def create_dataset(
             if split_parts:
                 _write_shards(df, output_dir)
             else:
-                print(
-                    f"  -> Writing {len(df)} rows to{output_dir.name} as single file."
-                )
+                print(f"  -> Writing {len(df)} rows to{output_dir.name} as single file.")
                 _write_to_file(df, output_dir / f"data.{file_format}")
         print(f"--- Done. Dataset saved to {dataset_path} ---")
 
@@ -707,7 +676,7 @@ def create_dataset(
         dataset_path.mkdir(exist_ok=True)
         dataset_info = MathWritingDatasetInfo(
             name=dataset_name,
-            unmapped=symbols if symbols else None,
+            unmapped=symbols or None,
         )
         with (dataset_path / "dataset_info.json").open("wb") as f:
             f.write(json.format(json.encode(dataset_info)))
@@ -730,12 +699,8 @@ def main(
         "-d",
         help="Datasets to process when converting data.",
     ),
-    skip_convert_data: bool = typer.Option(
-        False, help="Do not construct or upload local datasets."
-    ),
-    skip_gen_info: bool = typer.Option(
-        False, help="Skip writing symbol metadata and infer JSON files."
-    ),
+    skip_convert_data: bool = typer.Option(False, help="Do not construct or upload local datasets."),
+    skip_gen_info: bool = typer.Option(False, help="Skip writing symbol metadata and infer JSON files."),
     include_contrib: bool = typer.Option(
         False,
         help="Append the contrib dataset even if it was not listed explicitly.",
@@ -768,9 +733,7 @@ def main(
     convert_data: bool = not skip_convert_data
     gen_info: bool = not skip_gen_info
 
-    dataset_names: list[DataSetName] = [
-        cast("DataSetName", d.value) for d in dict.fromkeys(datasets)
-    ]
+    dataset_names: list[DataSetName] = [cast("DataSetName", d.value) for d in dict.fromkeys(datasets)]
     if include_contrib and "contrib" not in dataset_names:
         dataset_names.append("contrib")
 

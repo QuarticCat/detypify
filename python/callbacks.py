@@ -99,9 +99,7 @@ class LogPredictCallback(Callback):
             # Normalize axes to be iterable even if single plot
             axes_flat = [axes] if num_images == 1 else axes.flatten()
 
-            for i, (img, pred_idx, true_idx) in enumerate(
-                zip(selected_images, selected_preds, true_labels)
-            ):
+            for i, (img, pred_idx, true_idx) in enumerate(zip(selected_images, selected_preds, true_labels)):
                 ax = axes_flat[i]
 
                 # Image is (C, H, W), usually (1, H, W) for grayscale
@@ -112,24 +110,14 @@ class LogPredictCallback(Callback):
 
                 ax.imshow(img_np, cmap="gray")
 
-                pred_name = (
-                    self.classes[pred_idx]
-                    if pred_idx < len(self.classes)
-                    else str(pred_idx.item())
-                )
-                true_name = (
-                    self.classes[true_idx]
-                    if true_idx < len(self.classes)
-                    else str(true_idx.item())
-                )
+                pred_name = self.classes[pred_idx] if pred_idx < len(self.classes) else str(pred_idx.item())
+                true_name = self.classes[true_idx] if true_idx < len(self.classes) else str(true_idx.item())
 
                 # Determine color: red if wrong, green if right
                 is_correct = pred_idx == true_idx
                 title_color = "green" if is_correct else "red"
 
-                ax.set_title(
-                    f"Truth: {true_name}\nPrediction: {pred_name}", color=title_color
-                )
+                ax.set_title(f"Truth: {true_name}\nPrediction: {pred_name}", color=title_color)
                 ax.axis("off")
 
             # Hide unused subplots
@@ -209,9 +197,7 @@ def get_ema_multi_avg_fn(
 
         # Apply Fused Update (Horizontal Fusion)
         if lerp_ema_params:
-            torch._foreach_lerp_(
-                lerp_ema_params, lerp_curr_params, weight=1.0 - cur_decay
-            )
+            torch._foreach_lerp_(lerp_ema_params, lerp_curr_params, weight=1.0 - cur_decay)
 
         # Apply Standard Copy for integers
         for ema_p, curr_p in zip(copy_ema_params, copy_curr_params):
@@ -278,18 +264,14 @@ class EMAWeightAveraging(WeightAveraging):
         super().__init__(
             device=device,
             use_buffers=use_buffers,
-            multi_avg_fn=get_ema_multi_avg_fn(
-                decay, use_warmup, min_decay, warmup_gamma, warmup_power
-            ),
+            multi_avg_fn=get_ema_multi_avg_fn(decay, use_warmup, min_decay, warmup_gamma, warmup_power),
         )
         self.update_every_n_steps = update_every_n_steps
         self.update_starting_at_step = update_starting_at_step
         self.update_starting_at_epoch = update_starting_at_epoch
 
     @override
-    def should_update(
-        self, step_idx: int | None = None, epoch_idx: int | None = None
-    ) -> bool:
+    def should_update(self, step_idx: int | None = None, epoch_idx: int | None = None) -> bool:
         """Decide when to update the model weights.
 
         Args:
@@ -301,22 +283,15 @@ class EMAWeightAveraging(WeightAveraging):
         """
         if step_idx is not None:
             # Check step-based conditions only if we have a valid step_idx
-            meets_step_requirement = (
-                self.update_starting_at_step is None
-                or step_idx >= self.update_starting_at_step
-            )
-            meets_step_frequency = (
-                self.update_every_n_steps > 0
-                and step_idx % self.update_every_n_steps == 0
-            )
+            meets_step_requirement = self.update_starting_at_step is None or step_idx >= self.update_starting_at_step
+            meets_step_frequency = self.update_every_n_steps > 0 and step_idx % self.update_every_n_steps == 0
             if meets_step_requirement and meets_step_frequency:
                 return True
 
         if epoch_idx is not None:
             # Check epoch-based condition only if we specify one
             meets_epoch_requirement = (
-                self.update_starting_at_epoch is not None
-                and epoch_idx >= self.update_starting_at_epoch
+                self.update_starting_at_epoch is not None and epoch_idx >= self.update_starting_at_epoch
             )
             if meets_epoch_requirement:
                 return True
@@ -384,9 +359,7 @@ class ExportBestModelToONNX(Callback):
         if model_type == CNNModel:
             best_model = model_type.load_from_checkpoint(best_model_path)
         elif model_type == TimmModel:
-            best_model = model_type.load_from_checkpoint(
-                best_model_path, model_name=self.model_name
-            )
+            best_model = model_type.load_from_checkpoint(best_model_path, model_name=self.model_name)
         else:
             print(f"Warning: Unknown model type {model_type}. Skipping ONNX export.")
             return
