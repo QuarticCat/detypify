@@ -1,8 +1,13 @@
 """Train the model."""
 
+import logging
+
 import typer
 
+CUDA_AMPERE_VERSION = 8
+
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     app = typer.Typer(pretty_exceptions_show_locals=False)
 
     @app.command()
@@ -72,7 +77,7 @@ if __name__ == "__main__":
 
         out_dir_path = Path(out_dir)
 
-        classes: set[str] = get_dataset_classes(DATASET_REPO)
+        classes = get_dataset_classes(DATASET_REPO)
         model_instances: list[CNNModel | TimmModel] = []
         for model_name in models:
             if model_name == "CNN":
@@ -103,7 +108,7 @@ if __name__ == "__main__":
 
         # for Ampere or later NVIDIA graphics only
         if is_available():
-            if get_device_properties(0).major >= 8:
+            if get_device_properties(0).major >= CUDA_AMPERE_VERSION:
                 # set matmul precision for speed
                 set_float32_matmul_precision("medium")
             # 20 series graphics don't support bf16 format precision
@@ -197,7 +202,7 @@ if __name__ == "__main__":
             if not debug and trainer.num_devices == 1 and find_batch_size:
                 suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
                 batch_size = suggested_batch_size or init_batch_size
-            print(f"The final batch size is {batch_size}.")
+            logging.info("The final batch size is %s.", batch_size)
             if not debug and not dev_run:
                 lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-4, max_lr=1e-3)
                 fig = lr_finder.plot(suggest=True)  # type: ignore
