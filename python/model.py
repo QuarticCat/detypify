@@ -51,7 +51,6 @@ class BaseModel(LightningModule):
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
         """Forward pass - must be implemented by subclasses."""
-        pass
 
     @override
     def training_step(self, batch, batch_idx=0):
@@ -86,12 +85,7 @@ class BaseModel(LightningModule):
             if not param.requires_grad:
                 continue
             # Check for bias, norm, or batchnorm layers to exclude from decay
-            if (
-                param.ndim <= 1
-                or name.endswith(".bias")
-                or "norm" in name
-                or "bn" in name
-            ):
+            if param.ndim <= 1 or name.endswith(".bias") or "norm" in name or "bn" in name:
                 no_decay.append(param)
             else:
                 decay.append(param)
@@ -101,18 +95,14 @@ class BaseModel(LightningModule):
             {"params": no_decay, "weight_decay": 0.0},
         ]
 
-        optimizer = optim.AdamW(
-            optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7
-        )
+        optimizer = optim.AdamW(optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7)
 
         warmup_scheduler = LinearLR(
             optimizer,
             total_iters=self.warm_up_epochs,
         )
 
-        decay_scheduler = CosineAnnealingLR(
-            optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=1e-6
-        )
+        decay_scheduler = CosineAnnealingLR(optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=1e-6)
 
         scheduler = SequentialLR(
             optimizer,
