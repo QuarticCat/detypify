@@ -1,12 +1,18 @@
 """Preprocess training datasets, helping functions and related constants/types."""
 
-from enum import Enum
+from __future__ import annotations
+
+import logging
+from enum import StrEnum
 from functools import cache
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import typer
-from msgspec import Struct, json, yaml
+from msgspec import Struct, json
+
+if TYPE_CHECKING:
+    import polars as pl
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -16,17 +22,16 @@ type SplitName = Literal["train", "test", "val"]
 
 
 # Constants
-# Data
 DATASET_ROOT = Path("build/dataset")
+DATA_ROOT = Path("data")
 EXTERNAL_DATA_PATH = Path("build/raw_data")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 CONTRIB_DATA = Path("build/dataset.json")
 DATASET_REPO = "Cloud0310/detypify-datasets"
-UPLOAD = True
-# Processing
-# Extra latex to typst mapping.
 TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.yaml"
+UPLOAD = True
+RAW_POINT_LENGTH = 3
 
 
 # Structs
@@ -59,11 +64,14 @@ class MathSymbolSample(Struct):
     symbol: Strokes
 
 
+type RAW_POINT = list[list[tuple[float, float, float]]]
+
+
 # Helper functions
 def is_invisible(c: str) -> bool:
     from unicodedata import category
 
-    return category(c) in ["Zs", "Cc", "Cf"]
+    return category(c) in {"Zs", "Cc", "Cf"}
 
 
 @cache
@@ -79,45 +87,46 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
     """
 
     import re
-    from urllib.request import urlretrieve
+    from urllib.request import urlopen
 
-    page_path = EXTERNAL_DATA_PATH / "typ_sym.html"
-    page_path.parent.mkdir(exist_ok=True, parents=True)
-    if not page_path.exists():
-        urlretrieve("https://typst.app/docs/reference/symbols/sym/", page_path)
-    with page_path.open() as f:
-        from bs4 import BeautifulSoup
+    page_url = "https://typst.app/docs/reference/symbols/sym/"
+    with urlopen(page_url) as resp:
+        page_data = resp.read()
 
-        soup = BeautifulSoup(f.read(), "lxml")
+    from bs4 import BeautifulSoup
+
     sym_info = {}
+    if page_data:
+        soup = BeautifulSoup(page_data, "lxml")
+        for li in soup.find_all("li", id=re.compile("^symbol-")):
+            name = li["id"][len("symbol-") :]
+            char = li["data-value"][0]
+            if is_invisible(char) or li.get("data-deprecation"):
+                # We don't care about invisible chars and deprecated names.
+                continue
+            if char in sym_info:
+                # Repeated symbols. Merge names.
+                sym_info[char].names.append(name)
+            else:
+                latex_name, markup_shorthand, math_shorthand, alternates = (
+                    li.get("data-latex-name"),
+                    li.get("data-markup-shorthand"),
+                    li.get("data-math-shorthand"),
+                    li.get("data-alternates", ""),
+                )
 
-    for li in soup.find_all("li", id=re.compile("^symbol-")):
-        name = li["id"][len("symbol-") :]
-        char = li["data-value"][0]
-        if is_invisible(char) or li.get("data-deprecation"):
-            # We don't care about invisible chars and deprecated names.
-            continue
-        if char in sym_info:
-            # Repeated symbols. Merge names.
-            sym_info[char].names.append(name)
-        else:
-            latex_name, markup_shorthand, math_shorthand, alternates = (
-                li.get("data-latex-name"),
-                li.get("data-markup-shorthand"),
-                li.get("data-math-shorthand"),
-                li.get("data-alternates", ""),
-            )
-
-            # New symbols. Add to map.
-            sym_info[char] = TypstSymInfo(
-                char=char,
-                names=[cast("str", name)],
-                latex_name=cast("str | None", latex_name),
-                markup_shorthand=cast("str | None", markup_shorthand),
-                math_shorthand=cast("str | None", math_shorthand),
-                accent=li.get("accent") == "true",
-                alternates=cast("str", alternates).split(),
-            )
+                # New symbols. Add to map.
+                sym_info[char] = TypstSymInfo(
+                    char=char,
+                    names=[cast("str", name)],
+                    latex_name=cast("str | None", latex_name),
+                    markup_shorthand=cast("str | None", markup_shorthand),
+                    math_shorthand=cast("str | None", math_shorthand),
+                    accent=li.get("accent") == "true",
+                    alternates=cast("str", alternates).split(),
+                )
+    else:
+        logging.warning("Unable to retrive page data.")
 
     return list(sym_info.values())
 
@@ -154,7 +163,7 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     target_size = output_size - (2 * padding)
 
     width = max(max_x - min_x, max_y - min_y)
-    scale = target_size / width if width > 1e-6 else 1.0
+    scale = target_size / width if width > 1e-6 else 1.0  # noqa: PLR2004
     center_x = (min_x + max_x) / 2
     center_y = (min_y + max_y) / 2
 
@@ -180,14 +189,14 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
 
 
 @cache
-def get_dataset_classes(dataset_name: str) -> set[str]:
+def get_dataset_classes(dataset_name: str) -> list[str]:
     from datasets import load_dataset
 
     classes: set[str] = set()
     dataset = load_dataset(dataset_name)
     for split in dataset:
         classes.update(dataset[split].features["label"].names)
-    return classes
+    return sorted(classes)
 
 
 @cache
@@ -207,7 +216,9 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
 
     with TEX_TO_TYP_PATH.open("rb") as f:
-        manual_mapping = yaml.decode(f.read(), type=dict[str, str])
+        from msgspec.yaml import decode
+
+        manual_mapping = decode(f.read(), type=dict[str, str])
 
     tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
     return tex_to_typ
@@ -220,33 +231,18 @@ def get_xml_parser():
     return etree.XMLParser()
 
 
-@cache
-def map_sym() -> dict[str, TypstSymInfo]:
-    """Get a mapping from Detexify keys to Typst symbol info.
-
-    Reads the Detexify symbol list and maps them to Typst symbols using the
-    TeX command mapping.
-
-    Returns:
-        A dictionary mapping Detexify IDs to Typst symbol info.
-    """
-    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
-        tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
-    tex_to_typ = map_tex_typ()
-    return {x.id: tex_to_typ[x.command] for x in tex_sym_info if x.command in tex_to_typ}
-
-
 def parse_inkml_symbol(
     filepath: Path,
-) -> MathSymbolSample | str | None:
-    """Parses a single InkML file to extract the label and stroke data.
+) -> MathSymbolSample | None:
+    """Parses a single InkML file to extract the raw LaTeX label and stroke data.
+
+    This version does NOT map to Typst symbols, keeping the original LaTeX label.
 
     Args:
         filepath: Path to the .inkml file.
 
     Returns:
-        A `MathSymbolSample` if successful.
-        A string (the TeX label) if the label could not be mapped to a Typst symbol.
+        A `MathSymbolSample` with latex_label as label if successful.
         None if no label is found.
     """
 
@@ -260,102 +256,35 @@ def parse_inkml_symbol(
     # couldn't find data, return None
     if not tex_label:
         return None
-    tex_to_typ = map_tex_typ()
-    typ = tex_to_typ.get(tex_label)
-    # found mapped typst symbol
-    if typ:
-        label = typ.char
-        return MathSymbolSample(
-            label,
+
+    return MathSymbolSample(
+        tex_label,
+        [
             [
-                [
-                    (float(x), float(y))
-                    for x, y, _ in (
-                        # point tuple[int, int, int]
-                        point_str.split()
-                        for point_str in trace.text.split(",")
-                        if len(point_str.split()) == 3
-                    )
-                ]
-                for trace in root.iterfind(".//ink:trace", namespaces=namespace)
-                if trace.text
-            ],
-        )
-    # missing mapping, return current label as unmap
-    return tex_label
-
-
-# Dataset creating functions
-def construct_detexify_df():
-    """Constructs a Polars LazyFrame for the Detexify dataset.
-
-    Reads the raw JSON data, maps the keys to Typst symbols, filters out
-    unmapped or empty samples, and formats the strokes.
-
-    Returns:
-        A tuple containing:
-            - The processed LazyFrame with 'label' and 'strokes' columns.
-            - A set of unmapped keys (commands that couldn't be mapped to Typst).
-    """
-
-    import polars as pl
-
-    pl.Config.set_engine_affinity("streaming")
-
-    key_to_typ = map_sym()
-    with (DETEXIFY_DATA_PATH / "detexify.json").open("rb") as f:
-        # Schema: list of (key, strokes)
-        raw_strokes_t = list[tuple[str, list[list[tuple[float, float, float]]]]]
-        data = json.decode(f.read(), type=raw_strokes_t)
-
-    raw_data_schema = {
-        "key": pl.String,
-        # use float32 for mem saving
-        "strokes": pl.List(pl.List(pl.Array(pl.Float32, 3))),
-    }
-    raw_lf = pl.DataFrame(data, schema=raw_data_schema, orient="row").lazy()
-    del data
-
-    # 2. Prepare Mapping
-
-    mapping_lf = pl.DataFrame(
-        {
-            "key": list(key_to_typ.keys()),
-            "label": [typ.char for typ in key_to_typ.values()],
-        }
-    ).lazy()
-
-    processed_lf = raw_lf.join(mapping_lf, on="key", how="left")
-
-    # Extract unmapped keys before filtering
-    unmapped_keys: set[str] = set(
-        processed_lf.filter(pl.col("label").is_null()).select("key").unique().collect().get_column("key").to_list()
-    )
-    final_lf = (
-        processed_lf.filter(pl.col("label").is_not_null())
-        .select(
-            [
-                pl.col("label"),
-                pl.col("strokes")
-                # Drop time (keep only x, y)
-                .list.eval(pl.element().list.eval(pl.element().arr.head(2).list.to_array(2))),
+                (float(x), float(y))
+                for x, y, _ in (
+                    # keep only x,y, discard time
+                    point_str.split()
+                    for point_str in trace.text.split(",")
+                    if len(point_str.split()) == RAW_POINT_LENGTH
+                )
             ]
-        )
-        # 3. Drop empty samples
-        .filter(pl.col("strokes").list.len() > 0)
+            for trace in root.iterfind(".//ink:trace", namespaces=namespace)
+            if trace.text
+        ],
     )
 
-    return final_lf, unmapped_keys
 
+# Raw dataset functions
+def collect_mathwriting_raw():
+    """Collects raw MathWriting data with LaTeX labels (not mapped to Typst).
 
-def construct_mathwriting_df():
-    """Constructs a Polars LazyFrame for the MathWriting dataset.
+    Parses InkML files in parallel to extract strokes and original LaTeX labels.
 
-    Parses InkML files in parallel to extract strokes and labels.
     Returns:
-        A tuple containing:
-            - The processed LazyFrame with 'label' and 'strokes' columns.
-            - A set of unmapped labels (TeX commands that couldn't be mapped).
+        A Polars LazyFrame with columns:
+            - latex_label: Original LaTeX command string
+            - symbol: List of strokes as arrays of (x, y) coordinates
     """
 
     from concurrent.futures import ProcessPoolExecutor
@@ -364,7 +293,6 @@ def construct_mathwriting_df():
 
     label_acc = []
     data_acc = []
-    unmapped: set[str] = set()
 
     with ProcessPoolExecutor() as executor:
         results = executor.map(
@@ -373,131 +301,351 @@ def construct_mathwriting_df():
             chunksize=500,
         )
         for result in results:
-            match result:
-                case None:
-                    continue
-                case str():
-                    unmapped.add(result)
-                case MathSymbolSample():
-                    label_acc.append(result.label)
-                    data_acc.append(result.symbol)
+            if result is None:
+                continue
+            label_acc.append(result.label)
+            data_acc.append(result.symbol)
 
     del results
     pl_schema = {
-        "label": pl.String,
-        "strokes": pl.List(pl.List(pl.Array(pl.Float32, 2))),
+        "latex_label": pl.String,
+        "symbol": pl.List(pl.List(pl.Array(pl.Float32, 2))),
     }
 
-    final_lf = pl.DataFrame({"label": label_acc, "strokes": data_acc}, schema=pl_schema).lazy()
-    del label_acc, data_acc
-
-    return final_lf, unmapped
+    return pl.DataFrame({"latex_label": label_acc, "symbol": data_acc}, schema=pl_schema).lazy()
 
 
-# WIP
-def construct_contribute_df():
+def collect_detexify_raw():
+    """Collects raw Detexify data with original command labels (not mapped to Typst).
+
+    Reads the raw JSON data and formats strokes without Typst symbol mapping.
+
+    Returns:
+        A Polars LazyFrame with columns:
+            - latex_label: Original LaTeX command string
+            - symbol: List of strokes as arrays of (x, y) coordinates
+    """
+
     import polars as pl
 
-    # 1. Load Data
+    pl.Config.set_engine_affinity("streaming")
+
+    with (DETEXIFY_DATA_PATH / "symbols.json").open("rb") as f:
+        tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
+
+    # Create mapping from key to command (latex label)
+    key_to_command = {x.id: x.command for x in tex_sym_info}
+
+    with (DETEXIFY_DATA_PATH / "detexify.json").open("rb") as f:
+        # Schema: list of (key, strokes)
+        data = json.decode(f.read(), type=list[tuple[str, list[list[tuple[float, float, float]]]]])
+
+    raw_data_schema = {
+        "key": pl.String,
+        "strokes": pl.List(pl.List(pl.Array(pl.Float32, 3))),
+    }
+
+    raw_lf = pl.DataFrame(data, schema=raw_data_schema, orient="row").lazy()
+    del data
+
+    # Prepare Mapping
+    mapping_lf = pl.DataFrame(
+        {
+            "key": list(key_to_command.keys()),
+            "latex_label": list(key_to_command.values()),
+        }
+    ).lazy()
+
+    processed_lf = raw_lf.join(mapping_lf, on="key", how="left")
+
+    return (
+        processed_lf.filter(pl.col("latex_label").is_not_null())
+        .select(
+            [
+                pl.col("latex_label"),
+                pl.col("strokes")
+                # Drop time (keep only x, y)
+                .list.eval(pl.element().list.eval(pl.element().arr.head(2).list.to_array(2)))
+                .alias("symbol"),
+            ]
+        )
+        # Drop empty samples
+        .filter(pl.col("symbol").list.len() > 0)
+    )
+
+
+def collect_contrib_raw():
+    """Collects raw contributed data with symbol names (not mapped to Typst).
+
+    Reads the contrib JSON and decodes strokes without Typst symbol mapping.
+
+    Returns:
+        A Polars LazyFrame with columns:
+            - latex_label: Original symbol name string
+            - symbol: List of strokes as arrays of (x, y) coordinates
+    """
+
+    import polars as pl
+
+    # Load Data
     with CONTRIB_DATA.open("rb") as f:
         # Schema: list of dicts {sym: str, strokes: json_string}
         data = json.decode(f.read(), type=list[dict[str, str]])
 
-    typ_sym_info = get_typst_symbol_info()
-    name_to_chr = {name: s.char for s in typ_sym_info for name in s.names}
-    # 2. Decode JSON Strings & Join Labels Locally
-
-    mapping_lf = pl.DataFrame(
-        {
-            "sym": list(name_to_chr.keys()),
-            "label": list(name_to_chr.values()),
-        }
-    ).lazy()
-
+    # Decode strokes and rename sym to latex_label
     processed_lf = (
         pl.DataFrame(data)
         .lazy()
+        .rename({"sym": "latex_label"})
         # Decode strokes
         .with_columns(
-            pl.col("strokes").map_elements(
+            pl.col("strokes")
+            .map_elements(
                 json.decode,
                 return_dtype=pl.List(pl.List(pl.Array(pl.Float32, 2))),
             )
+            .alias("symbol")
         )
-        # Join Labels
-        .join(mapping_lf, on="sym", how="left")
+        .drop("strokes")
     )
+
     return (
-        processed_lf.filter(pl.col("label").is_not_null())
+        processed_lf.filter(pl.col("latex_label").is_not_null())
+        .select(
+            [
+                pl.col("latex_label"),
+                pl.col("symbol"),
+            ]
+        )
+        # Drop empty samples
+        .filter(pl.col("symbol").list.len() > 0)
+    )
+
+
+def create_raw_dataset(
+    dataset_names: list[DataSetName],
+    *,
+    upload: bool = True,
+) -> pl.DataFrame:
+    """Creates and uploads raw dataset with original LaTeX/command labels.
+
+    This dataset is intended for CI/CD processing pipelines. It contains
+    the original labels before Typst symbol mapping.
+
+    Args:
+        dataset_names: List of dataset names to include ("mathwriting", "detexify", "contrib")
+        upload: Whether to upload to HuggingFace (True) or save locally (False)
+    """
+
+    from os import process_cpu_count
+
+    import polars as pl
+    from datasets import (
+        Dataset,
+        DatasetInfo,
+        Features,
+        List,
+        Sequence,
+        Value,
+    )
+
+    logging.info(f"--- Creating Raw Dataset: {','.join(dataset_names)} ---")
+
+    lfs = []
+    for dataset_name in dataset_names:
+        match dataset_name:
+            case "mathwriting":
+                math_writing_lf = collect_mathwriting_raw()
+                # Add source column
+                math_writing_lf = math_writing_lf.with_columns(pl.lit("mathwriting").alias("source"))
+                lfs.append(math_writing_lf)
+            case "detexify":
+                detexify_lf = collect_detexify_raw()
+                # Add source column
+                detexify_lf = detexify_lf.with_columns(pl.lit("detexify").alias("source"))
+                lfs.append(detexify_lf)
+            case "contrib":
+                contrib_lf = collect_contrib_raw()
+                # Add source column
+                contrib_lf = contrib_lf.with_columns(pl.lit("contrib").alias("source"))
+                lfs.append(contrib_lf)
+
+    # Concatenate all datasets
+    lf = pl.concat(lfs)
+
+    # Collect and shuffle
+    df = lf.collect().sample(fraction=1.0, shuffle=True, seed=114514)
+
+    if upload:
+        features: Features = Features(
+            {
+                "latex_label": Value("string"),
+                "symbol": List(List(Sequence(Value("float32"), length=2))),
+                "source": Value("string"),
+            }
+        )  # type: ignore
+
+        description = (
+            "Raw detypify dataset with original LaTeX labels, "
+            "composed by mathwriting, detexify and contributed datasets. "
+            "Intended for CI/CD processing pipelines."
+        )
+
+        dataset_info = DatasetInfo(description=description, features=features)
+        dataset = Dataset.from_polars(df, info=dataset_info)
+
+        logging.info("  -> Uploading raw dataset to %s as 'raw_data'...", DATASET_REPO)
+        dataset.push_to_hub(repo_id=DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
+        logging.info("--- Done. Raw dataset uploaded to %s (config: raw) ---", DATASET_REPO)
+    else:
+        # Save locally
+        raw_dataset_path = DATASET_ROOT / "raw"
+        raw_dataset_path.mkdir(parents=True, exist_ok=True)
+
+        logging.info("  -> Saving raw dataset locally to %s...", raw_dataset_path)
+        df.write_parquet(
+            raw_dataset_path / "data.parquet",
+            compression="zstd",
+        )
+        logging.info("--- Done. Raw dataset saved to %s ---", raw_dataset_path)
+    return df
+
+
+def load_raw_dataset(dataset_names: list[DataSetName]) -> pl.DataFrame:
+    """Load raw dataset from HF config 'raw'.
+
+    Raises:
+        ValueError: If raw dataset not found on HF with helpful message.
+    """
+    import polars as pl
+    from datasets import Dataset, load_dataset
+
+    df = Dataset.to_polars(load_dataset(DATASET_REPO, name="raw", split="data"))
+    if not isinstance(df, pl.DataFrame):
+        err_msg = "Raw data is not pl.DataFrame"
+        raise TypeError(err_msg)
+
+    # Filter by source if dataset_names provided
+    if dataset_names:
+        df = df.filter(pl.col("source").is_in(dataset_names))
+
+    return df
+
+
+def apply_typst_mapping(
+    df: pl.DataFrame,
+) -> tuple[pl.LazyFrame, dict[DataSetName, set[str]]]:
+    """Apply LaTeX→Typst mapping to raw data.
+
+    Returns:
+        - Mapped LazyFrame with columns: label, strokes, source
+        - Dictionary of unmapped labels per source
+    """
+    import polars as pl
+
+    tex_to_typ = map_tex_typ()
+
+    # We need to flatten the TypstSymInfo to just the char for mapping
+    tex_to_char = {k: v.char for k, v in tex_to_typ.items()}
+
+    # Apply mapping
+    mapped_df = df.with_columns(
+        [
+            pl.col("latex_label").replace(tex_to_char, default=None).alias("label"),
+        ]
+    )
+
+    # Track unmapped per source
+    unmapped_df = mapped_df.filter(pl.col("label").is_null()).group_by("source").agg(pl.col("latex_label").unique())
+    unmapped = {row["source"]: set(row["latex_label"]) for row in unmapped_df.to_dicts()}
+
+    # Filter out unmapped, select final columns, convert strokes format
+    result_df = (
+        mapped_df.filter(pl.col("label").is_not_null())
         .select(
             [
                 pl.col("label"),
-                pl.col("strokes")
-                # Drop time (keep only x, y)
-                .list.eval(pl.element().list.eval(pl.element().arr.head(2))),
+                pl.col("symbol").alias("strokes"),  # Rename to match processed format
+                pl.col("source"),
             ]
         )
-        # 3. Drop empty samples
-        .filter(pl.col("strokes").list.len() > 0)
+        .filter(pl.col("strokes").list.len() > 0)  # Drop empty
     )
 
+    return result_df.lazy(), unmapped
 
-def generate_infer_json(classes: set[str] | None = None) -> None:
-    """Generate JSON files for the infer page and contrib page.
+
+def remap_from_raw(
+    dataset_names: list[DataSetName],
+    data: pl.DataFrame | None = None,
+) -> tuple[pl.LazyFrame, dict[DataSetName, set[str]]]:
+    """High-level function: Load raw data and apply fresh mapping.
+
+    When Typst reference changes, reload raw data and remap.
+    """
+
+    if data is None:
+        logging.info("  -> Loading raw dataset from HuggingFace...")
+        data = load_raw_dataset(dataset_names)
+
+    logging.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
+    return apply_typst_mapping(data)
+
+
+def generate_infer_data(classes: list[str] | None = None) -> None:
+    """Generate the infer and contrib data
 
     Args:
         classes: Optional set of character classes to generate infer.json for.
                  If None, generates for all available symbols.
     """
-    sym_info = get_typst_symbol_info()
-    chr_to_sym = {s.char: s for s in sym_info}
 
-    infer_path = DATASET_ROOT / "infer.json"
-    contrib_path = DATASET_ROOT / "contrib.json"
+    infer_path = DATA_ROOT / "infer.json"
+    contrib_path = DATA_ROOT / "contrib.json"
 
     infer_path.parent.mkdir(parents=True, exist_ok=True)
     contrib_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # lazy write
-    if not infer_path.exists():
-        infer = []
-        if classes:
-            sorted_classes = sorted(classes)
-            for c in sorted_classes:
-                if c not in chr_to_sym:
-                    continue
-                sym = chr_to_sym[c]
-                info = {"char": sym.char, "names": sym.names}
-                if sym.markup_shorthand and sym.math_shorthand:
-                    info["shorthand"] = sym.markup_shorthand
-                elif sym.markup_shorthand:
-                    info["markupShorthand"] = sym.markup_shorthand
-                elif sym.math_shorthand:
-                    info["mathShorthand"] = sym.math_shorthand
-                infer.append(info)
-        else:
-            for sym in sym_info:
-                info = {"char": sym.char, "names": sym.names}
-                if sym.markup_shorthand and sym.math_shorthand:
-                    info["shorthand"] = sym.markup_shorthand
-                elif sym.markup_shorthand:
-                    info["markupShorthand"] = sym.markup_shorthand
-                elif sym.math_shorthand:
-                    info["mathShorthand"] = sym.math_shorthand
-                infer.append(info)
-        with infer_path.open("wb") as f:
-            f.write(json.encode(infer))
+    typ_sym_info = get_typst_symbol_info()
 
-    if not contrib_path.exists():
-        contrib = {n: s.char for s in sym_info for n in s.names}
-        with contrib_path.open("wb") as f:
-            f.write(json.encode(contrib))
+    infer = []
+    if classes:
+        contrib = {n: s.char for s in typ_sym_info for n in s.names}
+        chr_to_sym = {s.char: s for s in typ_sym_info}
+        for c in classes:
+            if c not in chr_to_sym:
+                continue
+            sym = chr_to_sym[c]
+            info = {"char": sym.char, "names": sym.names}
+            if sym.markup_shorthand and sym.math_shorthand:
+                info["shorthand"] = sym.markup_shorthand
+            elif sym.markup_shorthand:
+                info["markupShorthand"] = sym.markup_shorthand
+            elif sym.math_shorthand:
+                info["mathShorthand"] = sym.math_shorthand
+            infer.append(info)
+    else:
+        for sym in typ_sym_info:
+            info = {"char": sym.char, "names": sym.names}
+            if sym.markup_shorthand and sym.math_shorthand:
+                info["shorthand"] = sym.markup_shorthand
+            elif sym.markup_shorthand:
+                info["markupShorthand"] = sym.markup_shorthand
+            elif sym.math_shorthand:
+                info["mathShorthand"] = sym.math_shorthand
+            infer.append(info)
+
+    for path, data in [(infer_path, infer), (contrib_path, contrib)]:
+        with path.open("wb") as f:
+            f.write(json.encode(data))
 
 
 def create_dataset(
     dataset_names: list[DataSetName],
-    upload: bool = True,
+    raw_data: pl.DataFrame | None = None,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    *,
+    upload: bool = True,
     **kwargs,
 ) -> None:
     """Orchestrates the creation of a math symbol dataset.
@@ -508,7 +656,8 @@ def create_dataset(
     4. Saves data as sharded files (Parquet/Vortex) and writes metadata.
 
     Args:
-        dataset_name: The name of the dataset to create.
+        dataset_names: The names of the dataset to use.
+        raw_data: The dataframe. Optional, if nothing, load from huggingface
         split_ratio: A tuple defining the ratio for (train, test, val) splits.
         upload: whether or not uploading dataset to hugggingface.
         kwargs: valid only when not uploading.
@@ -528,29 +677,10 @@ def create_dataset(
         Value,
     )
 
-    print(f"--- Creating Datasets: {','.join(dataset_names)} ---")
+    logging.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
-    lfs = []
-    unmapped: dict[DataSetName, set[str]] = {}
-    for dataset_name in dataset_names:
-        match dataset_name:
-            case "mathwriting":
-                math_writing_lf, unmapped_symbols = construct_mathwriting_df()
-                lfs.append(math_writing_lf)
-                if unmapped_symbols:
-                    unmapped[dataset_name] = unmapped_symbols
-            case "detexify":
-                detexify_lf, unmapped_symbols = construct_detexify_df()
-                lfs.append(detexify_lf)
-                if unmapped_symbols:
-                    unmapped[dataset_name] = unmapped_symbols
-            case "contrib":
-                # Requires: typ_sym_info list (to map by 'names')
-                contrib_lf = construct_contribute_df()
-                lfs.append(contrib_lf)
-            case _:
-                raise ValueError(f"Unknown dataset name: {dataset_name}")
-    lf = pl.concat(lfs)
+    # load from raw data
+    lf, unmapped = remap_from_raw(dataset_names, raw_data)
 
     dataset_path = DATASET_ROOT
     split_names: list[SplitName] = ["train", "test", "val"]
@@ -565,7 +695,7 @@ def create_dataset(
     t1 = train_r
     t2 = train_r + test_r
 
-    print("  -> Shuffling and splitting data...")
+    logging.info("  -> Shuffling and splitting data...")
 
     # Add Stratified Indices
     # Casting label to Utf8 ensures consistency across datasets.
@@ -581,25 +711,26 @@ def create_dataset(
             ]
         )
     )
-    print("  -> Generating metadata...")
+    logging.info("  -> Generating metadata...")
     # Use base_lf (materialized view logic) for fast stats
     stats_df = base_lf.select(pl.col("label")).collect().get_column("label").value_counts().sort("label")
-    global_labels = stats_df["label"].to_list()
 
     # Split and shuffle data
-    train_lf = base_lf.filter(pl.col("idx") < (pl.col("n") * t1))
-    test_lf = base_lf.filter((pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2)))
-    val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2))
-
-    train_lf = train_lf.drop(["n", "idx"]).sort("label").collect()
-    test_lf = test_lf.drop(["n", "idx"]).sort("label").collect()
-    val_lf = val_lf.drop(["n", "idx"]).sort("label").collect()
+    train_lf = base_lf.filter(pl.col("idx") < (pl.col("n") * t1)).drop(["n", "idx"]).sort("label").collect()
+    test_lf = (
+        base_lf.filter((pl.col("idx") >= (pl.col("n") * t1)) & (pl.col("idx") < (pl.col("n") * t2)))
+        .drop(["n", "idx"])
+        .sort("label")
+        .collect()
+    )
+    val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2)).drop(["n", "idx"]).sort("label").collect()
 
     if upload:
         global_features: Features = Features(
             {
-                "label": ClassLabel(names=global_labels),
+                "label": ClassLabel(names=stats_df["label"].to_list()),
                 "strokes": LargeList(LargeList(List(Value("float32")))),
+                "source": Value("string"),
             }
         )  # type: ignore
 
@@ -607,15 +738,14 @@ def create_dataset(
             split: SplitName,
             data_frame: pl.DataFrame,
         ):
+            from os import process_cpu_count
+
             def encode_labels(batch):
                 class_feature = global_features["label"]
                 batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
                 return batch
 
-            from os import process_cpu_count
-
             description = "Detypify dataset, composed by mathwriting, detexify and contributed datasets"
-
             dataset_info = DatasetInfo(description=description)
             dataset = cast(
                 Dataset,
@@ -624,21 +754,19 @@ def create_dataset(
                 .cast(features=global_features),
             )
             dataset.push_to_hub(
-                repo_id=DATASET_REPO,
-                num_proc=process_cpu_count() if process_cpu_count() else 1,
-                split=split,
+                repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True, create_pr=True
             )
 
-        for df, split in zip([train_lf, test_lf, val_lf], split_names):
-            print(f"  -> Uploading split: {split}... to huggingface.")
+        for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
+            logging.info("  -> Uploading split: %s... to huggingface.", split)
             _upload_to_huggingface(split, df)
-        print(f"--- Done. Dataset uploaded to {DATASET_REPO} ---")
+        logging.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
     else:
         split_parts: bool = kwargs.get("split_parts", False)
         batch_size: int = kwargs.get("batch_size", 2000)
         file_format: Literal["vortex", "parquet"] = kwargs.get("file_format", "parquet")
 
-        def _write_to_file(df: pl.DataFrame, path: Path):
+        def _write_to_file(df: pl.DataFrame, path: Path, file_format="parquet"):
             if file_format == "vortex":
                 import vortex as vx
 
@@ -654,22 +782,22 @@ def create_dataset(
             num_shards = total_rows // batch_size
             pad_width = len(str(num_shards))
 
-            print(f"  -> Writing {total_rows} rows to{output_dir.name} ({num_shards} shards).")
+            logging.info(f"  -> Writing {total_rows} rows to{output_dir.name} ({num_shards} shards).")
 
             for i, start_idx in enumerate(range(0, total_rows, batch_size)):
                 chunk = df.slice(start_idx, batch_size)
                 filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
                 _write_to_file(chunk, output_dir / filename)
 
-        for df, split in zip([train_lf, test_lf, val_lf], split_names):
+        for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
             output_dir = dataset_path / split
             output_dir.mkdir(exist_ok=True)
             if split_parts:
                 _write_shards(df, output_dir)
             else:
-                print(f"  -> Writing {len(df)} rows to{output_dir.name} as single file.")
+                logging.info(f"  -> Writing {len(df)} rows to{output_dir.name} as single file.")
                 _write_to_file(df, output_dir / f"data.{file_format}")
-        print(f"--- Done. Dataset saved to {dataset_path} ---")
+        logging.info("--- Done. Dataset saved to %s ---", dataset_path)
 
     for dataset_name, symbols in unmapped.items():
         dataset_path = DATASET_ROOT / dataset_name
@@ -682,7 +810,7 @@ def create_dataset(
             f.write(json.format(json.encode(dataset_info)))
 
 
-class DataSetNameEnum(str, Enum):
+class DataSetNameEnum(StrEnum):
     mathwriting = "mathwriting"
     detexify = "detexify"
     contrib = "contrib"
@@ -705,7 +833,7 @@ def main(
         False,
         help="Append the contrib dataset even if it was not listed explicitly.",
     ),
-    no_upload: bool = typer.Option(
+    upload: bool = typer.Option(
         False,
         help="Store processed datasets locally.",
     ),
@@ -725,10 +853,21 @@ def main(
         "parquet",
         help="Output format(parquet/vortex) when writing dataset shards locally.",
     ),
+    create_raw: bool = typer.Option(
+        False,
+        "--create-raw",
+        help="Create and upload raw dataset with original LaTeX labels.",
+    ),
+    remap: bool = typer.Option(
+        False,
+        "--remap",
+        help="Load raw dataset from HF and re-apply LaTeX →  Typst mapping.",
+    ),
 ):
     """
     Preprocess datasets, generate metadata, and upload results.
     """
+    logging.basicConfig(level=logging.INFO)
 
     convert_data: bool = not skip_convert_data
     gen_info: bool = not skip_gen_info
@@ -737,27 +876,27 @@ def main(
     if include_contrib and "contrib" not in dataset_names:
         dataset_names.append("contrib")
 
-    if gen_info:
-        # Get symbol info.
-        typ_sym_info = get_typst_symbol_info()
-        symbols_info_path = DATASET_ROOT / "symbols.json"
-        if not symbols_info_path.exists():
-            symbols_info_path.parent.mkdir(parents=True, exist_ok=True)
-            with symbols_info_path.open("wb") as f:
-                f.write(json.encode(typ_sym_info))
+    raw_data = None
+    if create_raw:
+        raw_data = create_raw_dataset(
+            dataset_names=dataset_names,
+            upload=upload,
+        )
 
     if convert_data:
         create_dataset(
             dataset_names=dataset_names,
-            upload=not no_upload,
+            raw_data=raw_data,
+            upload=upload,
             split_ratio=split_ratio,
+            remap=remap,
             split_parts=split_parts,
             batch_size=batch_size,
             file_format=file_format,
         )
 
     if gen_info:
-        generate_infer_json(classes=get_dataset_classes(DATASET_REPO))
+        generate_infer_data(classes=get_dataset_classes(DATASET_REPO))
 
 
 if __name__ == "__main__":
