@@ -10,10 +10,6 @@ on:
       # on new manual mapping added
       - 'python/tex_to_typ.yaml'
 
-permissions: 
-  contents: write
-  pull-requests: write
-
 jobs:
   check-typst-symbol-page:
     if: ${{ github.event_name != 'push' }}
@@ -83,9 +79,8 @@ jobs:
         with:
           name: generated-data
           path: |
-            data/infer.json
-            data/contrib.json
-          retention-days: 1
+            build/data/infer.json
+            build/data/contrib.json
 
   trigger-training:
     needs: gen-info
@@ -97,7 +92,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: generated-data
-          path: data
+          path: build/data
 
       - name: Install kaggle CLI tools
         shell: bash
@@ -202,8 +197,8 @@ jobs:
           
           echo "Checking status for $KERNEL_NAME..."
           
-          # Max 120 minutes (60 iterations * 120s)
-          MAX_RETRIES=60
+          # Max 240 minutes (240 iterations * 60s)
+          MAX_RETRIES=240
           COUNT=0
           
           while [ $COUNT -lt $MAX_RETRIES ]; do
@@ -218,7 +213,7 @@ jobs:
                   exit 0
               fi
               
-              sleep 120
+              sleep 60
               COUNT=$((COUNT+1))
           done
           
@@ -236,43 +231,3 @@ jobs:
           
           mkdir -p artifacts
           kaggle kernels output "$KERNEL_NAME" -p artifacts
-
-      - name: Prepare Files for PR
-        id: prepare
-        run: |
-          mkdir -p data
-          
-          # Move artifacts to data directory
-          FOUND=0
-          for onnx_file in artifacts/*.onnx; do
-            [ -f "$onnx_file" ] || continue
-            model_name=$(basename "$onnx_file")
-            cp "$onnx_file" "data/$model_name"
-            echo "Copied $onnx_file -> data/$model_name"
-            FOUND=1
-          done
-          
-          if [ "$FOUND" -eq 0 ]; then
-            echo "::error::No ONNX files found in artifacts."
-            exit 1
-          fi
-          
-          # Set outputs for next step
-          echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update dataset info and model weights"
-          branch: "update-data-and-weights"
-          delete-branch: true
-          title: "Update dataset info and model weights ${{ steps.prepare.outputs.date }}"
-          body: |
-            This PR updates the symbol dataset and the ONNX model weights generated from the latest training run.
-            
-            - Updates `data/infer.json` and `data/contrib.json`
-            - Updates ONNX model weights in `data/`
-          base: main
-          add-paths: |
-            data/

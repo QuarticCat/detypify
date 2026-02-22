@@ -23,7 +23,7 @@ type SplitName = Literal["train", "test", "val"]
 
 # Constants
 DATASET_ROOT = Path("build/dataset")
-DATA_ROOT = Path("data")
+DATA_ROOT = Path("build/data")
 EXTERNAL_DATA_PATH = Path("build/raw_data")
 MATH_WRITING_DATA_PATH = EXTERNAL_DATA_PATH / "mathwriting"
 DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
