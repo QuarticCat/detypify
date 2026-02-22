@@ -1,8 +1,13 @@
 """Train the model."""
 
+import logging
+
 import typer
 
+CUDA_AMPERE_VERSION = 8
+
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     app = typer.Typer(pretty_exceptions_show_locals=False)
 
     @app.command()
@@ -10,32 +15,20 @@ if __name__ == "__main__":
         out_dir: str = typer.Option("build/train", help="Output directory"),
         debug: bool = typer.Option(False, help="Enable debug mode"),
         profiling: bool = typer.Option(False, help="Enable performance profiler."),
-        dev_run: bool = typer.Option(
-            False, help="Fast dev run (valid only when debug is True)"
-        ),
-        log_pred: bool = typer.Option(
-            True, help="Logging predictions to logger for review."
-        ),
+        dev_run: bool = typer.Option(False, help="Fast dev run (valid only when debug is True)"),
+        log_pred: bool = typer.Option(True, help="Logging predictions to logger for review."),
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
-        find_batch_size: bool = typer.Option(
-            False, help="Enable/Disable automatic batch size finding"
-        ),
-        use_ema: bool = typer.Option(
-            True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"
-        ),
+        find_batch_size: bool = typer.Option(False, help="Enable/Disable automatic batch size finding"),
+        use_ema: bool = typer.Option(True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
         ema_start_epoch: int = typer.Option(5, help="Epoch to start EMA"),
-        ema_warmup: bool = typer.Option(
-            True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."
-        ),
+        ema_warmup: bool = typer.Option(True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."),
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
-        amp_precision: str = typer.Option(
-            "bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"
-        ),
+        amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
         models: list[str] = typer.Option(
             [
                 "mobilenetv4_conv_small_035",
@@ -84,7 +77,7 @@ if __name__ == "__main__":
 
         out_dir_path = Path(out_dir)
 
-        classes: set[str] = get_dataset_classes(DATASET_REPO)
+        classes = get_dataset_classes(DATASET_REPO)
         model_instances: list[CNNModel | TimmModel] = []
         for model_name in models:
             if model_name == "CNN":
@@ -115,23 +108,18 @@ if __name__ == "__main__":
 
         # for Ampere or later NVIDIA graphics only
         if is_available():
-            if get_device_properties(0).major >= 8:
+            if get_device_properties(0).major >= CUDA_AMPERE_VERSION:
                 # set matmul precision for speed
                 set_float32_matmul_precision("medium")
-            else:
-                # 20 series graphics don't support bf16 format precision
-                if amp_precision == "bf16-mixed":
-                    amp_precision = "16-mixed"
-                    args_dict["amp_precision"] = amp_precision
+            # 20 series graphics don't support bf16 format precision
+            elif amp_precision == "bf16-mixed":
+                amp_precision = "16-mixed"
+                args_dict["amp_precision"] = amp_precision
         for model in model_instances:
             model_name_str = (
-                model.__class__.__name__
-                if model.__class__.__name__ != "TimmModel"
-                else str(model.model_name)
+                model.__class__.__name__ if model.__class__.__name__ != "TimmModel" else str(model.model_name)
             )
-            logger = TensorBoardLogger(
-                save_dir=out_dir_path, name=model_name_str, default_hp_metric=False
-            )  # type: ignore
+            logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
 
             final_output_dir = Path(logger.log_dir)
             checkpoints_dir = final_output_dir / "ckpts"
@@ -212,17 +200,11 @@ if __name__ == "__main__":
             # NOTE: don't use fast_dev_run=True with scale batch and lr finder
             batch_size = init_batch_size
             if not debug and trainer.num_devices == 1 and find_batch_size:
-                suggested_batch_size = tuner.scale_batch_size(
-                    model, datamodule=dm, init_val=init_batch_size
-                )
-                batch_size = (
-                    suggested_batch_size if suggested_batch_size else init_batch_size
-                )
-            print(f"The final batch size is {batch_size}.")
+                suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
+                batch_size = suggested_batch_size or init_batch_size
+            logging.info("The final batch size is %s.", batch_size)
             if not debug and not dev_run:
-                lr_finder = tuner.lr_find(
-                    model, datamodule=dm, min_lr=1e-4, max_lr=1e-3
-                )
+                lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-4, max_lr=1e-3)
                 fig = lr_finder.plot(suggest=True)  # type: ignore
                 save_path = final_output_dir / f"lr_{batch_size}_{image_size}.svg"
                 save_path.parent.mkdir(parents=True, exist_ok=True)

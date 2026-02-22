@@ -1,0 +1,233 @@
+name: Weekly updates for symbols
+
+on:
+  workflow_dispatch:
+  schedule:
+    # weekly, Monday
+    - cron: '0 0 * * 1'
+  push:
+    paths:
+      # on new manual mapping added
+      - 'python/tex_to_typ.yaml'
+
+jobs:
+  check-typst-symbol-page:
+    if: ${{ github.event_name != 'push' }}
+    runs-on: ubuntu-slim
+    outputs:
+      should_run: ${{ steps.check.outputs.changed }}
+    env:
+      GH_TOKEN: ${{ secrets.ACTION_UPDATE_TOKEN }} # Required for 'gh variable set'
+      TARGET_URL: "https://typst.app/docs/reference/symbols/sym/"
+      VAR_NAME: "TYPST_ETAG"
+    steps:
+      - name: Check ETag and Update
+        id: check
+        shell: bash
+        run: |
+          CURRENT_ETAG=$(curl -I -s "$TARGET_URL" | grep -i "^etag:" | sed 's/etag: //I' | tr -d '\r')
+
+          if [ -z "$CURRENT_ETAG" ]; then
+            echo "::error::Could not fetch ETag. Exiting."
+            exit 1
+          fi
+
+          STORED_ETAG=$(gh variable get "$VAR_NAME" --json value -q .value 2>/dev/null || echo "")
+
+          echo "Stored:  '$STORED_ETAG'"
+          echo "Current: '$CURRENT_ETAG'"
+
+          if [ "$CURRENT_ETAG" != "$STORED_ETAG" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "⚡ ETag changed from '$STORED_ETAG' to '$CURRENT_ETAG'"
+            gh variable set "$VAR_NAME" --body "$CURRENT_ETAG"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "😴 No change detected."
+          fi
+
+  gen-info:
+    needs: check-typst-symbol-page
+    if: ${{ !failure() && (needs.check-typst-symbol-page.outputs.should_run == 'true' || github.event_name == 'push') }}
+    name: dataset-update
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+        
+      - name: Cache Hugging Face datasets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface/datasets
+          key: huggingface-datasets-${{ hashFiles('python/tex_to_typ.yaml') }}
+          restore-keys: |
+            huggingface-datasets-
+
+      - name: Run Generation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          echo "ETag changed. Generating data."
+          uv run --no-project python/proc_data.py --upload
+
+      - name: Upload Data Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-data
+          path: |
+            build/data/infer.json
+            build/data/contrib.json
+
+  trigger-training:
+    needs: gen-info
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Data Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-data
+          path: build/data
+
+      - name: Install kaggle CLI tools
+        shell: bash
+        run: |
+          python -m pip install --upgrade kaggle --user
+
+      - name: Setup kaggle.json
+        shell: bash
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Set up Notebook Kernel
+        shell: bash
+        env:
+          REPO_URL: "https://github.com/${{ github.repository }}"
+          BRANCH_NAME: ${{ github.ref_name }}
+          TITLE: "Detypify Auto Training"
+        run: |
+          OUTPUT_NOTEBOOK="script.ipynb"
+          
+          cat <<EOM > "$OUTPUT_NOTEBOOK"
+          {
+            "cells": [
+              {
+                "cell_type": "code",
+                "execution_count": null,
+                "metadata": {},
+                "outputs": [],
+                "source": [
+                  "!git clone --branch $BRANCH_NAME $REPO_URL.git detypify"
+                ]
+              },
+              {
+                "cell_type": "code",
+                "execution_count": null,
+                "metadata": {},
+                "outputs": [],
+                "source": [
+                  "!cd detypify && pip install uv && uv export --format requirements-txt --output-file requirements.txt && pip install -r requirements.txt && python python/train.py"
+                ]
+              },
+              {
+                "cell_type": "code",
+                "execution_count": null,
+                "metadata": {},
+                "outputs": [],
+                "source": [
+                  "!for f in detypify/build/train/*/version_*/ckpts/*.onnx; do model=$(echo $f | cut -d/ -f4); cp $f /kaggle/working/$model.onnx && echo \"Copied $f -> /kaggle/working/$model.onnx\"; done"
+                ]
+              }
+            ],
+            "metadata": {
+              "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3"
+              },
+              "language_info": {
+                "name": "python",
+                "version": "3.13"
+              }
+            },
+            "nbformat": 4,
+            "nbformat_minor": 2
+          }
+          EOM
+
+      - name: Push Kernel
+        shell: bash
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          TITLE: "Detypify Auto Training"
+        run: |
+          kaggle kernels init -p .
+          
+          KERNEL_SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
+          
+          # Update metadata
+          jq --arg title "$TITLE" \
+             --arg id "${KAGGLE_USERNAME}/$KERNEL_SLUG" \
+             --arg code_file "script.ipynb" \
+             '. | .id = $id | .title = $title | .code_file = $code_file | .language = "python" | .kernel_type = "notebook" | .enable_gpu = true | .enable_internet = true' \
+             kernel-metadata.json > kernel-metadata.json.tmp && mv kernel-metadata.json.tmp kernel-metadata.json
+             
+          cat kernel-metadata.json
+          
+          kaggle kernels push -p .
+
+      - name: Check status
+        shell: bash
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          TITLE: "Detypify Auto Training"
+        run: |
+          KERNEL_SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
+          KERNEL_NAME="${KAGGLE_USERNAME}/${KERNEL_SLUG}"
+          
+          echo "Checking status for $KERNEL_NAME..."
+          
+          # Max 240 minutes (240 iterations * 60s)
+          MAX_RETRIES=240
+          COUNT=0
+          
+          while [ $COUNT -lt $MAX_RETRIES ]; do
+              status=$(kaggle kernels status "$KERNEL_NAME" 2>&1)
+              echo "Status: $status"
+          
+              if [[ "$status" == *"error"* || "$status" == *"cancel"* ]]; then
+                  echo "::error::Kernel execution failed."
+                  exit 1
+              elif [[ "$status" == *"complete"* ]]; then
+                  echo "Kernel execution completed successfully!"
+                  exit 0
+              fi
+              
+              sleep 60
+              COUNT=$((COUNT+1))
+          done
+          
+          echo "::error::Kernel execution timed out after 2 hours."
+          exit 1
+
+      - name: Download artifacts
+        shell: bash
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          TITLE: "Detypify Auto Training"
+        run: |
+          KERNEL_SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
+          KERNEL_NAME="${KAGGLE_USERNAME}/${KERNEL_SLUG}"
+          
+          mkdir -p artifacts
+          kaggle kernels output "$KERNEL_NAME" -p artifacts

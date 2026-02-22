@@ -1,5 +1,6 @@
 """Script to test a trained model and log wrong guesses."""
 
+import logging
 from pathlib import Path
 
 import torch
@@ -17,9 +18,7 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 @app.command()
 def main(
     checkpoint: str = typer.Argument(..., help="Path to checkpoint file"),
-    model_type: str = typer.Option(
-        ..., "--model-type", help="Model type (timm or cnn)"
-    ),
+    model_type: str = typer.Option(..., "--model-type", help="Model type (timm or cnn)"),
     model_name: str = typer.Option(
         None,
         "--model-name",
@@ -30,12 +29,13 @@ def main(
 ):
     ckpt_path = Path(checkpoint)
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+        err_msg = f"Checkpoint not found: {ckpt_path}"
+        raise FileNotFoundError(err_msg)
 
     out_dir_path = Path(out_dir)
     out_dir_path.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading checkpoint: {ckpt_path}")
+    logging.info("Loading checkpoint: %s", ckpt_path)
 
     # Determine class and load
     if model_type == "cnn":
@@ -48,19 +48,13 @@ def main(
             kwargs["model_name"] = model_name
 
     # Try loading
-    try:
-        model = model_class.load_from_checkpoint(ckpt_path, **kwargs)
-    except Exception as e:
-        print(f"Error loading checkpoint: {e}")
-        if model_type == "timm" and not model_name:
-            print("Tip: Try providing --model-name if it was missing from hparams.")
-        raise e
+    model = model_class.load_from_checkpoint(ckpt_path, **kwargs)
 
     model.eval()
 
     # Get image size from hparams or model
     image_size = model.hparams.image_size  # type: ignore
-    print(f"Model loaded. Image size: {image_size}")
+    logging.info("Model loaded. Image size: %s", image_size)
 
     # Data
     dm = MathSymbolDataModule(image_size=image_size, batch_size=batch_size)
@@ -70,9 +64,7 @@ def main(
     callback = LogPredictCallback(sorted(classes))
 
     # Logger
-    logger = TensorBoardLogger(
-        save_dir=out_dir_path, name="test_log", default_hp_metric=False
-    )  # type: ignore
+    logger = TensorBoardLogger(save_dir=out_dir_path, name="test_log", default_hp_metric=False)  # type: ignore
 
     trainer = Trainer(
         default_root_dir=out_dir_path,
@@ -81,11 +73,12 @@ def main(
         precision="16-mixed" if torch.cuda.is_available() else "32",
     )
 
-    print("Starting testing...")
+    logging.info("Starting testing...")
     torch.set_float32_matmul_precision("high")
     trainer.test(model, datamodule=dm)
-    print(f"Testing finished. Logs saved to {out_dir_path}")
+    logging.info("Testing finished. Logs saved to %s", out_dir_path)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     app()

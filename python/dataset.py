@@ -23,9 +23,7 @@ class MathSymbolDataModule(LightningDataModule):
         self.image_size = image_size
         self.dataset_repo = DATASET_REPO
 
-        self.eval_transform = v2.Compose(
-            [v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)]
-        )
+        self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
         self.train_transform = v2.Compose(
             [
                 v2.ToImage(),
@@ -49,9 +47,7 @@ class MathSymbolDataModule(LightningDataModule):
         from proc_data import rasterize_strokes
 
         def _rasterize_strokes_batched(batch, image_size):
-            batch["image"] = [
-                rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]
-            ]
+            batch["image"] = [rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]]
             return batch
 
         dataset = (
@@ -59,7 +55,7 @@ class MathSymbolDataModule(LightningDataModule):
             .map(
                 _rasterize_strokes_batched,
                 batched=True,
-                remove_columns="strokes",
+                remove_columns=["strokes", "source"],
                 num_proc=self.num_workers,
                 fn_kwargs={"image_size": self.image_size},
             )

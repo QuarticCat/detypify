@@ -1,5 +1,6 @@
 """Preprocess contribution from the webpage."""
 
+import logging
 import shutil
 from pathlib import Path
 
@@ -17,6 +18,7 @@ def bold(s: str) -> str:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     OUT_DIR.mkdir(exist_ok=True)
     img_size = 256
@@ -30,7 +32,7 @@ if __name__ == "__main__":
     with Path("build/dataset.json").open("rb") as f:
         samples = json.decode(f.read())[0]["results"]
 
-    print("\n### Generating images...")
+    logging.info("\n### Generating images...")
     name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
     for s in samples:
         id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
@@ -50,13 +52,13 @@ if __name__ == "__main__":
     while input(">>> Input 'done' to proceed: ") != "done":
         pass
 
-    print("\n### Collecting wanted samples...")
+    logging.info("\n### Collecting wanted samples...")
     id_to_strokes = {s["id"]: s["strokes"] for s in samples}
     for filename in OUT_DIR.iterdir():
         sym, id_, _ = str(filename).rsplit(".", 1)[0].split("-")
         if id_ != "0":
             strokes = id_to_strokes[str(id_)]
-            with Path(f"data/dataset/{sym}.txt").open("a") as f:
+            with Path(f"data/dataset/{sym}.txt").open("ab") as f:
                 f.write(strokes + "\n")
 
     cmd = "bunx wrangler d1 execute detypify --remote \
