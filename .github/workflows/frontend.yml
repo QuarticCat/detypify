@@ -3,12 +3,8 @@ name: Frontend code quality check
 on:
   push:
     branches: [main, "*dev"]
-    paths:
-      - "frontend/**"
   pull_request:
     branches: [main, "*dev"]
-    paths:
-      - "frontend/**"
     types: [opened, synchronize]
   workflow_dispatch:
 
