@@ -36,6 +36,7 @@ class BaseModel(LightningModule):
         total_epochs: int,
         warmup_epochs: int = 5,
         learning_rate: float = 4e-4,
+        *,
         use_compile: bool = False,
     ):
         super().__init__()
@@ -129,6 +130,7 @@ class TimmModel(BaseModel):
         image_size: int,
         warmup_epochs: int = 5,
         learning_rate: float = 0.002,
+        *,
         use_compile: bool = False,
     ):
         super().__init__(
@@ -180,8 +182,9 @@ class CNNModel(BaseModel):
         image_size: int,
         total_epochs: int,
         warmup_epochs: int = 5,
-        use_compile: bool = False,
         learning_rate: float = 1e-3,
+        *,
+        use_compile: bool = False,
     ):
         super().__init__(
             num_classes=num_classes,

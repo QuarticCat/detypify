@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, override
 
@@ -99,7 +100,9 @@ class LogPredictCallback(Callback):
             # Normalize axes to be iterable even if single plot
             axes_flat = [axes] if num_images == 1 else axes.flatten()
 
-            for i, (img, pred_idx, true_idx) in enumerate(zip(selected_images, selected_preds, true_labels)):
+            for i, (img, pred_idx, true_idx) in enumerate(
+                zip(selected_images, selected_preds, true_labels, strict=True)
+            ):
                 ax = axes_flat[i]
 
                 # Image is (C, H, W), usually (1, H, W) for grayscale
@@ -146,10 +149,11 @@ class LogPredictCallback(Callback):
 
 def get_ema_multi_avg_fn(
     decay: float = 0.995,
-    use_warmup: bool = True,
     min_decay: float = 0.0,
     warmup_gamma: float = 25.0,
     warmup_power: float = 0.7,
+    *,
+    use_warmup: bool = True,
 ):
     """
     Get a multi_avg_fn applying EMA with Inverse Gamma warmup schedule,
@@ -187,7 +191,7 @@ def get_ema_multi_avg_fn(
         copy_ema_params = []
         copy_curr_params = []
 
-        for ema_p, curr_p in zip(averaged_param_list, current_param_list):
+        for ema_p, curr_p in zip(averaged_param_list, current_param_list, strict=True):
             if ema_p.is_floating_point() or ema_p.is_complex():
                 lerp_ema_params.append(ema_p)
                 lerp_curr_params.append(curr_p)
@@ -200,7 +204,7 @@ def get_ema_multi_avg_fn(
             torch._foreach_lerp_(lerp_ema_params, lerp_curr_params, weight=1.0 - cur_decay)
 
         # Apply Standard Copy for integers
-        for ema_p, curr_p in zip(copy_ema_params, copy_curr_params):
+        for ema_p, curr_p in zip(copy_ema_params, copy_curr_params, strict=True):
             ema_p.copy_(curr_p)
 
     return ema_multi_update
@@ -248,15 +252,16 @@ class EMAWeightAveraging(WeightAveraging):
     def __init__(
         self,
         device: device | str | int | None = None,
-        use_buffers: bool = True,
         decay: float = 0.9999,
         min_decay: float = 0.0,
-        use_warmup: bool = True,
         warmup_gamma: float = 25.0,
         warmup_power: float = 3 / 4,
         update_every_n_steps: int = 1,
         update_starting_at_step: int | None = None,
         update_starting_at_epoch: int | None = None,
+        *,
+        use_buffers: bool = True,
+        use_warmup: bool = True,
     ) -> None:
         # Initialize parent without avg_fn since we're using ModelEmaV3
         # Note: We can't pass use_buffers to parent since ModelEmaV3
@@ -264,7 +269,7 @@ class EMAWeightAveraging(WeightAveraging):
         super().__init__(
             device=device,
             use_buffers=use_buffers,
-            multi_avg_fn=get_ema_multi_avg_fn(decay, use_warmup, min_decay, warmup_gamma, warmup_power),
+            multi_avg_fn=get_ema_multi_avg_fn(decay, min_decay, warmup_gamma, warmup_power, use_warmup=use_warmup),
         )
         self.update_every_n_steps = update_every_n_steps
         self.update_starting_at_step = update_starting_at_step
@@ -319,6 +324,7 @@ class ExportBestModelToONNX(Callback):
         save_dir: Path,
         model_name: str,
         checkpoint_callback: ModelCheckpoint | None = None,
+        *,
         dynamo: bool = True,
         external_data: bool = False,
     ) -> None:
@@ -341,16 +347,16 @@ class ExportBestModelToONNX(Callback):
                     break
 
         if checkpoint_callback is None:
-            print("Warning: No ModelCheckpoint callback found. Skipping ONNX export.")
+            logging.warning("No ModelCheckpoint callback found. Skipping ONNX export.")
             return
 
         # Get the best model path
         best_model_path = Path(checkpoint_callback.best_model_path)
         if not best_model_path.exists():
-            print("Warning: No best model checkpoint available. Skipping ONNX export.")
+            logging.warning("No best model checkpoint available. Skipping ONNX export.")
             return
 
-        print(f"Loading best checkpoint from: {best_model_path}")
+        logging.info("Loading best checkpoint from: %s", best_model_path)
 
         # Load the best checkpoint
         model_type = type(pl_module)
@@ -361,7 +367,7 @@ class ExportBestModelToONNX(Callback):
         elif model_type == TimmModel:
             best_model = model_type.load_from_checkpoint(best_model_path, model_name=self.model_name)
         else:
-            print(f"Warning: Unknown model type {model_type}. Skipping ONNX export.")
+            logging.warning("Unknown model type %s. Skipping ONNX export.", model_type)
             return
 
         # Freeze and prepare model for export
@@ -372,7 +378,7 @@ class ExportBestModelToONNX(Callback):
         # Create ONNX directory
         save_path = self.save_dir / f"{best_model_path.stem}.onnx"
 
-        print(f"Exporting best model to ONNX: {save_path}")
+        logging.info("Exporting best model to ONNX: %s", save_path)
 
         # Export to ONNX
         best_model.to_onnx(
@@ -382,4 +388,4 @@ class ExportBestModelToONNX(Callback):
             external_data=self.external_data,
         )
 
-        print(f"Successfully exported best model to: {save_path}")
+        logging.info("Successfully exported best model to: %s", save_path)

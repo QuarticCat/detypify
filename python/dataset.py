@@ -55,7 +55,7 @@ class MathSymbolDataModule(LightningDataModule):
             .map(
                 _rasterize_strokes_batched,
                 batched=True,
-                remove_columns="strokes",
+                remove_columns=["strokes", "source"],
                 num_proc=self.num_workers,
                 fn_kwargs={"image_size": self.image_size},
             )
