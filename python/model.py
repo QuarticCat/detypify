@@ -2,7 +2,6 @@ from abc import abstractmethod
 from typing import Literal, override
 
 import torch
-import torch_tensorrt  # noqa: F401
 from lightning import LightningModule
 from timm import create_model
 from torch import Tensor, nn, optim
@@ -132,6 +131,7 @@ class TimmModel(BaseModel):
         learning_rate: float = 0.002,
         *,
         use_compile: bool = False,
+        use_tensorrt: bool = True,
     ):
         super().__init__(
             num_classes=num_classes,
@@ -159,9 +159,12 @@ class TimmModel(BaseModel):
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
+        if use_tensorrt:
+            import torch_tensorrt  # noqa: F401
+
         self.model_opt = torch.compile(
             self.model,
-            backend="tensorrt",
+            backend="tensorrt" if use_tensorrt else "inductor",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
@@ -185,6 +188,7 @@ class CNNModel(BaseModel):
         learning_rate: float = 1e-3,
         *,
         use_compile: bool = False,
+        use_tensorrt: bool = True,
     ):
         super().__init__(
             num_classes=num_classes,
@@ -226,17 +230,18 @@ class CNNModel(BaseModel):
         self.avgpool = avgpool.to(memory_format=torch.channels_last)  # type: ignore
         self.classifier = classifier.to(memory_format=torch.channels_last)  # type: ignore
 
-        # Use `torch.compile` by default cannot be exported
-        # so add it as seperate optimized module
+        if use_tensorrt:
+            import torch_tensorrt  # noqa: F401
+
         self.features_opt = torch.compile(
             self.features,
-            backend="tensorrt",
+            backend="tensorrt" if use_tensorrt else "inductor",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
         self.classifier_opt = torch.compile(
             self.classifier,
-            backend="tensorrt",
+            backend="tensorrt" if use_tensorrt else "inductor",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )

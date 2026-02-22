@@ -753,9 +753,7 @@ def create_dataset(
                 .map(encode_labels, batched=True)
                 .cast(features=global_features),
             )
-            dataset.push_to_hub(
-                repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True, create_pr=True
-            )
+            dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
 
         for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
             logging.info("  -> Uploading split: %s... to huggingface.", split)
