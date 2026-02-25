@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
-type DataSetName = Literal["mathwriting", "detexify", "contrib"]
 type SplitName = Literal["train", "test", "val"]
 
 
@@ -30,7 +29,6 @@ DETEXIFY_DATA_PATH = EXTERNAL_DATA_PATH / "detexify"
 CONTRIB_DATA = Path("build/dataset.json")
 DATASET_REPO = "Cloud0310/detypify-datasets"
 TEX_TO_TYP_PATH = Path(__file__).parent / "tex_to_typ.yaml"
-UPLOAD = True
 RAW_POINT_LENGTH = 3
 
 
@@ -64,10 +62,8 @@ class MathSymbolSample(Struct):
     symbol: Strokes
 
 
-type RAW_POINT = list[list[tuple[float, float, float]]]
-
-
 # Helper functions
+@cache
 def is_invisible(c: str) -> bool:
     from unicodedata import category
 
@@ -424,8 +420,6 @@ def collect_contrib_raw():
 
 def create_raw_dataset(
     dataset_names: list[DataSetName],
-    *,
-    upload: bool = True,
 ) -> pl.DataFrame:
     """Creates and uploads raw dataset with original LaTeX/command labels.
 
@@ -434,7 +428,6 @@ def create_raw_dataset(
 
     Args:
         dataset_names: List of dataset names to include ("mathwriting", "detexify", "contrib")
-        upload: Whether to upload to HuggingFace (True) or save locally (False)
     """
 
     from os import process_cpu_count
@@ -476,38 +469,37 @@ def create_raw_dataset(
     # Collect and shuffle
     df = lf.collect().sample(fraction=1.0, shuffle=True, seed=114514)
 
-    if upload:
-        features: Features = Features(
-            {
-                "latex_label": Value("string"),
-                "symbol": List(List(Sequence(Value("float32"), length=2))),
-                "source": Value("string"),
-            }
-        )  # type: ignore
+    features: Features = Features(
+        {
+            "latex_label": Value("string"),
+            "symbol": List(List(Sequence(Value("float32"), length=2))),
+            "source": Value("string"),
+        }
+    )  # type: ignore
 
-        description = (
-            "Raw detypify dataset with original LaTeX labels, "
-            "composed by mathwriting, detexify and contributed datasets. "
-            "Intended for CI/CD processing pipelines."
-        )
+    description = (
+        "Raw detypify dataset with original LaTeX labels, "
+        "composed by mathwriting, detexify and contributed datasets. "
+        "Intended for CI/CD processing pipelines."
+    )
 
-        dataset_info = DatasetInfo(description=description, features=features)
-        dataset = Dataset.from_polars(df, info=dataset_info)
+    dataset_info = DatasetInfo(description=description, features=features)
+    dataset = Dataset.from_polars(df, info=dataset_info)
 
-        logging.info("  -> Uploading raw dataset to %s as 'raw_data'...", DATASET_REPO)
-        dataset.push_to_hub(repo_id=DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
-        logging.info("--- Done. Raw dataset uploaded to %s (config: raw) ---", DATASET_REPO)
-    else:
-        # Save locally
-        raw_dataset_path = DATASET_ROOT / "raw"
-        raw_dataset_path.mkdir(parents=True, exist_ok=True)
+    logging.info("  -> Uploading raw dataset to %s as 'raw_data'...", DATASET_REPO)
+    dataset.push_to_hub(repo_id=DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
+    logging.info("--- Done. Raw dataset uploaded to %s (config: raw) ---", DATASET_REPO)
 
-        logging.info("  -> Saving raw dataset locally to %s...", raw_dataset_path)
-        df.write_parquet(
-            raw_dataset_path / "data.parquet",
-            compression="zstd",
-        )
-        logging.info("--- Done. Raw dataset saved to %s ---", raw_dataset_path)
+    # Save locally
+    raw_dataset_path = DATASET_ROOT / "raw"
+    raw_dataset_path.mkdir(parents=True, exist_ok=True)
+
+    logging.info("  -> Saving raw dataset locally to %s...", raw_dataset_path)
+    df.write_parquet(
+        raw_dataset_path / "data.parquet",
+        compression="zstd",
+    )
+    logging.info("--- Done. Raw dataset saved to %s ---", raw_dataset_path)
     return df
 
 
@@ -592,12 +584,11 @@ def remap_from_raw(
     return apply_typst_mapping(data)
 
 
-def generate_infer_data(classes: list[str] | None = None) -> None:
+def generate_infer_data(classes: list[str]) -> None:
     """Generate the infer and contrib data
 
     Args:
-        classes: Optional set of character classes to generate infer.json for.
-                 If None, generates for all available symbols.
+        classes: Set of character classes to generate infer.json for.
     """
 
     infer_path = DATA_ROOT / "infer.json"
@@ -607,34 +598,21 @@ def generate_infer_data(classes: list[str] | None = None) -> None:
     contrib_path.parent.mkdir(parents=True, exist_ok=True)
 
     typ_sym_info = get_typst_symbol_info()
-
     infer = []
-    if classes:
-        contrib = {n: s.char for s in typ_sym_info for n in s.names}
-        chr_to_sym = {s.char: s for s in typ_sym_info}
-        for c in classes:
-            if c not in chr_to_sym:
-                continue
-            sym = chr_to_sym[c]
-            info = {"char": sym.char, "names": sym.names}
-            if sym.markup_shorthand and sym.math_shorthand:
-                info["shorthand"] = sym.markup_shorthand
-            elif sym.markup_shorthand:
-                info["markupShorthand"] = sym.markup_shorthand
-            elif sym.math_shorthand:
-                info["mathShorthand"] = sym.math_shorthand
-            infer.append(info)
-    else:
-        for sym in typ_sym_info:
-            info = {"char": sym.char, "names": sym.names}
-            if sym.markup_shorthand and sym.math_shorthand:
-                info["shorthand"] = sym.markup_shorthand
-            elif sym.markup_shorthand:
-                info["markupShorthand"] = sym.markup_shorthand
-            elif sym.math_shorthand:
-                info["mathShorthand"] = sym.math_shorthand
-            infer.append(info)
-
+    contrib = {n: s.char for s in typ_sym_info for n in s.names}
+    chr_to_sym = {s.char: s for s in typ_sym_info}
+    for c in classes:
+        if c not in chr_to_sym:
+            continue
+        sym = chr_to_sym[c]
+        info = {"char": sym.char, "names": sym.names}
+        if sym.markup_shorthand and sym.math_shorthand:
+            info["shorthand"] = sym.markup_shorthand
+        elif sym.markup_shorthand:
+            info["markupShorthand"] = sym.markup_shorthand
+        elif sym.math_shorthand:
+            info["mathShorthand"] = sym.math_shorthand
+        infer.append(info)
     for path, data in [(infer_path, infer), (contrib_path, contrib)]:
         with path.open("wb") as f:
             f.write(json.encode(data))
@@ -644,9 +622,6 @@ def create_dataset(
     dataset_names: list[DataSetName],
     raw_data: pl.DataFrame | None = None,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
-    *,
-    upload: bool = True,
-    **kwargs,
 ) -> None:
     """Orchestrates the creation of a math symbol dataset.
 
@@ -659,11 +634,6 @@ def create_dataset(
         dataset_names: The names of the dataset to use.
         raw_data: The dataframe. Optional, if nothing, load from huggingface
         split_ratio: A tuple defining the ratio for (train, test, val) splits.
-        upload: whether or not uploading dataset to hugggingface.
-        kwargs: valid only when not uploading.
-            split_parts: Whether to split the dataset into multiple shards.
-            batch_size: The number of rows per shard.
-            file_format: The output file format ("parquet" or "vortex").
     """
 
     import polars as pl
@@ -725,78 +695,39 @@ def create_dataset(
     )
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2)).drop(["n", "idx"]).sort("label").collect()
 
-    if upload:
-        global_features: Features = Features(
-            {
-                "label": ClassLabel(names=stats_df["label"].to_list()),
-                "strokes": LargeList(LargeList(List(Value("float32")))),
-                "source": Value("string"),
-            }
-        )  # type: ignore
+    global_features: Features = Features(
+        {
+            "label": ClassLabel(names=stats_df["label"].to_list()),
+            "strokes": LargeList(LargeList(List(Value("float32")))),
+            "source": Value("string"),
+        }
+    )  # type: ignore
 
-        def _upload_to_huggingface(
-            split: SplitName,
-            data_frame: pl.DataFrame,
-        ):
-            from os import process_cpu_count
+    def _upload_to_huggingface(
+        split: SplitName,
+        data_frame: pl.DataFrame,
+    ):
+        from os import process_cpu_count
 
-            def encode_labels(batch):
-                class_feature = global_features["label"]
-                batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
-                return batch
+        def encode_labels(batch):
+            class_feature = global_features["label"]
+            batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
+            return batch
 
-            description = "Detypify dataset, composed by mathwriting, detexify and contributed datasets"
-            dataset_info = DatasetInfo(description=description)
-            dataset = cast(
-                Dataset,
-                Dataset.from_polars(data_frame, info=dataset_info)
-                .map(encode_labels, batched=True)
-                .cast(features=global_features),
-            )
-            dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
+        description = "Detypify dataset, composed by mathwriting, detexify and contributed datasets"
+        dataset_info = DatasetInfo(description=description)
+        dataset = cast(
+            Dataset,
+            Dataset.from_polars(data_frame, info=dataset_info)
+            .map(encode_labels, batched=True)
+            .cast(features=global_features),
+        )
+        dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
 
-        for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
-            logging.info("  -> Uploading split: %s... to huggingface.", split)
-            _upload_to_huggingface(split, df)
-        logging.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
-    else:
-        split_parts: bool = kwargs.get("split_parts", False)
-        batch_size: int = kwargs.get("batch_size", 2000)
-        file_format: Literal["vortex", "parquet"] = kwargs.get("file_format", "parquet")
-
-        def _write_to_file(df: pl.DataFrame, path: Path, file_format="parquet"):
-            if file_format == "vortex":
-                import vortex as vx
-
-                vx.io.write(vx.compress(vx.array(df.to_arrow())), str(path))
-            else:
-                df.write_parquet(path, compression="zstd", compression_level=19)
-
-        def _write_shards(df: pl.DataFrame, output_dir: Path):
-            total_rows = len(df)
-            if total_rows == 0:
-                return
-
-            num_shards = total_rows // batch_size
-            pad_width = len(str(num_shards))
-
-            logging.info(f"  -> Writing {total_rows} rows to{output_dir.name} ({num_shards} shards).")
-
-            for i, start_idx in enumerate(range(0, total_rows, batch_size)):
-                chunk = df.slice(start_idx, batch_size)
-                filename = f"part_{str(i).zfill(pad_width)}.{file_format}"
-                _write_to_file(chunk, output_dir / filename)
-
-        for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
-            output_dir = dataset_path / split
-            output_dir.mkdir(exist_ok=True)
-            if split_parts:
-                _write_shards(df, output_dir)
-            else:
-                logging.info(f"  -> Writing {len(df)} rows to{output_dir.name} as single file.")
-                _write_to_file(df, output_dir / f"data.{file_format}")
-        logging.info("--- Done. Dataset saved to %s ---", dataset_path)
-
+    for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
+        logging.info("  -> Uploading split: %s... to huggingface.", split)
+        _upload_to_huggingface(split, df)
+    logging.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
     for dataset_name, symbols in unmapped.items():
         dataset_path = DATASET_ROOT / dataset_name
         dataset_path.mkdir(exist_ok=True)
@@ -808,7 +739,7 @@ def create_dataset(
             f.write(json.format(json.encode(dataset_info)))
 
 
-class DataSetNameEnum(StrEnum):
+class DataSetName(StrEnum):
     mathwriting = "mathwriting"
     detexify = "detexify"
     contrib = "contrib"
@@ -819,47 +750,22 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 
 @app.command()
 def main(
-    datasets: list[DataSetNameEnum] = typer.Option(
-        [DataSetNameEnum.detexify, DataSetNameEnum.mathwriting],
+    datasets: list[DataSetName] = typer.Option(
+        [DataSetName.detexify, DataSetName.mathwriting],
         "--datasets",
         "-d",
         help="Datasets to process when converting data.",
     ),
-    skip_convert_data: bool = typer.Option(False, help="Do not construct or upload local datasets."),
-    skip_gen_info: bool = typer.Option(False, help="Skip writing symbol metadata and infer JSON files."),
-    include_contrib: bool = typer.Option(
-        False,
-        help="Append the contrib dataset even if it was not listed explicitly.",
-    ),
-    upload: bool = typer.Option(
-        False,
-        help="Store processed datasets locally.",
-    ),
+    convert_data: bool = typer.Option(False, help="Do not construct or upload local datasets."),
+    gen_info: bool = typer.Option(False, help="Skip writing symbol metadata and infer JSON files."),
     split_ratio: tuple[float, float, float] = typer.Option(
         (0.8, 0.1, 0.1),
         help="Train/test/val split ratios for the processed dataset.",
-    ),
-    split_parts: bool = typer.Option(
-        False,
-        help="Write each split as multiple shards instead of a single file.",
-    ),
-    batch_size: int = typer.Option(
-        2000,
-        help="Number of rows per shard when --split-parts is enabled.",
-    ),
-    file_format: str = typer.Option(
-        "parquet",
-        help="Output format(parquet/vortex) when writing dataset shards locally.",
     ),
     create_raw: bool = typer.Option(
         False,
         "--create-raw",
         help="Create and upload raw dataset with original LaTeX labels.",
-    ),
-    remap: bool = typer.Option(
-        False,
-        "--remap",
-        help="Load raw dataset from HF and re-apply LaTeX →  Typst mapping.",
     ),
 ):
     """
@@ -867,30 +773,19 @@ def main(
     """
     logging.basicConfig(level=logging.INFO)
 
-    convert_data: bool = not skip_convert_data
-    gen_info: bool = not skip_gen_info
-
-    dataset_names: list[DataSetName] = [cast("DataSetName", d.value) for d in dict.fromkeys(datasets)]
-    if include_contrib and "contrib" not in dataset_names:
-        dataset_names.append("contrib")
+    dataset_names = list(set(datasets))
 
     raw_data = None
     if create_raw:
         raw_data = create_raw_dataset(
             dataset_names=dataset_names,
-            upload=upload,
         )
 
     if convert_data:
         create_dataset(
             dataset_names=dataset_names,
             raw_data=raw_data,
-            upload=upload,
             split_ratio=split_ratio,
-            remap=remap,
-            split_parts=split_parts,
-            batch_size=batch_size,
-            file_format=file_format,
         )
 
     if gen_info:
