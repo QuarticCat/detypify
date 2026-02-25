@@ -7,7 +7,8 @@ import typer
 CUDA_AMPERE_VERSION = 8
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     app = typer.Typer(pretty_exceptions_show_locals=False)
 
     @app.command()
@@ -121,9 +122,9 @@ if __name__ == "__main__":
             model_name_str = (
                 model.__class__.__name__ if model.__class__.__name__ != "TimmModel" else str(model.model_name)
             )
-            logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
+            tb_logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
 
-            final_output_dir = Path(logger.log_dir)
+            final_output_dir = Path(tb_logger.log_dir)
             checkpoints_dir = final_output_dir / "ckpts"
             train_args_path = final_output_dir / "training_args.yaml"
             train_args_path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,7 +189,7 @@ if __name__ == "__main__":
             trainer = Trainer(
                 max_epochs=total_epochs,
                 default_root_dir=out_dir_path,
-                logger=logger,
+                logger=tb_logger,
                 fast_dev_run=debug and dev_run,
                 precision=amp_precision,  # type: ignore
                 profiler="simple" if profiling else None,
@@ -204,7 +205,7 @@ if __name__ == "__main__":
             if not debug and trainer.num_devices == 1 and find_batch_size:
                 suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
                 batch_size = suggested_batch_size or init_batch_size
-            logging.info("The final batch size is %s.", batch_size)
+            logger.info("The final batch size is %s.", batch_size)
             if not debug and not dev_run:
                 lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-4, max_lr=1e-3)
                 fig = lr_finder.plot(suggest=True)  # type: ignore

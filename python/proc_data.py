@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -77,6 +76,16 @@ def is_invisible(c: str) -> bool:
 
 
 @cache
+def get_logger():
+    import logging
+
+    logger = logging.getLogger(name=__name__)
+    logger.setLevel(logging.INFO)
+
+    return logger
+
+
+@cache
 def get_typst_symbol_info() -> list[TypstSymInfo]:
     """Parses the Typst symbol page to extract symbol information.
 
@@ -128,7 +137,7 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
                     alternates=cast("str", alternates).split(),
                 )
     else:
-        logging.warning("Unable to retrive page data.")
+        get_logger().warning("Unable to retrive page data.")
 
     return list(sym_info.values())
 
@@ -449,7 +458,9 @@ def create_raw_dataset(
         Value,
     )
 
-    logging.info(f"--- Creating Raw Dataset: {','.join(dataset_names)} ---")
+    logger = get_logger()
+
+    logger.info(f"--- Creating Raw Dataset: {','.join(dataset_names)} ---")
 
     lfs = []
     for dataset_name in dataset_names:
@@ -493,20 +504,20 @@ def create_raw_dataset(
     dataset_info = DatasetInfo(description=description, features=features)
     dataset = Dataset.from_polars(df, info=dataset_info)
 
-    logging.info("  -> Uploading raw dataset to %s as 'raw_data'...", DATASET_REPO)
+    logger.info("  -> Uploading raw dataset to %s as 'raw_data'...", DATASET_REPO)
     dataset.push_to_hub(repo_id=DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
-    logging.info("--- Done. Raw dataset uploaded to %s (config: raw) ---", DATASET_REPO)
+    logger.info("--- Done. Raw dataset uploaded to %s (config: raw) ---", DATASET_REPO)
 
     # Save locally
     raw_dataset_path = DATASET_ROOT / "raw"
     raw_dataset_path.mkdir(parents=True, exist_ok=True)
 
-    logging.info("  -> Saving raw dataset locally to %s...", raw_dataset_path)
+    logger.info("  -> Saving raw dataset locally to %s...", raw_dataset_path)
     df.write_parquet(
         raw_dataset_path / "data.parquet",
         compression="zstd",
     )
-    logging.info("--- Done. Raw dataset saved to %s ---", raw_dataset_path)
+    logger.info("--- Done. Raw dataset saved to %s ---", raw_dataset_path)
     return df
 
 
@@ -541,11 +552,13 @@ def remap_from_raw(
     """
     import polars as pl
 
+    logger = get_logger()
+
     if data is None:
-        logging.info("  -> Loading raw dataset from HuggingFace...")
+        logger.info("  -> Loading raw dataset from HuggingFace...")
         data = load_raw_dataset(dataset_names)
 
-    logging.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
+    logger.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
 
     tex_to_typ = get_tex_typ_map()
 
@@ -613,7 +626,7 @@ def generate_data_info(classes: list[str]) -> None:
         with path.open("wb") as f:
             f.write(json.encode(info_data))
         info = f"Generated data at {path}"
-        logging.info(info)
+        get_logger().info(info)
 
     _, unmapped = remap_from_raw(dataset_names=[DataSetName.mathwriting, DataSetName.detexify])
     for dataset_name, symbols in unmapped.items():
@@ -654,7 +667,9 @@ def create_dataset(
         Value,
     )
 
-    logging.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
+    logger = get_logger()
+
+    logger.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
     # load from raw data
     lf, unmapped = remap_from_raw(dataset_names, raw_data)
@@ -672,7 +687,7 @@ def create_dataset(
     t1 = train_r
     t2 = train_r + test_r
 
-    logging.info("  -> Shuffling and splitting data...")
+    logger.info("  -> Shuffling and splitting data...")
 
     # Add Stratified Indices
     # Casting label to Utf8 ensures consistency across datasets.
@@ -688,7 +703,7 @@ def create_dataset(
             ]
         )
     )
-    logging.info("  -> Generating metadata...")
+    logger.info("  -> Generating metadata...")
     # Use base_lf (materialized view logic) for fast stats
     stats_df = base_lf.select(pl.col("label")).collect().get_column("label").value_counts().sort("label")
 
@@ -711,7 +726,7 @@ def create_dataset(
     )  # type: ignore
 
     for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
-        logging.info("  -> Uploading split: %s... to huggingface.", split)
+        logger.info("  -> Uploading split: %s... to huggingface.", split)
         from os import process_cpu_count
 
         def encode_labels(batch):
@@ -727,7 +742,7 @@ def create_dataset(
         )
         dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
 
-    logging.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
+    logger.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -755,8 +770,6 @@ def main(
     """
     Preprocess datasets, generate metadata, and upload results.
     """
-    logging.basicConfig(level=logging.INFO)
-    # TODO: seperate logger for this file, prevents logging pollution from libs
 
     dataset_names = list(set(datasets))
 

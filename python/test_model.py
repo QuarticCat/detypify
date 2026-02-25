@@ -27,6 +27,9 @@ def main(
     batch_size: int = typer.Option(64, "--batch-size", help="Batch size"),
     out_dir: str = typer.Option("build/test", "--out-dir", help="Output directory"),
 ):
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
     ckpt_path = Path(checkpoint)
     if not ckpt_path.exists():
         err_msg = f"Checkpoint not found: {ckpt_path}"
@@ -35,7 +38,7 @@ def main(
     out_dir_path = Path(out_dir)
     out_dir_path.mkdir(parents=True, exist_ok=True)
 
-    logging.info("Loading checkpoint: %s", ckpt_path)
+    logger.info("Loading checkpoint: %s", ckpt_path)
 
     # Determine class and load
     if model_type == "cnn":
@@ -54,7 +57,7 @@ def main(
 
     # Get image size from hparams or model
     image_size = model.hparams.image_size  # type: ignore
-    logging.info("Model loaded. Image size: %s", image_size)
+    logger.info("Model loaded. Image size: %s", image_size)
 
     # Data
     dm = MathSymbolDataModule(image_size=image_size, batch_size=batch_size)
@@ -63,22 +66,18 @@ def main(
     classes = get_dataset_classes(DATASET_REPO)
     callback = LogPredictCallback(sorted(classes))
 
-    # Logger
-    logger = TensorBoardLogger(save_dir=out_dir_path, name="test_log", default_hp_metric=False)  # type: ignore
-
     trainer = Trainer(
         default_root_dir=out_dir_path,
-        logger=logger,
+        logger=TensorBoardLogger(save_dir=out_dir_path, name="test_log", default_hp_metric=False),  # type: ignore
         callbacks=[callback],
         precision="16-mixed" if torch.cuda.is_available() else "32",
     )
 
-    logging.info("Starting testing...")
+    logger.info("Starting testing...")
     torch.set_float32_matmul_precision("high")
     trainer.test(model, datamodule=dm)
-    logging.info("Testing finished. Logs saved to %s", out_dir_path)
+    logger.info("Testing finished. Logs saved to %s", out_dir_path)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     app()
