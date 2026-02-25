@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
   schedule:
     # weekly, Monday
-    - cron: '0 0 * * 1'
+    - cron: "0 0 * * 1"
   push:
     paths:
       # on new manual mapping added
-      - 'python/tex_to_typ.yaml'
+      - "python/tex_to_typ.yaml"
 jobs:
   check-typst-symbol-page:
     if: ${{ github.event_name != 'push' }}
@@ -66,7 +66,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           echo "ETag changed. Generating data."
-          uv run --no-project --with 'typer' --with 'msgspec' --with 'datasets' --with 'polars' --with 'beautifulsoup4' --with 'lxml' --python 3.13 python/proc_data.py --upload
+          uv run --no-project --with 'typer' --with 'msgspec' --with 'datasets' --with 'polars' --with 'beautifulsoup4' --with 'lxml' --python 3.13 python/proc_data.py --convert
 
       - name: Cache Hugging Face datasets
         uses: actions/cache@v4

@@ -753,8 +753,8 @@ def main(
         "-d",
         help="Datasets to process when converting data.",
     ),
-    convert_data: bool = typer.Option(False, help="Do not construct or upload local datasets."),
-    gen_info: bool = typer.Option(False, help="Skip writing symbol metadata and infer JSON files."),
+    convert_data: bool = typer.Option(False, help="Construct or upload local datasets."),
+    gen_info: bool = typer.Option(False, help="Writing symbol metadata and infer data files."),
     split_ratio: tuple[float, float, float] = typer.Option(
         (0.8, 0.1, 0.1),
         help="Train/test/val split ratios for the processed dataset.",
