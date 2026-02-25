@@ -43,7 +43,7 @@ class TypstSymInfo(Struct, kw_only=True, omit_defaults=True):
     alternates: list[str] | None = None
 
 
-class MathWritingDatasetInfo(Struct, kw_only=True, omit_defaults=True):
+class UnmappedSymbols(Struct, kw_only=True, omit_defaults=True):
     name: str
     unmapped: set[str] | None = None
 
@@ -524,24 +524,28 @@ def load_raw_dataset(dataset_names: list[DataSetName]) -> pl.DataFrame:
     return df
 
 
-def apply_typst_mapping(
-    df: pl.DataFrame,
+def remap_from_raw(
+    dataset_names: list[DataSetName],
+    data: pl.DataFrame | None = None,
 ) -> tuple[pl.LazyFrame, dict[DataSetName, set[str]]]:
-    """Apply LaTeX→Typst mapping to raw data.
+    """High-level function: Load raw data and apply fresh mapping.
 
-    Returns:
-        - Mapped LazyFrame with columns: label, strokes, source
-        - Dictionary of unmapped labels per source
+    When Typst reference changes, reload raw data and remap.
     """
     import polars as pl
 
+    if data is None:
+        logging.info("  -> Loading raw dataset from HuggingFace...")
+        data = load_raw_dataset(dataset_names)
+
+    logging.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
+
     tex_to_typ = map_tex_typ()
 
-    # We need to flatten the TypstSymInfo to just the char for mapping
     tex_to_char = {k: v.char for k, v in tex_to_typ.items()}
 
     # Apply mapping
-    mapped_df = df.with_columns(
+    mapped_df = data.with_columns(
         [
             pl.col("latex_label").replace(tex_to_char, default=None).alias("label"),
         ]
@@ -567,23 +571,6 @@ def apply_typst_mapping(
     return result_df.lazy(), unmapped
 
 
-def remap_from_raw(
-    dataset_names: list[DataSetName],
-    data: pl.DataFrame | None = None,
-) -> tuple[pl.LazyFrame, dict[DataSetName, set[str]]]:
-    """High-level function: Load raw data and apply fresh mapping.
-
-    When Typst reference changes, reload raw data and remap.
-    """
-
-    if data is None:
-        logging.info("  -> Loading raw dataset from HuggingFace...")
-        data = load_raw_dataset(dataset_names)
-
-    logging.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
-    return apply_typst_mapping(data)
-
-
 def generate_infer_data(classes: list[str]) -> None:
     """Generate the infer and contrib data
 
@@ -599,6 +586,20 @@ def generate_infer_data(classes: list[str]) -> None:
 
     typ_sym_info = get_typst_symbol_info()
     infer = []
+    contrib = {n: s.char for s in typ_sym_info for n in s.names}
+    chr_to_sym = {s.char: s for s in typ_sym_info}
+    for c in classes:
+        if c not in chr_to_sym:
+            continue
+        sym = chr_to_sym[c]
+        info = {"char": sym.char, "names": sym.names}
+        if sym.markup_shorthand and sym.math_shorthand:
+            info["shorthand"] = sym.markup_shorthand
+        elif sym.markup_shorthand:
+            info["markupShorthand"] = sym.markup_shorthand
+        elif sym.math_shorthand:
+            info["mathShorthand"] = sym.math_shorthand
+        infer.append(info)
     contrib = {n: s.char for s in typ_sym_info for n in s.names}
     chr_to_sym = {s.char: s for s in typ_sym_info}
     for c in classes:
@@ -731,7 +732,7 @@ def create_dataset(
     for dataset_name, symbols in unmapped.items():
         dataset_path = DATASET_ROOT / dataset_name
         dataset_path.mkdir(exist_ok=True)
-        dataset_info = MathWritingDatasetInfo(
+        dataset_info = UnmappedSymbols(
             name=dataset_name,
             unmapped=symbols or None,
         )
