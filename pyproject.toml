@@ -43,6 +43,7 @@ dev = [
   # formatter and linter
   "ruff",
   # training logs
+  "setuptools==81.0",
   "tensorboard>=2.20.0",
   "tensorboardx>=2.6.4",
   "torch-tb-profiler>=0.4.3",
