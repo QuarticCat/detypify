@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 import typer
-from msgspec import Struct, json
+from msgspec import Struct
 
 if TYPE_CHECKING:
     import polars as pl
@@ -339,6 +339,7 @@ def collect_detexify_raw():
     """
 
     import polars as pl
+    from msgspec import json
 
     pl.Config.set_engine_affinity("streaming")
 
@@ -398,6 +399,7 @@ def collect_contrib_raw():
     """
 
     import polars as pl
+    from msgspec import json
 
     # Load Data
     with CONTRIB_DATA.open("rb") as f:
@@ -567,7 +569,7 @@ def remap_from_raw(
     # Apply mapping
     mapped_df = data.with_columns(
         [
-            pl.col("latex_label").replace(tex_to_char, default=None).alias("label"),
+            pl.col("latex_label").replace_strict(tex_to_char, default=None).alias("label"),
         ]
     )
 
@@ -597,6 +599,7 @@ def generate_data_info(classes: list[str]) -> None:
     Args:
         classes: Set of character classes to generate infer.json for.
     """
+    from msgspec import json
 
     DATA_ROOT.mkdir(exist_ok=True, parents=True)
 
@@ -621,7 +624,6 @@ def generate_data_info(classes: list[str]) -> None:
         elif sym.math_shorthand:
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
-    contrib = {n: s.char for s in typ_sym_info for n in s.names}
     for path, info_data in [(infer_path, infer), (contrib_path, contrib)]:
         with path.open("wb") as f:
             f.write(json.encode(info_data))
@@ -629,13 +631,8 @@ def generate_data_info(classes: list[str]) -> None:
         get_logger().info(info)
 
     _, unmapped = remap_from_raw(dataset_names=[DataSetName.mathwriting, DataSetName.detexify])
-    for dataset_name, symbols in unmapped.items():
-        dataset_info = UnmappedSymbols(
-            name=dataset_name,
-            unmapped=symbols or None,
-        )
-        with (unmapped_path).open("wb") as f:
-            f.write(json.format(json.encode(dataset_info)))
+    with (unmapped_path).open("wb") as f:
+        f.write(json.format(json.encode(unmapped)))
 
 
 def create_dataset(
