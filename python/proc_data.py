@@ -62,6 +62,12 @@ class MathSymbolSample(Struct):
     symbol: Strokes
 
 
+class DataSetName(StrEnum):
+    mathwriting = "mathwriting"
+    detexify = "detexify"
+    contrib = "contrib"
+
+
 # Helper functions
 @cache
 def is_invisible(c: str) -> bool:
@@ -196,7 +202,7 @@ def get_dataset_classes(dataset_name: str) -> list[str]:
 
 
 @cache
-def map_tex_typ() -> dict[str, TypstSymInfo]:
+def get_tex_typ_map() -> dict[str, TypstSymInfo]:
     """Creates a mapping from TeX command names to Typst symbol information.
 
     Combines mappings from the Typst symbol page (via `get_typst_symbol_info`)
@@ -222,12 +228,13 @@ def map_tex_typ() -> dict[str, TypstSymInfo]:
 
 @cache
 def get_xml_parser():
+    """Cached xml parser for reuse to increase performance"""
     from lxml import etree
 
     return etree.XMLParser()
 
 
-def parse_inkml_symbol(
+def parse_mathwriting_symbol(
     filepath: Path,
 ) -> MathSymbolSample | None:
     """Parses a single InkML file to extract the raw LaTeX label and stroke data.
@@ -292,7 +299,7 @@ def collect_mathwriting_raw():
 
     with ProcessPoolExecutor() as executor:
         results = executor.map(
-            parse_inkml_symbol,
+            parse_mathwriting_symbol,
             MATH_WRITING_DATA_PATH.glob("*.inkml"),
             chunksize=500,
         )
@@ -540,7 +547,7 @@ def remap_from_raw(
 
     logging.info(f"  -> Applying LaTeX→Typst mapping to {len(data)} samples...")
 
-    tex_to_typ = map_tex_typ()
+    tex_to_typ = get_tex_typ_map()
 
     tex_to_char = {k: v.char for k, v in tex_to_typ.items()}
 
@@ -571,19 +578,20 @@ def remap_from_raw(
     return result_df.lazy(), unmapped
 
 
-def generate_infer_data(classes: list[str]) -> None:
-    """Generate the infer and contrib data
+def generate_data_info(classes: list[str]) -> None:
+    """Generate the infer and contrib, unmapped data info
 
     Args:
         classes: Set of character classes to generate infer.json for.
     """
 
+    DATA_ROOT.mkdir(exist_ok=True, parents=True)
+
     infer_path = DATA_ROOT / "infer.json"
     contrib_path = DATA_ROOT / "contrib.json"
+    unmapped_path = DATA_ROOT / "unmapped_latex_symbols.json"
 
-    infer_path.parent.mkdir(parents=True, exist_ok=True)
-    contrib_path.parent.mkdir(parents=True, exist_ok=True)
-
+    # generate infer.json and contrib.json files
     typ_sym_info = get_typst_symbol_info()
     infer = []
     contrib = {n: s.char for s in typ_sym_info for n in s.names}
@@ -601,22 +609,20 @@ def generate_infer_data(classes: list[str]) -> None:
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
     contrib = {n: s.char for s in typ_sym_info for n in s.names}
-    chr_to_sym = {s.char: s for s in typ_sym_info}
-    for c in classes:
-        if c not in chr_to_sym:
-            continue
-        sym = chr_to_sym[c]
-        info = {"char": sym.char, "names": sym.names}
-        if sym.markup_shorthand and sym.math_shorthand:
-            info["shorthand"] = sym.markup_shorthand
-        elif sym.markup_shorthand:
-            info["markupShorthand"] = sym.markup_shorthand
-        elif sym.math_shorthand:
-            info["mathShorthand"] = sym.math_shorthand
-        infer.append(info)
-    for path, data in [(infer_path, infer), (contrib_path, contrib)]:
+    for path, info_data in [(infer_path, infer), (contrib_path, contrib)]:
         with path.open("wb") as f:
-            f.write(json.encode(data))
+            f.write(json.encode(info_data))
+        info = f"Generated data at {path}"
+        logging.info(info)
+
+    _, unmapped = remap_from_raw(dataset_names=[DataSetName.mathwriting, DataSetName.detexify])
+    for dataset_name, symbols in unmapped.items():
+        dataset_info = UnmappedSymbols(
+            name=dataset_name,
+            unmapped=symbols or None,
+        )
+        with (unmapped_path).open("wb") as f:
+            f.write(json.format(json.encode(dataset_info)))
 
 
 def create_dataset(
@@ -704,10 +710,8 @@ def create_dataset(
         }
     )  # type: ignore
 
-    def _upload_to_huggingface(
-        split: SplitName,
-        data_frame: pl.DataFrame,
-    ):
+    for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
+        logging.info("  -> Uploading split: %s... to huggingface.", split)
         from os import process_cpu_count
 
         def encode_labels(batch):
@@ -719,31 +723,11 @@ def create_dataset(
         dataset_info = DatasetInfo(description=description)
         dataset = cast(
             Dataset,
-            Dataset.from_polars(data_frame, info=dataset_info)
-            .map(encode_labels, batched=True)
-            .cast(features=global_features),
+            Dataset.from_polars(df, info=dataset_info).map(encode_labels, batched=True).cast(features=global_features),
         )
         dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
 
-    for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
-        logging.info("  -> Uploading split: %s... to huggingface.", split)
-        _upload_to_huggingface(split, df)
     logging.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
-    for dataset_name, symbols in unmapped.items():
-        dataset_path = DATASET_ROOT / dataset_name
-        dataset_path.mkdir(exist_ok=True)
-        dataset_info = UnmappedSymbols(
-            name=dataset_name,
-            unmapped=symbols or None,
-        )
-        with (dataset_path / "dataset_info.json").open("wb") as f:
-            f.write(json.format(json.encode(dataset_info)))
-
-
-class DataSetName(StrEnum):
-    mathwriting = "mathwriting"
-    detexify = "detexify"
-    contrib = "contrib"
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -765,7 +749,6 @@ def main(
     ),
     create_raw: bool = typer.Option(
         False,
-        "--create-raw",
         help="Create and upload raw dataset with original LaTeX labels.",
     ),
 ):
@@ -773,6 +756,7 @@ def main(
     Preprocess datasets, generate metadata, and upload results.
     """
     logging.basicConfig(level=logging.INFO)
+    # TODO: seperate logger for this file, prevents logging pollution from libs
 
     dataset_names = list(set(datasets))
 
@@ -790,7 +774,7 @@ def main(
         )
 
     if gen_info:
-        generate_infer_data(classes=get_dataset_classes(DATASET_REPO))
+        generate_data_info(classes=get_dataset_classes(DATASET_REPO))
 
 
 if __name__ == "__main__":
