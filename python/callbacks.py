@@ -359,17 +359,9 @@ class ExportBestModelToONNX(Callback):
         logging.info("Loading best checkpoint from: %s", best_model_path)
 
         # Load the best checkpoint
-        model_type = type(pl_module)
-        from model import CNNModel, TimmModel
+        from model import TimmModel
 
-        if model_type == CNNModel:
-            best_model = model_type.load_from_checkpoint(best_model_path)
-        elif model_type == TimmModel:
-            best_model = model_type.load_from_checkpoint(best_model_path, model_name=self.model_name)
-        else:
-            logging.warning("Unknown model type %s. Skipping ONNX export.", model_type)
-            return
-
+        best_model = TimmModel.load_from_checkpoint(best_model_path, model_name=self.model_name)
         # Freeze and prepare model for export
         best_model.freeze()
         if hasattr(best_model, "use_compile"):

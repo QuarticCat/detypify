@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Literal, override
+from typing import override
 
 import torch
 from lightning import LightningModule
@@ -11,18 +11,7 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
 )
 from torchmetrics import Accuracy
-
-# Selected models for efficiency, ranked by model size, ascending
-type TimmModelName = Literal[
-    # optimal ones
-    "mobilenetv4_conv_small_035",
-    "mobilenetv4_conv_small_050",
-    # for exp
-    "mobilenetv4_conv_small",
-    "mobilenetv4_conv_medium",
-    "mobilenetv4_hybrid_medium_075",
-    "mobilenetv4_hybrid_medium",
-]
+from train import ModelName
 
 
 class BaseModel(LightningModule):
@@ -124,7 +113,7 @@ class TimmModel(BaseModel):
     def __init__(
         self,
         num_classes: int,
-        model_name: TimmModelName,
+        model_name: ModelName,
         total_epochs: int,
         image_size: int,
         warmup_epochs: int = 5,
@@ -176,82 +165,3 @@ class TimmModel(BaseModel):
         if self.use_compile:
             return self.model_opt(x)
         return self.model(x)
-
-
-class CNNModel(BaseModel):
-    def __init__(
-        self,
-        num_classes: int,
-        image_size: int,
-        total_epochs: int,
-        warmup_epochs: int = 5,
-        learning_rate: float = 1e-3,
-        *,
-        use_compile: bool = False,
-        use_tensorrt: bool = True,
-    ):
-        super().__init__(
-            num_classes=num_classes,
-            image_size=image_size,
-            total_epochs=total_epochs,
-            warmup_epochs=warmup_epochs,
-            learning_rate=learning_rate,
-            use_compile=use_compile,
-        )
-        self.save_hyperparameters(
-            "num_classes",
-            "image_size",
-            "learning_rate",
-            "total_epochs",
-            "warmup_epochs",
-        )
-
-        features = nn.Sequential(
-            nn.Conv2d(1, 16, 5),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, 5),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-        )
-        avgpool = nn.AdaptiveAvgPool2d((4, 4))
-        classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(32 * 4 * 4, 512),
-            nn.ReLU(),
-            nn.Dropout(0.25),
-            nn.Linear(512, num_classes),
-        )
-
-        # Change model to channel last format for speed
-        self.features = features.to(memory_format=torch.channels_last)  # type: ignore
-        self.avgpool = avgpool.to(memory_format=torch.channels_last)  # type: ignore
-        self.classifier = classifier.to(memory_format=torch.channels_last)  # type: ignore
-
-        if use_tensorrt:
-            import torch_tensorrt  # noqa: F401
-
-        self.features_opt = torch.compile(
-            self.features,
-            backend="tensorrt" if use_tensorrt else "inductor",
-            options={"triton.cudagraphs": True, "shape_padding": True},
-            dynamic=False,
-        )
-        self.classifier_opt = torch.compile(
-            self.classifier,
-            backend="tensorrt" if use_tensorrt else "inductor",
-            options={"triton.cudagraphs": True, "shape_padding": True},
-            dynamic=False,
-        )
-
-    def forward(self, x):
-        x = x.to(memory_format=torch.channels_last)
-        if self.use_compile:
-            x = self.features_opt(x)
-            x = self.avgpool(x)
-            return self.classifier_opt(x)
-        x = self.features(x)
-        x = self.avgpool(x)
-        return self.classifier(x)

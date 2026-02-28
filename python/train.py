@@ -1,10 +1,21 @@
 """Train the model."""
 
 import logging
+from enum import StrEnum
 
 import typer
 
 CUDA_AMPERE_VERSION = 8
+
+
+class ModelName(StrEnum):
+    conv_small_035 = "mobilenetv4_conv_small_035"
+    conv_small_050 = "mobilenetv4_conv_small_050"
+    conv_small_full = "mobilenetv4_conv_small"
+    conv_medium = "mobilenetv4_conv_medium"
+    hybrid_medium_075 = "mobilenetv4_hybrid_medium_075"
+    hybrid_medium = "mobilenetv4_hybrid_medium"
+
 
 if __name__ == "__main__":
     logger = logging.getLogger()
@@ -31,12 +42,12 @@ if __name__ == "__main__":
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
         use_tensorrt: bool = typer.Option(True, help="Use pytorch tensorrt compile backend"),
-        models: list[str] = typer.Option(
+        models: list[ModelName] = typer.Option(
             [
-                "mobilenetv4_conv_small_035",
+                "conv_small_035",
             ],
             "--models",
-            help="List of models to train (use 'CNNModel' for built-in CNN)",
+            help="List of models to train",
         ),
     ):
         """Train the model."""
@@ -70,7 +81,7 @@ if __name__ == "__main__":
         from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
         from lightning.pytorch.loggers import TensorBoardLogger
         from lightning.pytorch.tuner.tuning import Tuner
-        from model import CNNModel, TimmModel
+        from model import TimmModel
         from msgspec import yaml
         from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
@@ -79,29 +90,17 @@ if __name__ == "__main__":
         out_dir_path = Path(out_dir)
 
         classes = get_dataset_classes(DATASET_REPO)
-        model_instances: list[CNNModel | TimmModel] = []
-        for model_name in models:
-            if model_name == "CNN":
-                model_instances.append(
-                    CNNModel(
-                        num_classes=len(classes),
-                        image_size=image_size,
-                        total_epochs=total_epochs,
-                        warmup_epochs=warmup_epochs,
-                        use_tensorrt=use_tensorrt,
-                    )
-                )
-            else:
-                model_instances.append(
-                    TimmModel(
-                        num_classes=len(classes),
-                        model_name=model_name,  # type: ignore[arg-type]
-                        warmup_epochs=warmup_epochs,
-                        total_epochs=total_epochs,
-                        image_size=image_size,
-                        use_tensorrt=use_tensorrt,
-                    )
-                )
+        model_instances: list[TimmModel] = [
+            TimmModel(
+                num_classes=len(classes),
+                model_name=model,
+                warmup_epochs=warmup_epochs,
+                total_epochs=total_epochs,
+                image_size=image_size,
+                use_tensorrt=use_tensorrt,
+            )
+            for model in models
+        ]
 
         # define data module
         dm = MathSymbolDataModule(
