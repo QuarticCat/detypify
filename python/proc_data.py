@@ -200,12 +200,8 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     return canvas
 
 
-@cache
-def get_dataset_classes(dataset_name: str) -> list[str]:
-    from datasets import load_dataset
-
+def get_dataset_classes(dataset: DatasetDict) -> list[str]:
     classes: set[str] = set()
-    dataset = load_dataset(dataset_name)
     for split in dataset:
         classes.update(dataset[split].features["label"].names)
     return sorted(classes)
@@ -646,6 +642,7 @@ def create_dataset(
     1. Loads symbol mappings using the specific project logic.
     2. Dispatches data loading to specific construct_* functions.
     3. Performs a stratified train/test/val split.
+    4. Generate {infer, contrib}.json for infer
 
     Args:
         dataset_names: The names of the dataset to use.
@@ -657,7 +654,7 @@ def create_dataset(
         err_msg = "The split ratio sum of dataset is not 1."
 
         logger.error(err_msg)
-        raise RuntimeError(err_msg)
+        raise ValueError(err_msg)
 
     from shutil import rmtree as rmdir
 
@@ -666,7 +663,7 @@ def create_dataset(
 
     logger.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
-    # load from raw data
+    # remap latex labels to typst
     lf, unmapped = remap_from_raw(dataset_names, None)
 
     dataset_path = DATASET_ROOT
@@ -680,10 +677,11 @@ def create_dataset(
     t1 = train_r
     t2 = train_r + test_r
 
-    logger.info("  -> Shuffling and splitting data...")
+    # Split data
 
     # Add Stratified Indices
     # Casting label to Utf8 ensures consistency across datasets.
+    logger.info("  -> Shuffling and splitting data...")
     base_lf = (
         lf.with_columns(pl.col("label").cast(pl.Utf8))
         .collect()
@@ -710,6 +708,7 @@ def create_dataset(
     )
     val_lf = base_lf.filter(pl.col("idx") >= (pl.col("n") * t2)).drop(["n", "idx"]).sort("label").collect()
 
+    # Rasterize and encode labels
     global_features: Features = Features(
         {
             "label": ClassLabel(names=stats_df["label"].to_list()),
@@ -724,35 +723,34 @@ def create_dataset(
 
         worker_count = process_cpu_count() or 1
 
-        def encode_labels(batch):
+        def preprocess(batch, image_size):
             class_feature = global_features["label"]
             batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
-            return batch
-
-        def rasterize_strokes_batched(batch, image_size):
             batch["image"] = [rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]]
             return batch
 
         dataset_dict[split_name] = cast(
             Dataset,
             Dataset.from_polars(df)
-            .map(encode_labels, batched=True, num_proc=worker_count)
-            .cast(features=global_features)
             .map(
-                rasterize_strokes_batched,
+                preprocess,
                 batched=True,
                 remove_columns=["strokes", "source"],
                 num_proc=worker_count,
                 fn_kwargs={"image_size": image_size},
+                keep_in_memory=True,
             )
-            .cast_column(
-                "image",
-                Array2D(shape=(image_size, image_size), dtype="uint8"),
-            )
+            .cast(features=global_features)
+            .cast_column("image", Array2D(shape=(image_size, image_size), dtype="uint8"))
             .with_format("torch"),
         )
 
-    return DatasetDict(dataset_dict)  # type: ignore
+    dataset = DatasetDict(dataset_dict)  # type: ignore
+
+    # Generate data info files
+    generate_data_info(classes=get_dataset_classes(dataset))
+
+    return dataset
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -766,7 +764,6 @@ def main(
         "-d",
         help="Datasets to process when converting data.",
     ),
-    gen_info: bool = typer.Option(False, help="Writing symbol metadata and infer data files."),
     create_raw: bool = typer.Option(
         False,
         help="Create and upload raw dataset with original LaTeX labels.",
@@ -780,9 +777,6 @@ def main(
         create_raw_dataset(
             dataset_names=list(set(datasets)),
         )
-
-    if gen_info:
-        generate_data_info(classes=get_dataset_classes(DATASET_REPO))
 
 
 if __name__ == "__main__":

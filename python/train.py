@@ -96,13 +96,24 @@ if __name__ == "__main__":
         from lightning.pytorch.tuner.tuning import Tuner
         from model import TimmModel
         from msgspec import yaml
-        from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
         from torch.cuda import get_device_properties, is_available
 
         out_dir_path = Path(out_dir)
 
-        classes = get_dataset_classes(DATASET_REPO)
+        # define data module
+        dm = MathSymbolDataModule(
+            batch_size=init_batch_size,
+            image_size=image_size,
+            split_ratio=split_ratio,
+            dataset_names=list(set(datasets)),
+        )
+
+        dm.prepare_data()
+
+        dm.setup()
+
+        classes = dm.classes
         model_instances: list[TimmModel] = [
             TimmModel(
                 num_classes=len(classes),
@@ -114,14 +125,6 @@ if __name__ == "__main__":
             )
             for model in models
         ]
-
-        # define data module
-        dm = MathSymbolDataModule(
-            batch_size=init_batch_size,
-            image_size=image_size,
-            split_ratio=split_ratio,
-            dataset_names=list(set(datasets)),
-        )
 
         # for Ampere or later NVIDIA graphics only
         if is_available():
@@ -161,7 +164,7 @@ if __name__ == "__main__":
             if log_pred:
                 from callbacks import LogPredictCallback
 
-                callbacks.append(LogPredictCallback(sorted(classes)))
+                callbacks.append(LogPredictCallback(classes))
 
             if use_ema:
                 from callbacks import EMAWeightAveraging

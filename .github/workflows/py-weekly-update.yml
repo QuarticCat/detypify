@@ -48,44 +48,9 @@ jobs:
             echo "😴 No change detected."
           fi
 
-  gen-info:
+  trigger-training:
     needs: check-typst-symbol-page
     if: ${{ !failure() && (needs.check-typst-symbol-page.outputs.should_run == 'true' || github.event_name == 'push') }}
-    name: dataset-update
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: Run Generation
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          echo "ETag changed. Generating data."
-          uv run --no-project --with 'typer' --with 'msgspec' --with 'datasets' --with 'polars' --with 'beautifulsoup4' --with 'lxml' --python 3.13 python/proc_data.py --convert-data
-
-      - name: Cache Hugging Face datasets
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: huggingface-datasets-${{ hashFiles('python/tex_to_typ.yaml') }}
-          restore-keys: |
-            huggingface-datasets-
-
-      - name: Upload Data Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-data
-          path: |
-            build/data/infer.json
-            build/data/contrib.json
-
-  trigger-training:
-    needs: gen-info
     runs-on: ubuntu-latest
     env:
       TITLE: "Detypify Auto Training"
@@ -93,11 +58,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Download Data Artifacts
-        uses: actions/download-artifact@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
         with:
-          name: generated-data
-          path: build/data
+          enable-cache: true
 
       - name: Set up Notebook Kernel
         shell: bash
@@ -184,6 +148,7 @@ jobs:
         run: |
           echo "Checking status for $KERNEL_ID..."
 
+          # set max training time to 240 min
           MAX_RETRIES=240
           COUNT=0
 
@@ -206,12 +171,13 @@ jobs:
           echo "::error::Kernel execution timed out after 4 hours."
           exit 1
 
-      - name: Download artifacts
+      - name: Download artifacts from kaggle
         shell: bash
         run: |
           mkdir -p artifacts
           # Use the exact KERNEL_ID (owner/slug) that Kaggle CLI expects
           kaggle kernels output "$KERNEL_ID" -p artifacts
+
       - name: Upload Trained Models to GitHub
         uses: actions/upload-artifact@v4
         with:

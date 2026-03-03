@@ -16,9 +16,9 @@ class MathSymbolDataModule(LightningDataModule):
         batch_size: int = 64,
         num_workers: int = process_cpu_count() or 1,
     ):
+        from pathlib import Path
+
         from proc_data import DATASET_REPO
-        from torch import float32 as t_float32
-        from torchvision.transforms import v2
 
         super().__init__()
         self.batch_size = batch_size
@@ -28,31 +28,32 @@ class MathSymbolDataModule(LightningDataModule):
         self.dataset_names = dataset_names
         self.split_ratio = split_ratio
 
-        self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
-        self.train_transform = v2.Compose(
-            [
-                v2.ToImage(),
-                # augmentations
-                v2.RandomAffine(
-                    degrees=10,  # type: ignore[arg-type]
-                    translate=(0.1, 0.1),
-                    shear=10,
-                ),
-                v2.ToDtype(dtype=t_float32, scale=True),
-            ]
-        )
+        save_path = Path("build/dataset")
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        self.save_path = save_path
 
     @override
     def prepare_data(self):
         load_dataset(self.dataset_repo)
-
-    @override
-    def setup(self, stage: str | None = None):
         from proc_data import create_dataset
 
         dataset = create_dataset(
             dataset_names=self.dataset_names, image_size=self.image_size, split_ratio=self.split_ratio
         )
+
+        dataset.save_to_disk(dataset_dict_path=self.save_path)
+
+    @override
+    def setup(self, stage: str | None = None):
+        from typing import cast
+
+        from datasets import DatasetDict, load_from_disk
+        from proc_data import get_dataset_classes
+
+        dataset = cast(DatasetDict, load_from_disk(dataset_path=self.save_path))
+
+        self.classes = get_dataset_classes(dataset)
 
         if stage == "fit":
             self.train_dataset = dataset["train"]
@@ -99,13 +100,29 @@ class MathSymbolDataModule(LightningDataModule):
         # when batch is not a dict, means its not from dataloader, do nothing.
         if isinstance(batch, dict) and self.trainer:
             from lightning.pytorch.trainer.states import RunningStage
+            from torch import float32 as t_float32
             from torch import uint8 as t_uint8
+            from torchvision.transforms import v2
 
             original_images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
+            eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
+            train_transform = v2.Compose(
+                [
+                    v2.ToImage(),
+                    # augmentations
+                    v2.RandomAffine(
+                        degrees=10,  # type: ignore[arg-type]
+                        translate=(0.1, 0.1),
+                        shear=10,
+                    ),
+                    v2.ToDtype(dtype=t_float32, scale=True),
+                ]
+            )
+
             match self.trainer.state.stage:
                 case RunningStage.TRAINING:
-                    batch["image"] = self.train_transform(original_images)
+                    batch["image"] = train_transform(original_images)
                 case _:
-                    batch["image"] = self.eval_transform(original_images)
+                    batch["image"] = eval_transform(original_images)
 
         return batch
