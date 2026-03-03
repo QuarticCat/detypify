@@ -12,6 +12,7 @@ from msgspec import Struct
 
 if TYPE_CHECKING:
     import polars as pl
+    from datasets import DatasetDict
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
@@ -637,44 +638,39 @@ def generate_data_info(classes: list[str]) -> None:
 
 def create_dataset(
     dataset_names: list[DataSetName],
-    raw_data: pl.DataFrame | None = None,
+    image_size: int = 224,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
-) -> None:
+) -> DatasetDict:
     """Orchestrates the creation of a math symbol dataset.
 
     1. Loads symbol mappings using the specific project logic.
     2. Dispatches data loading to specific construct_* functions.
     3. Performs a stratified train/test/val split.
-    4. Saves data as sharded files (Parquet/Vortex) and writes metadata.
 
     Args:
         dataset_names: The names of the dataset to use.
-        raw_data: The dataframe. Optional, if nothing, load from huggingface
         split_ratio: A tuple defining the ratio for (train, test, val) splits.
     """
+    logger = get_logger()
+
+    if sum(split_ratio) != 1:
+        err_msg = "The split ratio sum of dataset is not 1."
+
+        logger.error(err_msg)
+        raise RuntimeError(err_msg)
+
+    from shutil import rmtree as rmdir
 
     import polars as pl
-    from datasets import (
-        ClassLabel,
-        Dataset,
-        DatasetInfo,
-        Features,
-        LargeList,
-        List,
-        Value,
-    )
-
-    logger = get_logger()
+    from datasets import Array2D, ClassLabel, Dataset, DatasetDict, Features, LargeList, List, Value
 
     logger.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
     # load from raw data
-    lf, unmapped = remap_from_raw(dataset_names, raw_data)
+    lf, unmapped = remap_from_raw(dataset_names, None)
 
     dataset_path = DATASET_ROOT
     split_names: list[SplitName] = ["train", "test", "val"]
-
-    from shutil import rmtree as rmdir
 
     if dataset_path.exists():
         rmdir(dataset_path)
@@ -722,24 +718,41 @@ def create_dataset(
         }
     )  # type: ignore
 
-    for df, split in zip([train_lf, test_lf, val_lf], split_names, strict=True):
-        logger.info("  -> Uploading split: %s... to huggingface.", split)
+    dataset_dict: dict[SplitName, Dataset] = {}
+    for df, split_name in zip([train_lf, test_lf, val_lf], split_names, strict=True):
         from os import process_cpu_count
+
+        worker_count = process_cpu_count() or 1
 
         def encode_labels(batch):
             class_feature = global_features["label"]
             batch["label"] = [class_feature.str2int(label) for label in batch["label"]]
             return batch
 
-        description = "Detypify dataset, composed by mathwriting, detexify and contributed datasets"
-        dataset_info = DatasetInfo(description=description)
-        dataset = cast(
-            Dataset,
-            Dataset.from_polars(df, info=dataset_info).map(encode_labels, batched=True).cast(features=global_features),
-        )
-        dataset.push_to_hub(repo_id=DATASET_REPO, num_proc=process_cpu_count() or 1, split=split, set_default=True)
+        def rasterize_strokes_batched(batch, image_size):
+            batch["image"] = [rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]]
+            return batch
 
-    logger.info("--- Done. Dataset uploaded to %s ---", DATASET_REPO)
+        dataset_dict[split_name] = cast(
+            Dataset,
+            Dataset.from_polars(df)
+            .map(encode_labels, batched=True, num_proc=worker_count)
+            .cast(features=global_features)
+            .map(
+                rasterize_strokes_batched,
+                batched=True,
+                remove_columns=["strokes", "source"],
+                num_proc=worker_count,
+                fn_kwargs={"image_size": image_size},
+            )
+            .cast_column(
+                "image",
+                Array2D(shape=(image_size, image_size), dtype="uint8"),
+            )
+            .with_format("torch"),
+        )
+
+    return DatasetDict(dataset_dict)  # type: ignore
 
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -753,12 +766,7 @@ def main(
         "-d",
         help="Datasets to process when converting data.",
     ),
-    convert_data: bool = typer.Option(False, help="Construct or upload local datasets."),
     gen_info: bool = typer.Option(False, help="Writing symbol metadata and infer data files."),
-    split_ratio: tuple[float, float, float] = typer.Option(
-        (0.8, 0.1, 0.1),
-        help="Train/test/val split ratios for the processed dataset.",
-    ),
     create_raw: bool = typer.Option(
         False,
         help="Create and upload raw dataset with original LaTeX labels.",
@@ -768,19 +776,9 @@ def main(
     Preprocess datasets, generate metadata, and upload results.
     """
 
-    dataset_names = list(set(datasets))
-
-    raw_data = None
     if create_raw:
-        raw_data = create_raw_dataset(
-            dataset_names=dataset_names,
-        )
-
-    if convert_data:
-        create_dataset(
-            dataset_names=dataset_names,
-            raw_data=raw_data,
-            split_ratio=split_ratio,
+        create_raw_dataset(
+            dataset_names=list(set(datasets)),
         )
 
     if gen_info:

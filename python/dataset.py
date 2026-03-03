@@ -3,6 +3,7 @@ from typing import override
 
 from datasets import load_dataset
 from lightning import LightningDataModule
+from proc_data import DataSetName
 from torch.utils.data import DataLoader
 
 
@@ -10,6 +11,8 @@ class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
         image_size: int,
+        dataset_names: list[DataSetName],
+        split_ratio: tuple[float, float, float],
         batch_size: int = 64,
         num_workers: int = process_cpu_count() or 1,
     ):
@@ -22,6 +25,8 @@ class MathSymbolDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.image_size = image_size
         self.dataset_repo = DATASET_REPO
+        self.dataset_names = dataset_names
+        self.split_ratio = split_ratio
 
         self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
         self.train_transform = v2.Compose(
@@ -43,27 +48,10 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def setup(self, stage: str | None = None):
-        from datasets import Array2D
-        from proc_data import rasterize_strokes
+        from proc_data import create_dataset
 
-        def _rasterize_strokes_batched(batch, image_size):
-            batch["image"] = [rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]]
-            return batch
-
-        dataset = (
-            load_dataset(self.dataset_repo)
-            .map(
-                _rasterize_strokes_batched,
-                batched=True,
-                remove_columns=["strokes", "source"],
-                num_proc=self.num_workers,
-                fn_kwargs={"image_size": self.image_size},
-            )
-            .cast_column(
-                "image",
-                Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
-            )
-            .with_format("torch")
+        dataset = create_dataset(
+            dataset_names=self.dataset_names, image_size=self.image_size, split_ratio=self.split_ratio
         )
 
         if stage == "fit":

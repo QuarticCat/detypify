@@ -21,6 +21,7 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     app = typer.Typer(pretty_exceptions_show_locals=False)
+    from proc_data import DataSetName
 
     @app.command()
     def main(
@@ -32,7 +33,17 @@ if __name__ == "__main__":
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
+        datasets: list[DataSetName] = typer.Option(
+            [DataSetName.detexify, DataSetName.mathwriting],
+            "--datasets",
+            "-d",
+            help="Datasets to be used when converting data.",
+        ),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
+        split_ratio: tuple[float, float, float] = typer.Option(
+            (0.8, 0.1, 0.1),
+            help="Train/test/val split ratios for the processed dataset.",
+        ),
         find_batch_size: bool = typer.Option(False, help="Enable/Disable automatic batch size finding"),
         use_ema: bool = typer.Option(True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
@@ -44,7 +55,7 @@ if __name__ == "__main__":
         use_tensorrt: bool = typer.Option(True, help="Use pytorch tensorrt compile backend"),
         models: list[ModelName] = typer.Option(
             [
-                "conv_small_035",
+                ModelName.conv_small_035,
             ],
             "--models",
             help="List of models to train",
@@ -61,6 +72,8 @@ if __name__ == "__main__":
             "init_batch_size": init_batch_size,
             "warmup_epochs": warmup_epochs,
             "total_epochs": total_epochs,
+            "datasets": list(set(datasets)),
+            "split_ratio": split_ratio,
             "image_size": image_size,
             "find_batch_size": find_batch_size,
             "use_ema": use_ema,
@@ -106,6 +119,8 @@ if __name__ == "__main__":
         dm = MathSymbolDataModule(
             batch_size=init_batch_size,
             image_size=image_size,
+            split_ratio=split_ratio,
+            dataset_names=list(set(datasets)),
         )
 
         # for Ampere or later NVIDIA graphics only
