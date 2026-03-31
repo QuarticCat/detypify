@@ -120,7 +120,6 @@ class TimmModel(BaseModel):
         learning_rate: float = 0.002,
         *,
         use_compile: bool = False,
-        use_tensorrt: bool = True,
     ):
         super().__init__(
             num_classes=num_classes,
@@ -148,12 +147,8 @@ class TimmModel(BaseModel):
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
-        if use_tensorrt:
-            import torch_tensorrt  # noqa: F401
-
         self.model_opt = torch.compile(
             self.model,
-            backend="tensorrt" if use_tensorrt else "inductor",
             options={"triton.cudagraphs": True, "shape_padding": True},
             dynamic=False,
         )
