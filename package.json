@@ -26,5 +26,12 @@
                 }
             }
         ]
+    },
+    "pnpm": {
+        "peerDependencyRules": {
+            "allowedVersions": {
+                "vite": "8.x"
+            }
+        }
     }
 }
