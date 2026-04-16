@@ -277,7 +277,7 @@ def parse_mathwriting_symbol(
                 for x, y, _ in (
                     # keep only x,y, discard time
                     point_str.split()
-                    for point_str in trace.text.split(",")
+                    for point_str in trace.text.split(",")  # type: ignore[missing-attribute]
                     if len(point_str.split()) == RAW_POINT_LENGTH
                 )
             ]
@@ -467,17 +467,17 @@ def create_raw_dataset(
     lfs = []
     for dataset_name in dataset_names:
         match dataset_name:
-            case "mathwriting":
+            case DataSetName.mathwriting:
                 math_writing_lf = collect_mathwriting_raw()
                 # Add source column
                 math_writing_lf = math_writing_lf.with_columns(pl.lit("mathwriting").alias("source"))
                 lfs.append(math_writing_lf)
-            case "detexify":
+            case DataSetName.detexify:
                 detexify_lf = collect_detexify_raw()
                 # Add source column
                 detexify_lf = detexify_lf.with_columns(pl.lit("detexify").alias("source"))
                 lfs.append(detexify_lf)
-            case "contrib":
+            case DataSetName.contrib:
                 contrib_lf = collect_contrib_raw()
                 # Add source column
                 contrib_lf = contrib_lf.with_columns(pl.lit("contrib").alias("source"))
