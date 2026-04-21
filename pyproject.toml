@@ -37,10 +37,10 @@ rocm = [
 
 [dependency-groups]
 dev = [
-  # data wrangler
+  # for data wrangler
   "ipykernel",
-  # ort export
   "matplotlib>=3.10.8",
+  # ort export
   "onnxruntime>=1.23.2",
   # lsp
   "pyrefly",
@@ -53,14 +53,14 @@ dev = [
   "torch-tb-profiler>=0.4.3",
   # profiler
   "viztracer>=1.1.1",
-  # lsp, type checker
+  # lsp
   "zuban",
 ]
 
 [tool.pyrefly]
 search-path = ["./python"]
 
-# linter and formatter, line length 88 as black default
+# linter and formatter config
 [tool.ruff]
 line-length = 120
 exclude = [
@@ -75,7 +75,6 @@ exclude = [
 [tool.ruff.format]
 docstring-code-line-length = 80
 
-# default set and isort
 [tool.ruff.lint]
 preview = true
 select = [
@@ -719,6 +718,9 @@ select = [
   "YTT303",
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.uv]
 environments = ["sys_platform == 'linux'", "sys_platform == 'win32'"]
 conflicts = [
@@ -729,7 +731,7 @@ conflicts = [
   ],
 ]
 
-# target torch to cuda or CPU
+# target torch to CPU, CUDA or RoCM
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
