@@ -41,7 +41,6 @@ if __name__ == "__main__":
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
-        use_tensorrt: bool = typer.Option(True, help="Use pytorch tensorrt compile backend"),
         models: list[ModelName] = typer.Option(
             [
                 "conv_small_035",
@@ -97,7 +96,6 @@ if __name__ == "__main__":
                 warmup_epochs=warmup_epochs,
                 total_epochs=total_epochs,
                 image_size=image_size,
-                use_tensorrt=use_tensorrt,
             )
             for model in models
         ]
