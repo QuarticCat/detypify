@@ -669,7 +669,7 @@ def create_dataset(
     logger.info(f"--- Creating Datasets: {','.join(dataset_names)} ---")
 
     # load from raw data
-    lf, unmapped = remap_from_raw(dataset_names, raw_data)
+    lf, _ = remap_from_raw(dataset_names, raw_data)
 
     dataset_path = DATASET_ROOT
     split_names: list[SplitName] = ["train", "test", "val"]
@@ -747,7 +747,7 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 
 @app.command()
 def main(
-    datasets: list[DataSetName] = typer.Option(
+    datasets: list[DataSetName] = typer.Option(  # noqa: B008
         [DataSetName.detexify, DataSetName.mathwriting],
         "--datasets",
         "-d",

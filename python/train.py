@@ -41,7 +41,7 @@ if __name__ == "__main__":
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
-        models: list[ModelName] = typer.Option(
+        models: list[ModelName] = typer.Option(  # noqa: B008
             [
                 "conv_small_035",
             ],
