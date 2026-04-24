@@ -735,13 +735,13 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda" },
-  { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda" },
-  { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 triton-rocm = [
   { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
