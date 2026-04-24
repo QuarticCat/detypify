@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, override
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from lightning.pytorch.callbacks.weight_averaging import WeightAveraging
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from typing import Literal
 
@@ -347,16 +349,16 @@ class ExportBestModelToONNX(Callback):
                     break
 
         if checkpoint_callback is None:
-            logging.warning("No ModelCheckpoint callback found. Skipping ONNX export.")
+            logger.warning("No ModelCheckpoint callback found. Skipping ONNX export.")
             return
 
         # Get the best model path
         best_model_path = Path(checkpoint_callback.best_model_path)
         if not best_model_path.exists():
-            logging.warning("No best model checkpoint available. Skipping ONNX export.")
+            logger.warning("No best model checkpoint available. Skipping ONNX export.")
             return
 
-        logging.info("Loading best checkpoint from: %s", best_model_path)
+        logger.info("Loading best checkpoint from: %s", best_model_path)
 
         # Load the best checkpoint
         from model import TimmModel
@@ -370,7 +372,7 @@ class ExportBestModelToONNX(Callback):
         # Create ONNX directory
         save_path = self.save_dir / f"{best_model_path.stem}.onnx"
 
-        logging.info("Exporting best model to ONNX: %s", save_path)
+        logger.info("Exporting best model to ONNX: %s", save_path)
 
         # Export to ONNX
         best_model.to_onnx(
@@ -380,4 +382,4 @@ class ExportBestModelToONNX(Callback):
             external_data=self.external_data,
         )
 
-        logging.info("Successfully exported best model to: %s", save_path)
+        logger.info("Successfully exported best model to: %s", save_path)
