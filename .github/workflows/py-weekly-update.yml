@@ -1,115 +1,197 @@
-name: Weekly updates for symbols
+name: Weekly Typst symbol metadata
 
 on:
   workflow_dispatch:
+    inputs:
+      force_metadata:
+        description: "Regenerate metadata even if no symbol change is detected"
+        required: false
+        type: boolean
+        default: false
+      train:
+        description: "Run Kaggle training after metadata checks"
+        required: false
+        type: boolean
+        default: false
   schedule:
     # weekly, Monday
     - cron: "0 0 * * 1"
   push:
     paths:
-      # on new manual mapping added
-      - "python/tex_to_typ.yaml"
+      - ".github/workflows/py-weekly-update.yml"
+      - "python/proc_data.py"
+      - "python/detypify/data/datasets.py"
+      - "python/detypify/data/symbols.py"
+      - "python/detypify/assets/tex_to_typ_sup.yaml"
+
 jobs:
-  check-typst-symbol-page:
-    if: ${{ github.event_name != 'push' }}
-    runs-on: ubuntu-slim
-    outputs:
-      should_run: ${{ steps.check.outputs.changed }}
+  detect:
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
+      actions: write
+      contents: read
+    outputs:
+      should_generate: ${{ steps.detect.outputs.should_generate }}
+      current_etag: ${{ steps.detect.outputs.current_etag }}
+      current_digest: ${{ steps.detect.outputs.current_digest }}
     env:
-      GH_TOKEN: ${{ secrets.PAT_TOKEN }} # Required for 'gh variable set'
-      TARGET_URL: "https://typst.app/docs/reference/symbols/sym/"
+      GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
       GH_REPO: ${{ github.repository }}
-      VAR_NAME: "TYPST_ETAG"
+      TARGET_URL: "https://typst.app/docs/reference/symbols/sym/"
+      ETAG_VAR_NAME: "TYPST_SYMBOLS_ETAG"
+      DIGEST_VAR_NAME: "TYPST_SYMBOLS_DIGEST"
     steps:
-      - name: Check ETag and Update
-        id: check
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Fetch Typst symbols ETag
+        id: etag
         shell: bash
         run: |
-          CURRENT_ETAG=$(curl -I -s "$TARGET_URL" | grep -i "^etag:" | sed 's/etag: //I' | tr -d '\r')
-
-          if [ -z "$CURRENT_ETAG" ]; then
-            echo "::error::Could not fetch ETag. Exiting."
+          current_etag=$(curl -fsSI "$TARGET_URL" | awk 'tolower($1) == "etag:" { sub(/\r$/, "", $2); print $2; exit }')
+          if [ -z "$current_etag" ]; then
+            echo "::error::Could not fetch Typst symbol page ETag."
             exit 1
           fi
 
-          STORED_ETAG=$(gh variable get "$VAR_NAME" --json value -q .value 2>/dev/null || echo "")
+          stored_etag=$(gh variable get "$ETAG_VAR_NAME" --json value -q .value 2>/dev/null || true)
+          echo "current=$current_etag" >> "$GITHUB_OUTPUT"
+          echo "stored=$stored_etag" >> "$GITHUB_OUTPUT"
+          echo "Stored ETag:  $stored_etag"
+          echo "Current ETag: $current_etag"
 
-          echo "Stored:  '$STORED_ETAG'"
-          echo "Current: '$CURRENT_ETAG'"
+      - name: Setup uv
+        if: ${{ github.event_name == 'push' || inputs.force_metadata || steps.etag.outputs.current != steps.etag.outputs.stored }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
-          if [ "$CURRENT_ETAG" != "$STORED_ETAG" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "⚡ ETag changed from '$STORED_ETAG' to '$CURRENT_ETAG'"
-            gh variable set "$VAR_NAME" --body "$CURRENT_ETAG"
+      - name: Detect metadata changes
+        id: detect
+        shell: bash
+        env:
+          CURRENT_ETAG: ${{ steps.etag.outputs.current }}
+          STORED_ETAG: ${{ steps.etag.outputs.stored }}
+          FORCE_METADATA: ${{ inputs.force_metadata || 'false' }}
+        run: |
+          should_compute_digest=false
+          should_generate=false
+          current_digest=""
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            should_compute_digest=true
+            should_generate=true
+            echo "Push touched watched symbol metadata inputs; metadata will be regenerated."
+          elif [ "$FORCE_METADATA" = "true" ]; then
+            should_compute_digest=true
+            should_generate=true
+            echo "Manual force requested; metadata will be regenerated."
+          elif [ "$CURRENT_ETAG" != "$STORED_ETAG" ]; then
+            should_compute_digest=true
+            echo "ETag changed; computing effective mapping digest."
           else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "😴 No change detected."
+            echo "ETag unchanged; skipping digest calculation."
           fi
 
-  gen-info:
-    needs: check-typst-symbol-page
-    if: ${{ !failure() && (needs.check-typst-symbol-page.outputs.should_run == 'true' || github.event_name == 'push') }}
-    name: dataset-update
+          if [ "$should_compute_digest" = "true" ]; then
+            digest_json=$(uv run --extra=data python/proc_data.py --print-tex-typ-map-digest)
+            current_digest=$(jq -r '.tex_typ_map_digest' <<< "$digest_json")
+            stored_digest=$(gh variable get "$DIGEST_VAR_NAME" --json value -q .value 2>/dev/null || true)
+
+            echo "Stored digest:  $stored_digest"
+            echo "Current digest: $current_digest"
+
+            if [ "$CURRENT_ETAG" != "$STORED_ETAG" ] && [ "$current_digest" != "$stored_digest" ]; then
+              should_generate=true
+              echo "Effective mapping digest changed; metadata will be regenerated."
+            elif [ "$CURRENT_ETAG" != "$STORED_ETAG" ]; then
+              echo "ETag changed, but effective mapping digest is unchanged. Updating stored ETag."
+              gh variable set "$ETAG_VAR_NAME" --body "$CURRENT_ETAG"
+            fi
+          fi
+
+          echo "should_generate=$should_generate" >> "$GITHUB_OUTPUT"
+          echo "current_etag=$CURRENT_ETAG" >> "$GITHUB_OUTPUT"
+          echo "current_digest=$current_digest" >> "$GITHUB_OUTPUT"
+
+  generate-metadata:
+    needs: detect
+    if: ${{ needs.detect.outputs.should_generate == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+      GH_REPO: ${{ github.repository }}
+      ETAG_VAR_NAME: "TYPST_SYMBOLS_ETAG"
+      DIGEST_VAR_NAME: "TYPST_SYMBOLS_DIGEST"
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
-      - name: Run Generation
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          echo "ETag changed. Generating data."
-          uv run --no-project --with 'typer' --with 'msgspec' --with 'datasets' --with 'polars' --with 'beautifulsoup4' --with 'lxml' --python 3.13 python/proc_data.py --convert-data
-
       - name: Cache Hugging Face datasets
         uses: actions/cache@v4
         with:
-          path: ~/.cache/huggingface
-          key: huggingface-datasets-${{ hashFiles('python/tex_to_typ.yaml') }}
+          path: build/datasets/cache
+          key: huggingface-datasets-${{ runner.os }}-${{ needs.detect.outputs.current_digest }}
           restore-keys: |
-            huggingface-datasets-
+            huggingface-datasets-${{ runner.os }}-
 
-      - name: Upload Data Artifacts
+      - name: Generate metadata
+        run: uv run --extra=data python/proc_data.py --gen-metadata
+
+      - name: Upload metadata artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: generated-data
+          name: generated-metadata
           path: |
-            build/data/infer.json
-            build/data/contrib.json
+            build/generated/infer.json
+            build/generated/contrib.json
+            build/generated/unmapped_latex_symbols.json
 
-  trigger-training:
-    needs: gen-info
+      - name: Update stored symbol state
+        shell: bash
+        env:
+          CURRENT_ETAG: ${{ needs.detect.outputs.current_etag }}
+          CURRENT_DIGEST: ${{ needs.detect.outputs.current_digest }}
+        run: |
+          if [ -z "$CURRENT_DIGEST" ]; then
+            digest_json=$(uv run --extra=data python/proc_data.py --print-tex-typ-map-digest)
+            CURRENT_DIGEST=$(jq -r '.tex_typ_map_digest' <<< "$digest_json")
+          fi
+
+          gh variable set "$ETAG_VAR_NAME" --body "$CURRENT_ETAG"
+          gh variable set "$DIGEST_VAR_NAME" --body "$CURRENT_DIGEST"
+
+  train-on-kaggle:
+    needs:
+      - detect
+      - generate-metadata
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.train && needs.detect.result == 'success' && (needs.generate-metadata.result == 'success' || needs.generate-metadata.result == 'skipped') }}
     runs-on: ubuntu-latest
     env:
       TITLE: "Detypify Auto Training"
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_KEY }}
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout
+        uses: actions/checkout@v5
 
-      - name: Download Data Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-data
-          path: build/data
-
-      - name: Set up Notebook Kernel
+      - name: Set up notebook kernel
         shell: bash
         env:
           REPO_URL: "https://github.com/${{ github.repository }}"
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
           python -m pip install --upgrade kaggle --user
-          OUTPUT_NOTEBOOK="script.ipynb"
+          output_notebook="script.ipynb"
 
-          # Notice the escaped variables (\$) in the third block so GitHub Actions doesn't pre-evaluate them
-          cat <<EOM > "$OUTPUT_NOTEBOOK"
+          cat > "$output_notebook" <<EOM
           {
             "cells": [
               {
@@ -136,7 +218,7 @@ jobs:
                 "metadata": {},
                 "outputs": [],
                 "source": [
-                  "!for f in detypify/build/train/*/version_*/ckpts/*.onnx; do model=\$(echo \$f | cut -d/ -f4); cp \$f /kaggle/working/\$model.onnx && echo \"Copied \$f -> /kaggle/working/\$model.onnx\"; done"
+                  "!for f in detypify/build/train/*/version_*/ckpts/*.onnx; do model=\\$(echo \\$f | cut -d/ -f4); cp \\$f /kaggle/working/\\$model.onnx && echo \"Copied \\$f -> /kaggle/working/\\$model.onnx\"; done"
                 ]
               }
             ],
@@ -156,51 +238,46 @@ jobs:
           }
           EOM
 
-      - name: Push Kernel
+      - name: Push kernel
         shell: bash
         run: |
           kaggle kernels init -p .
 
-          KAGGLE_USERNAME=$(jq -r '.id' kernel-metadata.json | cut -d'/' -f1)
+          kaggle_username=$(jq -r '.id' kernel-metadata.json | cut -d'/' -f1)
+          kernel_slug=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
+          kernel_id="$kaggle_username/$kernel_slug"
+          echo "KERNEL_ID=$kernel_id" >> "$GITHUB_ENV"
 
-          KERNEL_SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g')
-          KERNEL_ID="$KAGGLE_USERNAME/$KERNEL_SLUG"
-
-          echo "KERNEL_ID=$KERNEL_ID" >> $GITHUB_ENV
-
-          jq --arg id "$KERNEL_ID" \
+          jq --arg id "$kernel_id" \
              --arg title "$TITLE" \
              --arg code_file "script.ipynb" \
              '.id = $id | .title = $title | .code_file = $code_file | .language = "python" | .kernel_type = "notebook" | .enable_gpu = true | .enable_internet = true' \
-             kernel-metadata.json > kernel-metadata.json.tmp && mv kernel-metadata.json.tmp kernel-metadata.json
+             kernel-metadata.json > kernel-metadata.json.tmp
+          mv kernel-metadata.json.tmp kernel-metadata.json
 
-          cat kernel-metadata.json
-
-          # 6. Push the kernel
           kaggle kernels push -p . --accelerator 'NvidiaTeslaT4'
 
       - name: Check status
         shell: bash
         run: |
           echo "Checking status for $KERNEL_ID..."
+          max_retries=240
+          count=0
 
-          MAX_RETRIES=240
-          COUNT=0
+          while [ "$count" -lt "$max_retries" ]; do
+            status=$(kaggle kernels status "$KERNEL_ID" 2>&1)
+            echo "Status: $status"
 
-          while [ $COUNT -lt $MAX_RETRIES ]; do
-              status=$(kaggle kernels status "$KERNEL_ID" 2>&1)
-              echo "Status: $status"
+            if [[ "$status" == *"ERROR"* || "$status" == *"CANCEL"* ]]; then
+              echo "::error::Kernel execution failed."
+              exit 1
+            elif [[ "$status" == *"COMPLETE"* ]]; then
+              echo "Kernel execution completed successfully!"
+              exit 0
+            fi
 
-              if [[ "$status" == *"ERROR"* || "$status" == *"CANCEL"* ]]; then
-                  echo "::error::Kernel execution failed."
-                  exit 1
-              elif [[ "$status" == *"COMPLETE"* ]]; then
-                  echo "Kernel execution completed successfully!"
-                  exit 0
-              fi
-
-              sleep 60
-              COUNT=$((COUNT+1))
+            sleep 60
+            count=$((count+1))
           done
 
           echo "::error::Kernel execution timed out after 4 hours."
@@ -210,10 +287,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          # Use the exact KERNEL_ID (owner/slug) that Kaggle CLI expects
           kaggle kernels output "$KERNEL_ID" -p artifacts
-      - name: Upload Trained Models to GitHub
+
+      - name: Upload trained models
         uses: actions/upload-artifact@v4
         with:
           name: trained-onnx-models
-          path: artifacts/build/train
+          path: artifacts
