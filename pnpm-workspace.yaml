@@ -1,2 +1,11 @@
 packages:
   - 'frontend/*'
+overrides:
+  brace-expansion@>=2.0.0 <3: 2.0.3
+  brace-expansion@>=4.0.0 <6: 5.0.5
+  defu: 6.1.7
+  lodash-es: 4.18.1
+  picomatch@>=4.0.0 <5: 4.0.4
+  postcss: 8.5.12
+  protobufjs: 7.5.5
+  serialize-javascript: 7.0.5
