@@ -1,20 +1,13 @@
 """Train the model."""
 
 import logging
-from enum import StrEnum
+from os import process_cpu_count
 
 import typer
+from detypify.config import ModelName
+from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
-
-
-class ModelName(StrEnum):
-    conv_small_035 = "mobilenetv4_conv_small_035"
-    conv_small_050 = "mobilenetv4_conv_small_050"
-    conv_small_full = "mobilenetv4_conv_small"
-    conv_medium = "mobilenetv4_conv_medium"
-    hybrid_medium_075 = "mobilenetv4_hybrid_medium_075"
-    hybrid_medium = "mobilenetv4_hybrid_medium"
 
 
 if __name__ == "__main__":
@@ -24,7 +17,7 @@ if __name__ == "__main__":
 
     @app.command()
     def main(
-        out_dir: str = typer.Option("build/train", help="Output directory"),
+        out_dir: str = typer.Option(str(DEFAULT_DATA_PATHS.train_dir), help="Output directory"),
         debug: bool = typer.Option(False, help="Enable debug mode"),
         profiling: bool = typer.Option(False, help="Enable performance profiler."),
         dev_run: bool = typer.Option(False, help="Fast dev run (valid only when debug is True)"),
@@ -43,7 +36,7 @@ if __name__ == "__main__":
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
         models: list[ModelName] = typer.Option(  # noqa: B008
             [
-                "conv_small_035",
+                "mobilenetv4_conv_small_035",
             ],
             "--models",
             help="List of models to train",
@@ -75,20 +68,27 @@ if __name__ == "__main__":
         # Lazy import
         from pathlib import Path
 
-        from dataset import MathSymbolDataModule
+        from detypify.config import DataSetName
+        from detypify.data.datasets import get_dataset_classes
+        from detypify.training.datamodule import MathSymbolDataModule
+        from detypify.training.model import TimmModel
         from lightning import Trainer
         from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
         from lightning.pytorch.loggers import TensorBoardLogger
         from lightning.pytorch.tuner.tuning import Tuner
-        from model import TimmModel
         from msgspec import yaml
-        from proc_data import DATASET_REPO, get_dataset_classes
         from torch import set_float32_matmul_precision
         from torch.cuda import get_device_properties, is_available
 
         out_dir_path = Path(out_dir)
 
-        classes = get_dataset_classes(DATASET_REPO)
+        dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
+        is_debug_dev_run = debug and dev_run
+        dev_max_samples = 2048 if is_debug_dev_run else None
+        data_num_workers = 0 if is_debug_dev_run else process_cpu_count() or 1
+        trainer_accelerator = "cpu" if is_debug_dev_run else "auto"
+        trainer_precision = "32-true" if is_debug_dev_run else amp_precision
+        classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
         model_instances: list[TimmModel] = [
             TimmModel(
                 num_classes=len(classes),
@@ -96,6 +96,7 @@ if __name__ == "__main__":
                 warmup_epochs=warmup_epochs,
                 total_epochs=total_epochs,
                 image_size=image_size,
+                use_compile=not debug,
             )
             for model in models
         ]
@@ -104,6 +105,9 @@ if __name__ == "__main__":
         dm = MathSymbolDataModule(
             batch_size=init_batch_size,
             image_size=image_size,
+            dataset_names=dataset_names,
+            max_samples=dev_max_samples,
+            num_workers=data_num_workers,
         )
 
         # for Ampere or later NVIDIA graphics only
@@ -116,9 +120,7 @@ if __name__ == "__main__":
                 amp_precision = "16-mixed"
                 args_dict["amp_precision"] = amp_precision
         for model in model_instances:
-            model_name_str = (
-                model.__class__.__name__ if model.__class__.__name__ != "TimmModel" else str(model.model_name)
-            )
+            model_name_str = model.__class__.__name__ if model.__class__.__name__ != "TimmModel" else model.model_name
             tb_logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
 
             final_output_dir = Path(tb_logger.log_dir)
@@ -142,12 +144,12 @@ if __name__ == "__main__":
 
             # Lazy import callbacks only when needed
             if log_pred:
-                from callbacks import LogPredictCallback
+                from detypify.training.callbacks import LogPredictCallback
 
                 callbacks.append(LogPredictCallback(sorted(classes)))
 
             if use_ema:
-                from callbacks import EMAWeightAveraging
+                from detypify.training.callbacks import EMAWeightAveraging
 
                 callbacks.append(
                     EMAWeightAveraging(
@@ -173,7 +175,7 @@ if __name__ == "__main__":
 
             # Add ONNX export callback for best model
             if not debug:
-                from callbacks import ExportBestModelToONNX
+                from detypify.training.callbacks import ExportBestModelToONNX
 
                 callbacks.append(
                     ExportBestModelToONNX(
@@ -188,7 +190,8 @@ if __name__ == "__main__":
                 default_root_dir=out_dir_path,
                 logger=tb_logger,
                 fast_dev_run=debug and dev_run,
-                precision=amp_precision,  # type: ignore
+                accelerator=trainer_accelerator,
+                precision=trainer_precision,  # type: ignore
                 profiler="simple" if profiling else None,
                 callbacks=callbacks,
             )
@@ -215,12 +218,13 @@ if __name__ == "__main__":
             lr = model.hparams.get("learning_rate")
             if lr is not None:
                 current_args["suggested_learning_rate"] = lr
+                logger.info(f"The optimimal learning rate is {lr}")
 
             with train_args_path.open("wb") as f:
                 f.write(yaml.encode(current_args))
 
             # training
-            model.use_compile = True
+            model.use_compile = not debug
             trainer.fit(model, datamodule=dm)
             trainer.test(model, datamodule=dm)
 

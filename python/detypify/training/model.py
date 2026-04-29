@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import override
 
 import torch
+from detypify.config import ModelName
 from lightning import LightningModule
 from timm import create_model
 from torch import Tensor, nn, optim
@@ -11,8 +12,6 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
 )
 from torchmetrics import Accuracy
-
-from train import ModelName
 
 
 class BaseModel(LightningModule):
@@ -61,7 +60,8 @@ class BaseModel(LightningModule):
         self.log("val_top3", self.acc_top3(pred, label))
         return loss
 
-    def test_step(self, batch, batch_idx=0):  # noqa: ARG002
+    @override
+    def test_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
         pred = self.forward(image)
         self.log("test_acc", self.acc_top1(pred, label), prog_bar=True)
@@ -114,7 +114,7 @@ class TimmModel(BaseModel):
     def __init__(
         self,
         num_classes: int,
-        model_name: ModelName,
+        model_name: ModelName | str,
         total_epochs: int,
         image_size: int,
         warmup_epochs: int = 5,
@@ -122,6 +122,7 @@ class TimmModel(BaseModel):
         *,
         use_compile: bool = False,
     ):
+        model_name = str(model_name)
         super().__init__(
             num_classes=num_classes,
             image_size=image_size,
@@ -148,16 +149,12 @@ class TimmModel(BaseModel):
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
-        self.model_opt = torch.compile(
-            self.model,
-            options={"triton.cudagraphs": True, "shape_padding": True},
-            dynamic=False,
-        )
+        self.model_opt = torch.compile(self.model, mode="max-autotune", dynamic=False) if use_compile else None
 
         self.model_name: str = model_name
 
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)
-        if self.use_compile:
+        if self.use_compile and self.model_opt is not None:
             return self.model_opt(x)
         return self.model(x)

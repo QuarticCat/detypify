@@ -50,6 +50,9 @@ class LogPredictCallback(Callback):
         if outputs is None:
             return
 
+        if not isinstance(outputs, torch.Tensor):
+            return
+
         pred_logits = outputs
         image, label = batch["image"], batch["label"]
 
@@ -361,7 +364,7 @@ class ExportBestModelToONNX(Callback):
         logger.info("Loading best checkpoint from: %s", best_model_path)
 
         # Load the best checkpoint
-        from model import TimmModel
+        from detypify.training.model import TimmModel
 
         best_model = TimmModel.load_from_checkpoint(best_model_path, model_name=self.model_name)
         # Freeze and prepare model for export
