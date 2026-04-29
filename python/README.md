@@ -4,28 +4,15 @@ This directory contains scripts for data preprocessing, model training, and asse
 
 ## Project Structure
 
-- `proc_data.py`: Main data preprocessing script. Handles:
-  - Scraping symbol information from Typst documentation (downloads `typ_sym.html` if missing).
-  - Processing raw datasets (Detexify and MathWriting).
-  - Mapping LaTeX commands to Typst symbols.
-  - Creating and uploading sharded datasets to Hugging Face.
-  - Generating inference metadata (`infer.json`) and contribution metadata (`contrib.json`).
-- `train.py`: Training script using PyTorch Lightning.
-  - Supports multiple MobileNetV4 variants from the `timm` library and a custom CNN.
-  - Includes automatic batch size and learning rate finding.
-  - Exports the trained model to ONNX format.
-  - Uses TensorBoard for logging.
-- `model.py`: Neural network architectures.
-  - `TimmModel`: Wrapper for `timm` models optimized for grayscale math symbol recognition.
-  - `CNNModel`: A simple custom CNN for comparison or smaller tasks.
-- `dataset.py`: Data loading and augmentation.
-  - `MathSymbolDataModule`: Handles downloading from Hugging Face, rasterizing strokes, and applying real-time augmentations (rotation, affine transforms).
-- `review_contrib.py`: Utility to review and incorporate community-contributed symbol samples from the D1 database (Maintainer only).
-- `tex_to_typ.json`: Manual mapping overrides for LaTeX to Typst symbol names.
-- `callbacks.py`: Custom callbacks for model training:
-  - `EMAWeightAveraging`: EMA implementation with performance optimization and warmup, similar to `timm`'s EMAv3.
-  - `LogPredictCallback`: Logs sample images with their ground truth and predicted labels to TensorBoard for visual performance review.
-- `test_model.py`: Script for testing pre-trained model performance and logging wrong guesses.
+- `proc_data.py`: Compatibility entry script for raw dataset upload and metadata generation.
+- `train.py`: Compatibility entry script for model training.
+- `review_contrib.py`: Compatibility entry script for maintainer contribution review.
+- `detypify/config.py`: Shared enum and remote dataset config.
+- `detypify/types.py`: Shared stroke aliases and msgspec structs.
+- `detypify/data/`: Raw source parsing, Typst mapping, rendering, Hugging Face dataset transforms, metadata, and path config.
+- `detypify/training/`: Lightning data module, model definitions, and training callbacks.
+- `detypify/tools/`: Maintainer tools.
+- `detypify/assets/tex_to_typ_sup.yaml`: Manual mapping overrides for LaTeX to Typst symbol names.
 
 ## Development
 
@@ -47,31 +34,27 @@ uv sync --extra=data
 
 ### Data Preprocessing
 
-> [!NOTE]
-> For training the first time, at least **generate testing info** is needed.
+Training loads the raw LaTeX-annotated dataset from Hugging Face and uses the
+`datasets` local cache for label mapping, rasterization, and splitting. Processed
+`ClassLabel` splits are not uploaded, which avoids CI/CD failures when labels
+change.
 
-To generate data for testing without full dataset processing:
+To generate frontend inference metadata:
 
 ```bash
-uv run --extra=data proc_data.py --skip-convert-data
+uv run --extra=data proc_data.py --gen-metadata
 ```
 
-To compose the dataset (Detexify + MathWriting) and upload it to Hugging Face:
+To compose the raw dataset (Detexify + MathWriting) and upload it to Hugging Face:
 
 ```bash
-uv run --extra=data proc_data.py --datasets detexify mathwriting
+uv run --extra=data proc_data.py --upload-raw --datasets detexify --datasets mathwriting
 ```
 
-To prepare data locally without uploading (useful for debugging):
+To include the contributed dataset in the raw upload (requires `build/raw/contrib/dataset.json`):
 
 ```bash
-uv run --extra=data proc_data.py --no-upload --split-parts
-```
-
-To include the contributed dataset (requires `build/dataset.json`):
-
-```bash
-uv run --extra=data proc_data.py --include-contrib
+uv run --extra=data proc_data.py --upload-raw --datasets detexify --datasets mathwriting --datasets contrib
 ```
 
 See more options with:
