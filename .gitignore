@@ -6,6 +6,8 @@ node_modules/
 .cache/
 
 build/
+/data/
+external/fonts/
 train/
 dist/
 *.woff2
