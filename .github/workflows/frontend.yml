@@ -37,13 +37,12 @@ jobs:
           path: frontend/ui/.cache
           key: ${{ runner.os }}-frontend-postinstall-cache
 
-      - name: Prepare train folder
+      - name: Prepare generated metadata and model placeholders
         run: |
-          mkdir -p train
-          echo '[]' > train/infer.json
-          echo '{}' > train/contrib.json
-          echo '??' > train/model.onnx
-        working-directory: frontend/service
+          mkdir -p build/generated frontend/service/train
+          echo '[]' > build/generated/infer.json
+          echo '{}' > build/generated/contrib.json
+          echo '??' > frontend/service/train/model.onnx
 
       - name: Install dependencies
         run: pnpm install
