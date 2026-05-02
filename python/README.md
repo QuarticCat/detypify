@@ -97,16 +97,32 @@ uv run --extra data python/proc_data.py --help
 > accuracy low problem.
 > By default, these options are tuned for batch size 128 as default.
 
-To train the default model:
+To train the default MobileNet comparison set:
 
 ```bash
 uv run python/train.py --total-epochs 35 --image-size 224
 ```
 
+This trains `mobilenet_v4_035`.
+
 You can specify models to be trained:
 
 ```bash
-uv run python/train.py --models mobilenetv4_conv_small_035 --models mobilenetv4_conv_small_050
+uv run python/train.py --models mobilenet_v4_035 --models mobilenet_v4_050
+```
+
+Model names use `mobilenet_{v4|v5}_{size}`. The size suffix is divided by 100,
+so `mobilenet_v4_035` uses a `0.35` channel multiplier. MobileNetV4 uses a
+scaled conv-small model. MobileNetV5 uses a scaled `mobilenetv5_base` with the
+multi-scale fusion adapter disabled for classification speed.
+
+> [!WARNING]
+> MobileNetV5 support is experimental and still in development. Use smaller
+> size suffixes (e.g. `005`, `010`) to keep the base V5 architecture close to
+> the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
+
+```bash
+uv run python/train.py --models mobilenet_v5_010 --models mobilenet_v5_005 --no-ema
 ```
 
 The script will:
