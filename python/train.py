@@ -4,7 +4,7 @@ import logging
 from os import process_cpu_count
 
 import typer
-from detypify.config import ModelName
+from detypify.config import parse_mobilenet_model_name
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
@@ -34,15 +34,19 @@ if __name__ == "__main__":
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
-        models: list[ModelName] = typer.Option(  # noqa: B008
-            [
-                "mobilenetv4_conv_small_035",
-            ],
+        models: list[str] = typer.Option(  # noqa: B008
+            ["mobilenet_v4_035"],
             "--models",
-            help="List of models to train",
+            help="Models to train, formatted as mobilenet_{v4|v5}_{size}. Size is divided by 100.",
         ),
     ):
         """Train the model."""
+        for model_name in models:
+            try:
+                parse_mobilenet_model_name(model_name)
+            except ValueError as e:
+                raise typer.BadParameter(str(e), param_hint="--models") from e
+
         # Collect all input arguments
         args_dict = {
             "out_dir": out_dir,
@@ -71,7 +75,7 @@ if __name__ == "__main__":
         from detypify.config import DataSetName
         from detypify.data.datasets import get_dataset_classes
         from detypify.training.datamodule import MathSymbolDataModule
-        from detypify.training.model import TimmModel
+        from detypify.training.model import MobileNetModel
         from lightning import Trainer
         from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
         from lightning.pytorch.loggers import TensorBoardLogger
@@ -89,8 +93,8 @@ if __name__ == "__main__":
         trainer_accelerator = "cpu" if is_debug_dev_run else "auto"
         trainer_precision = "32-true" if is_debug_dev_run else amp_precision
         classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
-        model_instances: list[TimmModel] = [
-            TimmModel(
+        model_instances: list[MobileNetModel] = [
+            MobileNetModel(
                 num_classes=len(classes),
                 model_name=model,
                 warmup_epochs=warmup_epochs,
@@ -120,7 +124,7 @@ if __name__ == "__main__":
                 amp_precision = "16-mixed"
                 args_dict["amp_precision"] = amp_precision
         for model in model_instances:
-            model_name_str = model.__class__.__name__ if model.__class__.__name__ != "TimmModel" else model.model_name
+            model_name_str = model.model_name
             tb_logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
 
             final_output_dir = Path(tb_logger.log_dir)

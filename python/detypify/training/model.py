@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import override
 
 import torch
-from detypify.config import ModelName
+from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
 from timm import create_model
 from torch import Tensor, nn, optim
@@ -12,6 +12,24 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
 )
 from torchmetrics import Accuracy
+
+
+def create_project_model(model_name: str, **kwargs) -> nn.Module:
+    model_spec = parse_mobilenet_model_name(model_name)
+    if model_spec.family == ModelFamily.v4:
+        from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
+
+        model_kwargs = dict(kwargs)
+        model_kwargs.pop("exportable", None)
+        return _gen_mobilenet_v4(
+            "mobilenetv4_conv_small",
+            channel_multiplier=model_spec.size,
+            aa_layer="blurpc",
+            **model_kwargs,
+        )
+
+    msg = f"Unsupported model family: {model_spec.family}"
+    raise ValueError(msg)
 
 
 class BaseModel(LightningModule):
@@ -110,11 +128,11 @@ class BaseModel(LightningModule):
         }
 
 
-class TimmModel(BaseModel):
+class MobileNetModel(BaseModel):
     def __init__(
         self,
         num_classes: int,
-        model_name: ModelName | str,
+        model_name: str,
         total_epochs: int,
         image_size: int,
         warmup_epochs: int = 5,
@@ -122,7 +140,6 @@ class TimmModel(BaseModel):
         *,
         use_compile: bool = False,
     ):
-        model_name = str(model_name)
         super().__init__(
             num_classes=num_classes,
             image_size=image_size,
@@ -139,11 +156,10 @@ class TimmModel(BaseModel):
             "image_size",
             "learning_rate",
         )
-        model = create_model(
+        model = create_project_model(
             model_name,
             num_classes=num_classes,
             in_chans=1,
-            aa_layer="blurpc",
             drop_rate=0.15,
             exportable=True,
         )

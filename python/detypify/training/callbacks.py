@@ -364,9 +364,9 @@ class ExportBestModelToONNX(Callback):
         logger.info("Loading best checkpoint from: %s", best_model_path)
 
         # Load the best checkpoint
-        from detypify.training.model import TimmModel
+        from detypify.training.model import MobileNetModel
 
-        best_model = TimmModel.load_from_checkpoint(best_model_path, model_name=self.model_name)
+        best_model = MobileNetModel.load_from_checkpoint(best_model_path, model_name=self.model_name)
         # Freeze and prepare model for export
         best_model.freeze()
         if hasattr(best_model, "use_compile"):
