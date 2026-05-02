@@ -32,7 +32,8 @@ data = [
 rocm = [
   "torch>=2.6.0",
   "torchvision",
-  "triton-rocm>=3.6.0 ; sys_platform == 'linux'",
+  "pytorch-triton-rocm ; sys_platform == 'linux'",
+  "triton-rocm ; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
