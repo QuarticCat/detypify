@@ -28,8 +28,13 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             **model_kwargs,
         )
 
-    msg = f"Unsupported model family: {model_spec.family}"
-    raise ValueError(msg)
+    return create_model(
+        "mobilenetv5_base",
+        **kwargs,
+        channel_multiplier=model_spec.size,
+        use_msfa=False,
+        num_features=256,
+    )
 
 
 class BaseModel(LightningModule):
