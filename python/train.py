@@ -121,6 +121,7 @@ if __name__ == "__main__":
                 set_float32_matmul_precision("medium")
             # 20 series graphics don't support bf16 format precision
             elif amp_precision == "bf16-mixed":
+                logger.warning("Current device don't support bfloat16 precision, use float16 instead.")
                 amp_precision = "16-mixed"
                 args_dict["amp_precision"] = amp_precision
         for model in model_instances:
