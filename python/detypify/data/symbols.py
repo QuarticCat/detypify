@@ -1,5 +1,5 @@
 from functools import cache
-from hashlib import sha256
+from hashlib import blake2b
 from importlib import resources
 from json import dumps
 from typing import cast
@@ -88,7 +88,7 @@ def get_tex_typ_map_digest() -> str:
         for latex, typ in sorted(get_tex_typ_map().items())
     ]
     payload = dumps(records, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
-    return sha256(payload).hexdigest()
+    return blake2b(payload).hexdigest()
 
 
 def get_tex_to_char() -> dict[str, str]:

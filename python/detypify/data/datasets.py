@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cache
-from hashlib import sha256
+from hashlib import blake2b
 from json import dumps
 from os import process_cpu_count
 from typing import TYPE_CHECKING, Any, cast
@@ -123,7 +123,7 @@ def _map_raw_dataset_cached(
     tex_typ_map_digest = get_tex_typ_map_digest()
     raw_dataset = load_raw_dataset(dataset_names, paths)
     raw_dataset_fingerprint = getattr(raw_dataset, "_fingerprint", "")
-    map_fingerprint = sha256(
+    map_fingerprint = blake2b(
         dumps(
             {
                 "base": raw_dataset_fingerprint,
@@ -134,7 +134,7 @@ def _map_raw_dataset_cached(
             separators=(",", ":"),
             sort_keys=True,
         ).encode()
-    ).hexdigest()
+    ).hexdigest()[:64]
 
     def map_labels(batch, mapping: dict[str, str]):
         return {"label": [mapping.get(label) for label in batch["latex_label"]]}
