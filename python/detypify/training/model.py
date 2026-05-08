@@ -25,6 +25,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             "mobilenetv4_conv_small",
             channel_multiplier=model_spec.size,
             aa_layer="blurpc",
+            exportable=True,
             **model_kwargs,
         )
 
@@ -32,6 +33,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
         "mobilenetv5_base",
         **kwargs,
         channel_multiplier=model_spec.size,
+        exportable=True,
         use_msfa=False,
         num_features=256,
     )
