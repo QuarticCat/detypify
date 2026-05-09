@@ -4,7 +4,6 @@ import logging
 from os import process_cpu_count
 
 import typer
-from detypify.config import parse_mobilenet_model_name
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
@@ -44,6 +43,8 @@ if __name__ == "__main__":
         """Train the model."""
         for model_name in models:
             try:
+                from detypify.config import parse_mobilenet_model_name
+
                 parse_mobilenet_model_name(model_name)
             except ValueError as e:
                 raise typer.BadParameter(str(e), param_hint="--models") from e
