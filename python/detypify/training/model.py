@@ -5,6 +5,7 @@ import torch
 from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
 from timm import create_model
+from timm.layers import set_layer_config
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
@@ -19,15 +20,13 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
     if model_spec.family == ModelFamily.v4:
         from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
 
-        model_kwargs = dict(kwargs)
-        model_kwargs.pop("exportable", None)
-        return _gen_mobilenet_v4(
-            "mobilenetv4_conv_small",
-            channel_multiplier=model_spec.size,
-            aa_layer="blurpc",
-            exportable=True,
-            **model_kwargs,
-        )
+        with set_layer_config(exportable=True):
+            return _gen_mobilenet_v4(
+                "mobilenetv4_conv_small",
+                channel_multiplier=model_spec.size,
+                aa_layer="blurpc",
+                **kwargs,
+            )
 
     return create_model(
         "mobilenetv5_base",
@@ -168,7 +167,6 @@ class MobileNetModel(BaseModel):
             num_classes=num_classes,
             in_chans=1,
             drop_rate=0.15,
-            exportable=True,
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
