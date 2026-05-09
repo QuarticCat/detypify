@@ -82,7 +82,7 @@ if __name__ == "__main__":
         from lightning.pytorch.tuner.tuning import Tuner
         from msgspec import yaml
         from torch import set_float32_matmul_precision
-        from torch.cuda import get_device_properties, is_available
+        from torch.cuda import is_bf16_supported
 
         out_dir_path = Path(out_dir)
 
@@ -91,8 +91,18 @@ if __name__ == "__main__":
         dev_max_samples = 2048 if is_debug_dev_run else None
         data_num_workers = 0 if is_debug_dev_run else process_cpu_count() or 1
         trainer_accelerator = "cpu" if is_debug_dev_run else "auto"
-        trainer_precision = "32-true" if is_debug_dev_run else amp_precision
         classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
+
+        # compatibility check for graphics
+        if not is_bf16_supported() and amp_precision == "bf16-mixed":
+            logger.warning("Current device don't support bfloat16 precision, use float16 instead.")
+            amp_precision = "16-mixed"
+            args_dict["amp_precision"] = amp_precision
+        else:
+            # use low precision acceleration
+            set_float32_matmul_precision("medium")
+        trainer_precision = "32-true" if is_debug_dev_run else amp_precision
+
         model_instances: list[MobileNetModel] = [
             MobileNetModel(
                 num_classes=len(classes),
@@ -114,16 +124,6 @@ if __name__ == "__main__":
             num_workers=data_num_workers,
         )
 
-        # for Ampere or later NVIDIA graphics only
-        if is_available():
-            if get_device_properties(0).major >= CUDA_AMPERE_VERSION:
-                # set matmul precision for speed
-                set_float32_matmul_precision("medium")
-            # 20 series graphics don't support bf16 format precision
-            elif amp_precision == "bf16-mixed":
-                logger.warning("Current device don't support bfloat16 precision, use float16 instead.")
-                amp_precision = "16-mixed"
-                args_dict["amp_precision"] = amp_precision
         for model in model_instances:
             model_name_str = model.model_name
             tb_logger = TensorBoardLogger(save_dir=out_dir_path, name=model_name_str, default_hp_metric=False)  # type: ignore
