@@ -34,6 +34,7 @@ if __name__ == "__main__":
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
+        use_compile: bool = typer.Option(False, "--compile/--no-compile", help="Enable/Disable torch.compile."),
         models: list[str] = typer.Option(  # noqa: B008
             ["mobilenet_v4_035"],
             "--models",
@@ -66,6 +67,7 @@ if __name__ == "__main__":
             "ema_warmup_gamma": ema_warmup_gamma,
             "ema_warmup_power": ema_warmup_power,
             "amp_precision": amp_precision,
+            "use_compile": use_compile,
             "models": models,
         }
 
@@ -110,7 +112,7 @@ if __name__ == "__main__":
                 warmup_epochs=warmup_epochs,
                 total_epochs=total_epochs,
                 image_size=image_size,
-                use_compile=not debug,
+                use_compile=use_compile and not debug,
             )
             for model in models
         ]
@@ -229,7 +231,7 @@ if __name__ == "__main__":
                 f.write(yaml.encode(current_args))
 
             # training
-            model.use_compile = not debug
+            model.use_compile = use_compile and not debug
             trainer.fit(model, datamodule=dm)
             trainer.test(model, datamodule=dm)
 
