@@ -67,7 +67,7 @@ def collect_mathwriting_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
         "latex_label": pl.String,
         "symbol": pl.List(pl.List(pl.Array(pl.Float32, 2))),
     }
-    return pl.DataFrame({"latex_label": label_acc, "symbol": data_acc}, schema=pl_schema).lazy()
+    return pl.LazyFrame({"latex_label": label_acc, "symbol": data_acc}, schema=pl_schema)
 
 
 def collect_detexify_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
@@ -75,7 +75,6 @@ def collect_detexify_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
     import polars as pl
     from msgspec import json
 
-    pl.Config.set_engine_affinity("streaming")
     with (paths.detexify_raw_dir / "symbols.json").open("rb") as f:
         tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
     key_to_command = {x.id: x.command for x in tex_sym_info}
@@ -83,24 +82,19 @@ def collect_detexify_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
     with (paths.detexify_raw_dir / "detexify.json").open("rb") as f:
         data = json.decode(f.read(), type=list[tuple[str, list[list[tuple[float, float, float]]]]])
 
-    raw_lf = pl.DataFrame(
-        data,
-        schema={"key": pl.String, "strokes": pl.List(pl.List(pl.Array(pl.Float32, 3)))},
-        orient="row",
-    ).lazy()
-    mapping_lf = pl.DataFrame({"key": list(key_to_command), "latex_label": list(key_to_command.values())}).lazy()
-
     return (
-        raw_lf.join(mapping_lf, on="key", how="left")
-        .filter(pl.col("latex_label").is_not_null())
-        .select(
-            [
-                pl.col("latex_label"),
-                pl.col("strokes")
-                .list.eval(pl.element().list.eval(pl.element().arr.head(2).list.to_array(2)))
-                .alias("symbol"),
-            ]
+        pl.LazyFrame(
+            data,
+            schema={"key": pl.String, "strokes": pl.List(pl.List(pl.Array(pl.Float32, 3)))},
+            orient="row",
         )
+        .select(
+            pl.col("key").replace_strict(key_to_command, default=None).alias("latex_label"),
+            pl.col("strokes")
+            .list.eval(pl.element().list.eval(pl.element().arr.head(2).list.to_array(2)))
+            .alias("symbol"),
+        )
+        .filter(pl.col("latex_label").is_not_null())
         .filter(pl.col("symbol").list.len() > 0)
     )
 
@@ -114,16 +108,13 @@ def collect_contrib_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
         data = json.decode(f.read(), type=list[dict[str, str]])
 
     return (
-        pl.DataFrame(data)
-        .lazy()
-        .rename({"sym": "latex_label"})
-        .with_columns(
+        pl.LazyFrame(data)
+        .select(
+            pl.col("sym").alias("latex_label"),
             pl.col("strokes")
             .map_elements(json.decode, return_dtype=pl.List(pl.List(pl.Array(pl.Float32, 2))))
-            .alias("symbol")
+            .alias("symbol"),
         )
-        .drop("strokes")
         .filter(pl.col("latex_label").is_not_null())
-        .select(["latex_label", "symbol"])
         .filter(pl.col("symbol").list.len() > 0)
     )
