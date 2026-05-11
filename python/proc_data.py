@@ -2,9 +2,9 @@
 
 import typer
 from detypify.config import DataSetName
-from detypify.data.datasets import create_raw_dataset
+from detypify.data.datasets import create_raw_dataset, get_dataset_classes
 from detypify.data.metadata import generate_data_info
-from detypify.data.symbols import get_tex_typ_map, get_tex_typ_map_digest
+from detypify.data.symbols import get_tex_typ_map_digest
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
@@ -46,7 +46,7 @@ def main(
         create_raw_dataset(dataset_names=dataset_names)
 
     if gen_metadata:
-        generate_data_info(classes=sorted({v.char for v in get_tex_typ_map().values()}))
+        generate_data_info(classes=get_dataset_classes(dataset_names))
 
 
 if __name__ == "__main__":
