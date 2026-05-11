@@ -11,7 +11,7 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 
 @app.command()
 def main(
-    datasets: list[DataSetName] = typer.Option(  # noqa: B008
+    datasets: list[DataSetName] = typer.Option(
         [DataSetName.detexify, DataSetName.mathwriting],
         "--datasets",
         "-d",

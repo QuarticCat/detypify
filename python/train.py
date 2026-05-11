@@ -34,7 +34,7 @@ if __name__ == "__main__":
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
         amp_precision: str = typer.Option("bf16-mixed", help="Precision: 64, 32, 16-mixed, bf16-mixed"),
         use_compile: bool = typer.Option(False, "--compile/--no-compile", help="Enable/Disable torch.compile."),
-        models: list[str] = typer.Option(  # noqa: B008
+        models: list[str] = typer.Option(
             ["mobilenet_v4_035"],
             "--models",
             help="Models to train, formatted as mobilenet_{v4|v5}_{size}. Size is divided by 100.",
