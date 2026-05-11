@@ -110,10 +110,6 @@ def collect_contrib_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
     import polars as pl
     from msgspec import json
 
-    if not paths.contrib_accepted_json.exists():
-        msg = f"Reviewed contribution dataset not found: {paths.contrib_accepted_json}"
-        raise FileNotFoundError(msg)
-
     with paths.contrib_accepted_json.open("rb") as f:
         data = json.decode(f.read(), type=list[dict[str, str]])
 
