@@ -100,7 +100,7 @@ uv run --extra data python/proc_data.py --help
 To train the default MobileNet comparison set:
 
 ```bash
-uv run python/train.py --total-epochs 35 --image-size 224
+uv run --extra <accelerator> python/train.py --total-epochs 35 --image-size 224
 ```
 
 This trains `mobilenet_v4_035`.
@@ -108,7 +108,7 @@ This trains `mobilenet_v4_035`.
 You can specify models to be trained:
 
 ```bash
-uv run python/train.py --models mobilenet_v4_035 --models mobilenet_v4_050
+uv run --extra <accelerator> python/train.py --models mobilenet_v4_035 --models mobilenet_v4_050
 ```
 
 Model names use `mobilenet_{v4|v5}_{size}`. The size suffix is divided by 100,
