@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import cache
 from typing import TYPE_CHECKING
 
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
@@ -12,19 +11,11 @@ if TYPE_CHECKING:
 RAW_POINT_COORD_COUNT = 3
 
 
-@cache
-def get_xml_parser():
-    """Cached XML parser for reuse."""
-    from lxml import etree
-
-    return etree.XMLParser()
-
-
 def parse_mathwriting_symbol(filepath: Path) -> MathSymbolSample | None:
     """Parse a single InkML file into its raw LaTeX label and strokes."""
     from lxml import etree
 
-    root = etree.parse(filepath, parser=get_xml_parser()).getroot()
+    root = etree.parse(filepath).getroot()
     namespace = {"ink": "http://www.w3.org/2003/InkML"}
     tex_label = root.findtext(".//ink:annotation[@type='label']", namespaces=namespace)
     if not tex_label:
