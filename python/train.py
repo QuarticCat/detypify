@@ -226,7 +226,7 @@ if __name__ == "__main__":
             lr = model.hparams.get("learning_rate")
             if lr is not None:
                 current_args["suggested_learning_rate"] = lr
-                logger.info(f"The optimimal learning rate is {lr}")
+                logger.info(f"The optimal learning rate is {lr}")
 
             with train_args_path.open("wb") as f:
                 f.write(yaml.encode(current_args))
