@@ -2,8 +2,10 @@ from abc import abstractmethod
 from typing import override
 
 import torch
+from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
 from timm import create_model
+from timm.layers import set_layer_config
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
@@ -11,7 +13,29 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
 )
 from torchmetrics import Accuracy
-from train import ModelName
+
+
+def create_project_model(model_name: str, **kwargs) -> nn.Module:
+    model_spec = parse_mobilenet_model_name(model_name)
+    if model_spec.family == ModelFamily.v4:
+        from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
+
+        with set_layer_config(exportable=True):
+            return _gen_mobilenet_v4(
+                "mobilenetv4_conv_small",
+                channel_multiplier=model_spec.size,
+                aa_layer="blurpc",
+                **kwargs,
+            )
+
+    return create_model(
+        "mobilenetv5_base",
+        **kwargs,
+        channel_multiplier=model_spec.size,
+        exportable=True,
+        use_msfa=False,
+        num_features=256,
+    )
 
 
 class BaseModel(LightningModule):
@@ -29,8 +53,11 @@ class BaseModel(LightningModule):
     ):
         super().__init__()
         self.criterion = nn.CrossEntropyLoss()
-        self.acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        self.acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.train_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.val_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.val_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.test_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.test_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
         self.use_compile = use_compile
         self.learning_rate = learning_rate
         self.total_epochs = total_epochs
@@ -47,7 +74,7 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("train_loss", loss)
-        self.log("train_acc", self.acc_top1(pred, label))
+        self.log("train_acc", self.train_acc_top1(pred, label))
         return loss
 
     @override
@@ -56,15 +83,16 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", self.acc_top1(pred, label), prog_bar=True)
-        self.log("val_top3", self.acc_top3(pred, label))
+        self.log("val_acc", self.val_acc_top1(pred, label), prog_bar=True)
+        self.log("val_top3", self.val_acc_top3(pred, label))
         return loss
 
-    def test_step(self, batch, batch_idx=0):  # noqa: ARG002
+    @override
+    def test_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
         pred = self.forward(image)
-        self.log("test_acc", self.acc_top1(pred, label), prog_bar=True)
-        self.log("test_top3", self.acc_top3(pred, label))
+        self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
+        self.log("test_top3", self.test_acc_top3(pred, label))
         return pred
 
     def configure_optimizers(self):
@@ -109,18 +137,17 @@ class BaseModel(LightningModule):
         }
 
 
-class TimmModel(BaseModel):
+class MobileNetModel(BaseModel):
     def __init__(
         self,
         num_classes: int,
-        model_name: ModelName,
+        model_name: str,
         total_epochs: int,
         image_size: int,
         warmup_epochs: int = 5,
         learning_rate: float = 0.002,
         *,
         use_compile: bool = False,
-        use_tensorrt: bool = True,
     ):
         super().__init__(
             num_classes=num_classes,
@@ -138,30 +165,20 @@ class TimmModel(BaseModel):
             "image_size",
             "learning_rate",
         )
-        model = create_model(
+        model = create_project_model(
             model_name,
             num_classes=num_classes,
             in_chans=1,
-            aa_layer="blurpc",
             drop_rate=0.15,
-            exportable=True,
         )
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
-        if use_tensorrt:
-            import torch_tensorrt  # noqa: F401
-
-        self.model_opt = torch.compile(
-            self.model,
-            backend="tensorrt" if use_tensorrt else "inductor",
-            options={"triton.cudagraphs": True, "shape_padding": True},
-            dynamic=False,
-        )
+        self.model_opt = torch.compile(self.model, mode="max-autotune", dynamic=False) if use_compile else None
 
         self.model_name: str = model_name
 
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)
-        if self.use_compile:
+        if self.use_compile and self.model_opt is not None:
             return self.model_opt(x)
         return self.model(x)

@@ -1,67 +1,16 @@
-"""Preprocess contribution from the webpage."""
+"""Contribution review entry script."""
 
-import logging
-import shutil
-from pathlib import Path
+import typer
+from detypify.tools.review_contrib import main as review_contrib
 
-import cv2
-from msgspec import json
-from PIL import Image, ImageDraw, ImageFont
-from proc_data import get_typst_symbol_info, rasterize_strokes
-
-OUT_DIR = Path("build/contrib")
-REF_SIZE = 100  # px
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
-def bold(s: str) -> str:
-    return "\033[1m" + s + "\033[0m"
+@app.command()
+def main():
+    """Review and collect contributed symbol samples."""
+    review_contrib()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    shutil.rmtree(OUT_DIR, ignore_errors=True)
-    OUT_DIR.mkdir(exist_ok=True)
-    img_size = 256
-
-    cmd = "bunx wrangler d1 execute detypify --remote \
-                --command='SELECT * FROM samples' --json > build/dataset.json"
-    print("### Run this command to fetch data:")
-    print(f"### $ {bold(cmd)}")
-    while input(">>> Input 'done' to proceed: ") != "done":
-        pass
-    with Path("build/dataset.json").open("rb") as f:
-        samples = json.decode(f.read())[0]["results"]
-
-    logging.info("\n### Generating images...")
-    name_to_chr = {x.names[0]: x.char for x in get_typst_symbol_info()}
-    for s in samples:
-        id_, token, sym, strokes = s["id"], s["token"], s["sym"], s["strokes"]
-        img = rasterize_strokes(json.decode(strokes), img_size)
-        cv2.imwrite(f"{OUT_DIR}/{sym}-{id_}-{token}.png", img)
-
-        if not Path(f"{OUT_DIR}/{sym}-0-0.png").exists():
-            text = name_to_chr[sym]
-            img = Image.new("1", (100, 100), "white")
-            draw = ImageDraw.Draw(img)
-            font = ImageFont.truetype("external/NewCMMath-Regular.otf", size=80)
-            _, _, w, h = draw.textbbox((0, 0), text, font=font)
-            draw.text(((REF_SIZE - w) / 2, (REF_SIZE - h) / 2), text, font=font)
-            img.save(f"{OUT_DIR}/{sym}-0-0.png")
-
-    print(f"\n### Go through {bold(str(OUT_DIR))} and delete unwanted images")
-    while input(">>> Input 'done' to proceed: ") != "done":
-        pass
-
-    logging.info("\n### Collecting wanted samples...")
-    id_to_strokes = {s["id"]: s["strokes"] for s in samples}
-    for filename in OUT_DIR.iterdir():
-        sym, id_, _ = str(filename).rsplit(".", 1)[0].split("-")
-        if id_ != "0":
-            strokes = id_to_strokes[str(id_)]
-            with Path(f"data/dataset/{sym}.txt").open("ab") as f:
-                f.write(strokes + "\n")
-
-    cmd = "bunx wrangler d1 execute detypify --remote \
-                --command='DELETE FROM samples WHERE id <= n'"
-    print("\n### Run this command to clean data:")
-    print(f"### $ {bold(cmd)}")
+    app()

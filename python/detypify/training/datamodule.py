@@ -1,7 +1,9 @@
 from os import process_cpu_count
 from typing import override
 
-from datasets import load_dataset
+from detypify.config import DataSetName
+from detypify.data.datasets import get_rendered_dataset_splits, load_raw_dataset
+from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
@@ -12,8 +14,10 @@ class MathSymbolDataModule(LightningDataModule):
         image_size: int,
         batch_size: int = 64,
         num_workers: int = process_cpu_count() or 1,
+        dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
+        paths: DataPaths = DEFAULT_DATA_PATHS,
+        max_samples: int | None = None,
     ):
-        from proc_data import DATASET_REPO
         from torch import float32 as t_float32
         from torchvision.transforms import v2
 
@@ -21,13 +25,15 @@ class MathSymbolDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
-        self.dataset_repo = DATASET_REPO
+        self.dataset_names = dataset_names
+        self.paths = paths
+        self.max_samples = max_samples
+        self.classes: list[str] = []
 
         self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
         self.train_transform = v2.Compose(
             [
                 v2.ToImage(),
-                # augmentations
                 v2.RandomAffine(
                     degrees=10,  # type: ignore[arg-type]
                     translate=(0.1, 0.1),
@@ -39,34 +45,19 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def prepare_data(self):
-        load_dataset(self.dataset_repo)
+        load_raw_dataset(self.dataset_names, self.paths)
 
     @override
     def setup(self, stage: str | None = None):
-        from datasets import Array2D
-        from proc_data import rasterize_strokes
-
-        def _rasterize_strokes_batched(batch, image_size):
-            batch["image"] = [rasterize_strokes(strokes, image_size) for strokes in batch["strokes"]]
-            return batch
-
-        dataset = (
-            load_dataset(self.dataset_repo)
-            .map(
-                _rasterize_strokes_batched,
-                batched=True,
-                remove_columns=["strokes", "source"],
-                num_proc=self.num_workers,
-                fn_kwargs={"image_size": self.image_size},
-            )
-            .cast_column(
-                "image",
-                Array2D(shape=(self.image_size, self.image_size), dtype="uint8"),
-            )
-            .with_format("torch")
+        dataset, self.classes = get_rendered_dataset_splits(
+            self.dataset_names,
+            self.image_size,
+            num_proc=self.num_workers,
+            paths=self.paths,
+            max_samples=self.max_samples,
         )
 
-        if stage == "fit":
+        if stage == "fit" or stage is None:
             self.train_dataset = dataset["train"]
             self.val_dataset = dataset["val"]
 
