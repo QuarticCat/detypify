@@ -189,6 +189,7 @@ if __name__ == "__main__":
                         save_dir=checkpoints_dir,
                         model_name=model_name_str,
                         checkpoint_callback=checkpoint_callback,
+                        use_compile=use_compile and not debug,
                     )
                 )
 

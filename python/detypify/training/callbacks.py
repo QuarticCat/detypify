@@ -320,6 +320,7 @@ class ExportBestModelToONNX(Callback):
         model_name: Name to use for the ONNX file (without extension)
         checkpoint_callback: The ModelCheckpoint callback used during training.
             If None, the callback will try to find it automatically.
+        use_compile: Whether training used torch.compile. Also controls ONNX export optimization.
         dynamo: Whether to use torch.dynamo for ONNX export (default: True)
         external_data: Whether to save weights as external data (default: False)
     """
@@ -330,6 +331,7 @@ class ExportBestModelToONNX(Callback):
         model_name: str,
         checkpoint_callback: ModelCheckpoint | None = None,
         *,
+        use_compile: bool = False,
         dynamo: bool = True,
         external_data: bool = False,
     ) -> None:
@@ -337,6 +339,7 @@ class ExportBestModelToONNX(Callback):
         self.save_dir = Path(save_dir)
         self.model_name = model_name
         self.checkpoint_callback = checkpoint_callback
+        self.use_compile = use_compile
         self.dynamo = dynamo
         self.external_data = external_data
 
@@ -383,6 +386,7 @@ class ExportBestModelToONNX(Callback):
             best_model.example_input_array,
             dynamo=self.dynamo,
             external_data=self.external_data,
+            optimize=self.use_compile,
         )
 
         logger.info("Successfully exported best model to: %s", save_path)
