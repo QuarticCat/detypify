@@ -84,8 +84,8 @@ if __name__ == "__main__":
         from lightning.pytorch.loggers import TensorBoardLogger
         from lightning.pytorch.tuner.tuning import Tuner
         from msgspec import yaml
+        import torch
         from torch import set_float32_matmul_precision
-        from torch.cuda import is_bf16_supported
 
         out_dir_path = Path(out_dir)
 
@@ -97,13 +97,26 @@ if __name__ == "__main__":
         classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
 
         # compatibility check for graphics
-        if not is_bf16_supported() and amp_precision == "bf16-mixed":
-            logger.warning("Current device don't support bfloat16 precision, use float16 instead.")
+        try:
+            bf16_supported = torch.cuda.is_bf16_supported()
+        except RuntimeError as e:
+            msg = str(e)
+            if "NVIDIA driver on your system is too old" in msg:
+                raise typer.BadParameter(
+                    "Installed PyTorch CUDA build is incompatible with the NVIDIA driver. "
+                    "For driver 545 / CUDA 12.3, recreate the environment with Python 3.12 "
+                    "and `uv sync --extra cuda` so uv installs PyTorch cu121 wheels.",
+                    param_hint="--amp-precision",
+                ) from e
+            raise
+
+        if not bf16_supported and amp_precision == "bf16-mixed":
+            logger.warning("Current device doesn't support bfloat16 precision, use float16 instead.")
             amp_precision = "16-mixed"
             args_dict["amp_precision"] = amp_precision
-        else:
-            # use low precision acceleration
-            set_float32_matmul_precision("medium")
+
+        # use low precision acceleration
+        set_float32_matmul_precision("medium")
         trainer_precision = "32-true" if is_debug_dev_run else amp_precision
 
         model_instances: list[MobileNetModel] = [
