@@ -104,8 +104,9 @@ if __name__ == "__main__":
             if "NVIDIA driver on your system is too old" in msg:
                 raise typer.BadParameter(
                     "Installed PyTorch CUDA build is incompatible with the NVIDIA driver. "
-                    "For driver 545 / CUDA 12.3, recreate the environment with Python 3.12 "
-                    "and `uv sync --extra cuda` so uv installs PyTorch cu121 wheels.",
+                    "For driver 545 / CUDA 12.3, run training with Python 3.12 and "
+                    "`uv run --extra cuda ...` so uv keeps PyTorch cu121 wheels "
+                    "for the command.",
                     param_hint="--amp-precision",
                 ) from e
             raise

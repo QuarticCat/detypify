@@ -21,10 +21,12 @@ dependencies = [
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision"]
 cuda = [
+  "lxml>=6.0.2",
   "torch>=2.5.0,<2.6.0 ; sys_platform != 'darwin' and python_version < '3.13'",
   "torchvision>=0.20.0,<0.21.0 ; sys_platform != 'darwin' and python_version < '3.13'",
 ]
 cuda130 = [
+  "lxml>=6.0.2",
   "torch>=2.6.0 ; sys_platform != 'darwin'",
   "torchvision ; sys_platform != 'darwin'",
 ]

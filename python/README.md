@@ -33,6 +33,8 @@ uv sync
 > or `uv run --extra rocm ...`. The project currently requires Python 3.12.
 > The `cuda` extra targets PyTorch CUDA 12.1 wheels for hosts such as NVIDIA
 > driver 545 / CUDA 12.3.
+> If you sync with extras, pass the same extras to `uv run`; otherwise uv may
+> change the environment for that command.
 
 If you're interested in processing data:
 
