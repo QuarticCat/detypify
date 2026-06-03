@@ -123,17 +123,18 @@ def _map_raw_dataset_cached(
     tex_typ_map_digest = get_tex_typ_map_digest()
     raw_dataset = load_raw_dataset(dataset_names, paths)
     raw_dataset_fingerprint = getattr(raw_dataset, "_fingerprint", "")
+    map_fingerprint_payload = dumps(
+        {
+            "base": raw_dataset_fingerprint,
+            "dataset_names": _dataset_name_values(dataset_names),
+            "stage": "latex-to-typst-v1",
+            "tex_typ_map_digest": tex_typ_map_digest,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
     map_fingerprint = blake2b(
-        data=dumps(
-            {
-                "base": raw_dataset_fingerprint,
-                "dataset_names": _dataset_name_values(dataset_names),
-                "stage": "latex-to-typst-v1",
-                "tex_typ_map_digest": tex_typ_map_digest,
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode(),
+        map_fingerprint_payload,
         # len(hexdigest) is 2 * digest_size
         # but the num_proc is also hashed implicitly by huggingface datasets, causing a hexdigest + num_proc size internal fingerprint
         # so use 16 here
