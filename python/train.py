@@ -2,8 +2,10 @@
 
 import logging
 from os import process_cpu_count
+from typing import Annotated
 
 import typer
+from detypify.config import ProfilerName
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
@@ -18,7 +20,10 @@ if __name__ == "__main__":
     def main(
         out_dir: str = typer.Option(str(DEFAULT_DATA_PATHS.train_dir), help="Output directory"),
         debug: bool = typer.Option(False, help="Enable debug mode"),
-        profiling: bool = typer.Option(False, help="Enable performance profiler."),
+        profiling: Annotated[
+            ProfilerName,
+            typer.Option(help="Performance profiler: none, simple, advanced, pytorch, trace."),
+        ] = ProfilerName.none,
         dev_run: bool = typer.Option(False, help="Fast dev run (valid only when debug is True)"),
         log_pred: bool = typer.Option(True, help="Logging predictions to logger for review."),
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
@@ -53,7 +58,7 @@ if __name__ == "__main__":
         args_dict = {
             "out_dir": out_dir,
             "debug": debug,
-            "profiling": profiling,
+            "profiling": profiling.value,
             "dev_run": dev_run,
             "log_pred": log_pred,
             "init_batch_size": init_batch_size,
@@ -79,6 +84,7 @@ if __name__ == "__main__":
         from detypify.data.datasets import get_dataset_classes
         from detypify.training.datamodule import MathSymbolDataModule
         from detypify.training.model import MobileNetModel
+        from detypify.training.profiling import build_profiler
         from lightning import Trainer
         from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
         from lightning.pytorch.loggers import TensorBoardLogger
@@ -200,7 +206,7 @@ if __name__ == "__main__":
                 fast_dev_run=debug and dev_run,
                 accelerator=trainer_accelerator,
                 precision=trainer_precision,  # type: ignore
-                profiler="simple" if profiling else None,
+                profiler=build_profiler(profiling, final_output_dir),
                 callbacks=callbacks,
             )
 

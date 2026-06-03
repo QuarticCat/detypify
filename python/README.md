@@ -138,6 +138,21 @@ The script will:
 - `--find-batch-size`: Enable Lightning batch-size scaling.
 - `--ema-start-epoch`: Epoch to start EMA (default: 5).
 - `--log-pred`: Enable logging of predictions (default: True).
+- `--profiling`: Enable a named Lightning profiler: `none`, `simple`,
+  `advanced`, `pytorch`, or `trace`. Profiler outputs are saved under
+  `build/train/{model_name}/version_*/profiler`.
+
+For broad timing diagnostics, start with:
+
+```bash
+uv run --extra <accelerator> python/train.py --profiling simple
+```
+
+For GPU operator and memory traces, use:
+
+```bash
+uv run --extra cuda python/train.py --profiling trace --no-log-pred --no-ema
+```
 
 To view the training/test logs:
 
