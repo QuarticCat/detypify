@@ -1,4 +1,4 @@
-from os import process_cpu_count
+from os import cpu_count
 from typing import override
 
 from detypify.config import DataSetName
@@ -13,7 +13,7 @@ class MathSymbolDataModule(LightningDataModule):
         self,
         image_size: int,
         batch_size: int = 64,
-        num_workers: int = process_cpu_count() or 1,
+        num_workers: int = cpu_count() or 1,
         dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
         paths: DataPaths = DEFAULT_DATA_PATHS,
         max_samples: int | None = None,

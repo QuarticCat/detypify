@@ -1,7 +1,7 @@
 """Train the model."""
 
 import logging
-from os import process_cpu_count
+from os import cpu_count
 
 import typer
 from detypify.data.paths import DEFAULT_DATA_PATHS
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
         is_debug_dev_run = debug and dev_run
         dev_max_samples = 2048 if is_debug_dev_run else None
-        data_num_workers = 0 if is_debug_dev_run else process_cpu_count() or 1
+        data_num_workers = 0 if is_debug_dev_run else cpu_count() or 1
         trainer_accelerator = "cpu" if is_debug_dev_run else "auto"
         classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
 

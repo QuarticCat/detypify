@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import cache
 from hashlib import blake2b
 from json import dumps
-from os import process_cpu_count
+from os import cpu_count
 from typing import TYPE_CHECKING, Any, cast
 
 from detypify.config import HF_DATASET_REPO, DataSetName
@@ -64,7 +64,7 @@ def create_raw_dataset(dataset_names: list[DataSetName], paths: DataPaths = DEFA
     dataset = Dataset.from_polars(df, info=dataset_info)
 
     logger.info("  -> Uploading raw dataset to %s...", HF_DATASET_REPO)
-    dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
+    dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data", num_proc=cpu_count() or 1)
 
     paths.raw_dataset_parquet.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(paths.raw_dataset_parquet, compression="zstd")
