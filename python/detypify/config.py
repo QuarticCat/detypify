@@ -17,6 +17,14 @@ class ModelFamily(StrEnum):
     v5 = "v5"
 
 
+class ProfilerName(StrEnum):
+    none = "none"
+    simple = "simple"
+    advanced = "advanced"
+    pytorch = "pytorch"
+    trace = "trace"
+
+
 @dataclass(frozen=True)
 class MobileNetModelSpec:
     family: ModelFamily
