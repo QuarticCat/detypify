@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import cache
 from hashlib import blake2b
 from json import dumps
-from os import cpu_count
 from typing import TYPE_CHECKING, Any, cast
 
 from detypify.config import HF_DATASET_REPO, DataSetName
@@ -11,6 +10,7 @@ from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.data.raw_sources import collect_contrib_raw, collect_detexify_raw, collect_mathwriting_raw
 from detypify.data.rendering import rasterize_strokes
 from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
+from detypify.system import available_cpu_count
 
 if TYPE_CHECKING:
     import polars as pl
@@ -64,7 +64,7 @@ def create_raw_dataset(dataset_names: list[DataSetName], paths: DataPaths = DEFA
     dataset = Dataset.from_polars(df, info=dataset_info)
 
     logger.info("  -> Uploading raw dataset to %s...", HF_DATASET_REPO)
-    dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data", num_proc=cpu_count() or 1)
+    dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data", num_proc=available_cpu_count())
 
     paths.raw_dataset_parquet.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(paths.raw_dataset_parquet, compression="zstd")

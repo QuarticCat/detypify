@@ -1,9 +1,9 @@
-from os import cpu_count
 from typing import override
 
 from detypify.config import DataSetName
 from detypify.data.datasets import get_rendered_dataset_splits, load_raw_dataset
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
+from detypify.system import available_cpu_count
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
@@ -13,7 +13,7 @@ class MathSymbolDataModule(LightningDataModule):
         self,
         image_size: int,
         batch_size: int = 64,
-        num_workers: int = cpu_count() or 1,
+        num_workers: int | None = None,
         dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
         paths: DataPaths = DEFAULT_DATA_PATHS,
         max_samples: int | None = None,
@@ -23,7 +23,7 @@ class MathSymbolDataModule(LightningDataModule):
 
         super().__init__()
         self.batch_size = batch_size
-        self.num_workers = num_workers
+        self.num_workers = available_cpu_count() if num_workers is None else num_workers
         self.image_size = image_size
         self.dataset_names = dataset_names
         self.paths = paths
@@ -107,8 +107,10 @@ class MathSymbolDataModule(LightningDataModule):
             original_images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
             match self.trainer.state.stage:
                 case RunningStage.TRAINING:
-                    batch["image"] = self.train_transform(original_images)
+                    transformed_images = self.train_transform(original_images)
                 case _:
-                    batch["image"] = self.eval_transform(original_images)
+                    transformed_images = self.eval_transform(original_images)
+
+            batch["image"] = transformed_images.as_subclass(type(original_images))
 
         return batch
