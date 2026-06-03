@@ -21,8 +21,12 @@ dependencies = [
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision"]
 cuda = [
+  "torch>=2.5.0,<2.6.0 ; sys_platform != 'darwin' and python_version < '3.13'",
+  "torchvision>=0.20.0,<0.21.0 ; sys_platform != 'darwin' and python_version < '3.13'",
+]
+cuda130 = [
   "torch>=2.6.0 ; sys_platform != 'darwin'",
-  "torchvision ; sys_platform != 'darwin'"
+  "torchvision ; sys_platform != 'darwin'",
 ]
 data = [
   "lxml>=6.0.2",
@@ -67,6 +71,7 @@ conflicts = [
   [
     { extra = "cpu" },
     { extra = "cuda" },
+    { extra = "cuda130" },
     { extra = "rocm" },
   ],
 ]
@@ -75,12 +80,14 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu121", extra = "cuda", marker = "platform_system != 'Darwin' and python_version < '3.13'" },
+  { index = "pytorch-cu130", extra = "cuda130", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu121", extra = "cuda", marker = "platform_system != 'Darwin' and python_version < '3.13'" },
+  { index = "pytorch-cu130", extra = "cuda130", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 triton-rocm = [
@@ -95,6 +102,11 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu130"
 url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [[tool.uv.index]]

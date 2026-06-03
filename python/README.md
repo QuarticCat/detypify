@@ -29,7 +29,9 @@ uv sync
 >[!WARNING]
 > Plain `uv run` can resolve and install a PyTorch build that does not match your
 > hardware. Select the correct accelerator extra before training, for example
-> `uv run --extra cpu ...`, `uv run --extra cuda ...`, or `uv run --extra rocm ...`.
+> `uv run --extra cpu ...`, `uv run --extra cuda ...`, `uv run --extra cuda130 ...`,
+> or `uv run --extra rocm ...`. The `cuda` extra targets PyTorch CUDA 12.1 wheels
+> for hosts such as NVIDIA driver 545 / CUDA 12.3, and requires Python 3.12.
 
 If you're interested in processing data:
 
