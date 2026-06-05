@@ -26,6 +26,7 @@ if __name__ == "__main__":
         ] = ProfilerName.none,
         dev_run: bool = typer.Option(False, help="Fast dev run (valid only when debug is True)"),
         log_pred: bool = typer.Option(True, help="Logging predictions to logger for review."),
+        log_confusion_matrix: bool = typer.Option(True, help="Log final test confusion matrix to TensorBoard."),
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
@@ -61,6 +62,7 @@ if __name__ == "__main__":
             "profiling": profiling.value,
             "dev_run": dev_run,
             "log_pred": log_pred,
+            "log_confusion_matrix": log_confusion_matrix,
             "init_batch_size": init_batch_size,
             "warmup_epochs": warmup_epochs,
             "total_epochs": total_epochs,
@@ -161,6 +163,11 @@ if __name__ == "__main__":
                 from detypify.training.callbacks import LogPredictCallback
 
                 callbacks.append(LogPredictCallback(sorted(classes)))
+
+            if log_confusion_matrix:
+                from detypify.training.callbacks import LogConfusionMatrixCallback
+
+                callbacks.append(LogConfusionMatrixCallback(sorted(classes)))
 
             if use_ema:
                 from detypify.training.callbacks import EMAWeightAveraging

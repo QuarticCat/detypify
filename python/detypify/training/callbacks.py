@@ -152,6 +152,104 @@ class LogPredictCallback(Callback):
         self.logged_batches += 1
 
 
+class LogConfusionMatrixCallback(Callback):
+    """Log a test confusion matrix to TensorBoard at the end of testing."""
+
+    def __init__(self, classes: list[str], tag: str = "test_confusion_matrix") -> None:
+        super().__init__()
+        self.classes = classes
+        self.tag = tag
+        self.confusion_matrix = None
+
+    @override
+    def on_test_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        import torch
+
+        self.confusion_matrix = torch.zeros((len(self.classes), len(self.classes)), dtype=torch.long)
+
+    @override
+    def on_test_batch_end(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        outputs,
+        batch,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
+        import torch
+
+        if outputs is None or not isinstance(outputs, torch.Tensor) or self.confusion_matrix is None:
+            return
+
+        true_labels = batch["label"].detach().to(device="cpu", dtype=torch.long).flatten()
+        pred_labels = torch.argmax(outputs.detach(), dim=1).to(device="cpu", dtype=torch.long).flatten()
+
+        num_classes = len(self.classes)
+        valid_mask = (true_labels >= 0) & (true_labels < num_classes) & (pred_labels >= 0) & (pred_labels < num_classes)
+        if not valid_mask.any():
+            return
+
+        indices = true_labels[valid_mask] * num_classes + pred_labels[valid_mask]
+        batch_counts = torch.bincount(indices, minlength=num_classes * num_classes)
+        self.confusion_matrix += batch_counts.reshape(num_classes, num_classes)
+
+    @override
+    def on_test_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        if self.confusion_matrix is None:
+            return
+
+        from lightning.pytorch.loggers import TensorBoardLogger
+
+        if not isinstance(trainer.logger, TensorBoardLogger):
+            return
+
+        matrix_tensor = self.confusion_matrix.to(pl_module.device)
+        if getattr(trainer, "world_size", 1) > 1:
+            matrix_tensor = trainer.strategy.reduce(matrix_tensor, reduce_op="sum")
+
+        if not getattr(trainer, "is_global_zero", True):
+            return
+
+        import matplotlib as mpl
+
+        mpl.use("Agg")
+        import matplotlib.pyplot as plt
+
+        matrix = matrix_tensor.detach().cpu().numpy()
+        num_classes = len(self.classes)
+        fig_size = min(24, max(6, num_classes * 0.18))
+        fig, ax = plt.subplots(figsize=(fig_size, fig_size))
+
+        image = ax.imshow(matrix, interpolation="nearest", aspect="auto", cmap="Blues")
+        fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+
+        max_ticks = 40
+        tick_step = max(1, (num_classes + max_ticks - 1) // max_ticks)
+        tick_positions = list(range(0, num_classes, tick_step))
+        tick_labels = [self._compact_label(self.classes[i]) for i in tick_positions]
+
+        ax.set(
+            title="Test Confusion Matrix",
+            xlabel="Predicted label",
+            ylabel="True label",
+            xticks=tick_positions,
+            yticks=tick_positions,
+        )
+        ax.set_xticklabels(tick_labels, rotation=90, fontsize=6)
+        ax.set_yticklabels(tick_labels, fontsize=6)
+        fig.tight_layout()
+
+        trainer.logger.experiment.add_figure(self.tag, fig, global_step=trainer.global_step)
+        plt.close(fig)
+
+    @staticmethod
+    def _compact_label(label: str, max_len: int = 16) -> str:
+        if len(label) <= max_len:
+            return label
+        return f"{label[: max_len - 1]}..."
+
+
 def get_ema_multi_avg_fn(
     decay: float = 0.995,
     min_decay: float = 0.0,
