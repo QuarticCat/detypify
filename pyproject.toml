@@ -75,12 +75,12 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cuda", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu130", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu124", extra = "cuda", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 triton-rocm = [
@@ -93,8 +93,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [[tool.uv.index]]
