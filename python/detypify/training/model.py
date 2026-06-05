@@ -6,7 +6,7 @@ import torch
 from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
 from timm.layers import RmsNorm2d, set_layer_config
-from timm.models._efficientnet_builder import decode_arch_def, round_channels
+from timm.models._efficientnet_builder import decode_arch_def, round_channels  # noqa: PLC2701
 from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import (
@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import (
     LinearLR,
     SequentialLR,
 )
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, F1Score
 
 _GELU = partial(nn.GELU, approximate="tanh")
 
@@ -77,10 +77,13 @@ class BaseModel(LightningModule):
         super().__init__()
         self.criterion = nn.CrossEntropyLoss()
         self.train_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        self.train_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.val_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.val_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.val_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.test_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.test_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.test_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.use_compile = use_compile
         self.learning_rate = learning_rate
         self.total_epochs = total_epochs
@@ -98,6 +101,7 @@ class BaseModel(LightningModule):
         loss = self.criterion(pred, label)
         self.log("train_loss", loss)
         self.log("train_acc", self.train_acc_top1(pred, label))
+        self.log("train_f1", self.train_f1_macro(pred, label))
         return loss
 
     @override
@@ -108,6 +112,7 @@ class BaseModel(LightningModule):
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", self.val_acc_top1(pred, label), prog_bar=True)
         self.log("val_top3", self.val_acc_top3(pred, label))
+        self.log("val_f1", self.val_f1_macro(pred, label), prog_bar=True)
         return loss
 
     @override
@@ -116,6 +121,7 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
         self.log("test_top3", self.test_acc_top3(pred, label))
+        self.log("test_f1", self.test_f1_macro(pred, label), prog_bar=True)
         return pred
 
     def configure_optimizers(self):
