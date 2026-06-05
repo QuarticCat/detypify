@@ -5,7 +5,7 @@ from typing import override
 import torch
 from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
-from timm.layers import RmsNorm2d, set_layer_config
+from timm.layers import set_layer_config
 from timm.models._efficientnet_builder import decode_arch_def, round_channels  # noqa: PLC2701
 from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
@@ -74,7 +74,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             num_features=384,
             stem_size=24,
             use_msfa=False,
-            norm_layer=RmsNorm2d,
+            norm_layer=nn.BatchNorm2d,
             act_layer=_GELU,
             round_chs_fn=partial(round_channels, multiplier=model_spec.size),
             layer_scale_init_value=1e-5,
