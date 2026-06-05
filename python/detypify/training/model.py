@@ -17,6 +17,8 @@ from torch.optim.lr_scheduler import (
 from torchmetrics import Accuracy, F1Score
 
 _GELU = partial(nn.GELU, approximate="tanh")
+_IMAGE_MIN = -1e-4
+_IMAGE_MAX = 1.0001
 
 _MOBILENET_V5_ARCH_DEF = [
     ["er_r1_k3_s2_e4_c64", "er_r1_k3_s1_e4_c64"],
@@ -44,6 +46,15 @@ def _check_finite(name: str, tensor: Tensor) -> None:
     raise FloatingPointError(msg)
 
 
+def _check_image_input(name: str, image: Tensor) -> None:
+    _check_finite(name, image)
+    image_min = image.min().item()
+    image_max = image.max().item()
+    if image_min < _IMAGE_MIN or image_max > _IMAGE_MAX:
+        msg = f"{name} is outside [0, 1]. min={image_min}, max={image_max}, dtype={image.dtype}"
+        raise ValueError(msg)
+
+
 def create_project_model(model_name: str, **kwargs) -> nn.Module:
     model_spec = parse_mobilenet_model_name(model_name)
     if model_spec.family == ModelFamily.v4:
@@ -62,6 +73,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
             num_features=384,
             stem_size=24,
+            use_msfa=False,
             norm_layer=RmsNorm2d,
             act_layer=_GELU,
             round_chs_fn=partial(round_channels, multiplier=model_spec.size),
@@ -106,6 +118,7 @@ class BaseModel(LightningModule):
     @override
     def training_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
+        _check_image_input("train input", image)
         pred = self.forward(image)
         _check_finite("train logits", pred)
         loss = self.criterion(pred, label)
@@ -118,6 +131,7 @@ class BaseModel(LightningModule):
     @override
     def validation_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
+        _check_image_input("validation input", image)
         pred = self.forward(image)
         _check_finite("validation logits", pred)
         loss = self.criterion(pred, label)
@@ -131,6 +145,7 @@ class BaseModel(LightningModule):
     @override
     def test_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
+        _check_image_input("test input", image)
         pred = self.forward(image)
         _check_finite("test logits", pred)
         self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
