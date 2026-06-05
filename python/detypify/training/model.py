@@ -1,11 +1,13 @@
 from abc import abstractmethod
+from functools import partial
 from typing import override
 
 import torch
 from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
-from timm import create_model
-from timm.layers import set_layer_config
+from timm.layers import RmsNorm2d, set_layer_config
+from timm.models._efficientnet_builder import decode_arch_def, round_channels
+from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
@@ -13,6 +15,24 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
 )
 from torchmetrics import Accuracy
+
+_GELU = partial(nn.GELU, approximate="tanh")
+
+_MOBILENET_V5_ARCH_DEF = [
+    ["er_r1_k3_s2_e4_c64", "er_r1_k3_s1_e4_c64"],
+    ["uir_r1_a3_k5_s2_e6_c128", "uir_r1_a3_k0_s1_e4_c128"],
+    [
+        "uir_r1_a5_k5_s2_e6_c192",
+        "uir_r1_a0_k0_s1_e2_c192",
+        "mqa_r1_k3_h8_s2_d64_c192",
+        "uir_r1_a0_k0_s1_e2_c192",
+    ],
+    [
+        "uir_r1_a5_k5_s2_e6_c256",
+        "mqa_r1_k3_h16_s1_d64_c256",
+        "uir_r1_a0_k0_s1_e2_c256",
+    ],
+]
 
 
 def create_project_model(model_name: str, **kwargs) -> nn.Module:
@@ -28,14 +48,17 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
                 **kwargs,
             )
 
-    return create_model(
-        "mobilenetv5_base",
-        **kwargs,
-        channel_multiplier=model_spec.size,
-        exportable=True,
-        use_msfa=False,
-        num_features=256,
-    )
+    with set_layer_config(exportable=True):
+        return MobileNetV5(
+            block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
+            num_features=384,
+            stem_size=24,
+            norm_layer=RmsNorm2d,
+            act_layer=_GELU,
+            round_chs_fn=partial(round_channels, multiplier=model_spec.size),
+            layer_scale_init_value=1e-5,
+            **kwargs,
+        )
 
 
 class BaseModel(LightningModule):

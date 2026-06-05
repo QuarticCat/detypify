@@ -62,7 +62,7 @@ dev = [
 search-path = ["./python"]
 
 [tool.uv]
-environments = ["sys_platform == 'linux'", "sys_platform == 'win32'"]
+environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'", "sys_platform == 'win32'"]
 conflicts = [
   [
     { extra = "cpu" },
