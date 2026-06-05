@@ -113,12 +113,12 @@ uv run --extra <accelerator> python/train.py --models mobilenet_v4_035 --models 
 
 Model names use `mobilenet_{v4|v5}_{size}`. The size suffix is divided by 100,
 so `mobilenet_v4_035` uses a `0.35` channel multiplier. MobileNetV4 uses a
-scaled conv-small model. MobileNetV5 uses a scaled `mobilenetv5_base` with the
-multi-scale fusion adapter disabled for classification speed.
+scaled conv-small model. MobileNetV5 uses a scaled custom trimmed V5
+architecture with a compact multi-scale fusion head.
 
 > [!WARNING]
 > MobileNetV5 support is experimental and still in development. Use smaller
-> size suffixes (e.g. `005`, `010`) to keep the base V5 architecture close to
+> size suffixes (e.g. `005`, `010`) to keep the V5 architecture close to
 > the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
 
 ```bash
