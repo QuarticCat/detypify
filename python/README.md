@@ -122,7 +122,7 @@ architecture with a compact multi-scale fusion head.
 > the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
 
 ```bash
-uv run --extra <accelerator> python/train.py --models mobilenet_v5_010 --models mobilenet_v5_005 --no-ema
+uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --learning-rate 5e-4
 ```
 
 The script will:
@@ -135,7 +135,10 @@ The script will:
 **Key Options:**
 - `--out-dir`: Output directory (default: `build/train`).
 - `--debug --dev-run`: Use a small CPU-only fast dev run.
+- `--learning-rate`: Optimizer learning rate used when LR finder is disabled.
 - `--find-batch-size`: Enable Lightning batch-size scaling.
+- `--no-find-lr`: Skip Lightning learning-rate finder before training.
+- `--num-workers`: Override DataLoader and dataset mapping worker count.
 - `--ema-start-epoch`: Epoch to start EMA (default: 5).
 - `--log-pred`: Enable logging of predictions (default: True).
 
