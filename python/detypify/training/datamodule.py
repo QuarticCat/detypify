@@ -102,6 +102,8 @@ class MathSymbolDataModule(LightningDataModule):
         # when batch is not a dict, means its not from dataloader, do nothing.
         if isinstance(batch, dict) and self.trainer:
             from lightning.pytorch.trainer.states import RunningStage
+            from torch import bfloat16 as t_bfloat16
+            from torch import float16 as t_float16
             from torch import uint8 as t_uint8
 
             original_images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
@@ -110,5 +112,11 @@ class MathSymbolDataModule(LightningDataModule):
                     batch["image"] = self.train_transform(original_images)
                 case _:
                     batch["image"] = self.eval_transform(original_images)
+
+            match self.trainer.precision:
+                case "bf16-mixed":
+                    batch["image"] = batch["image"].to(dtype=t_bfloat16)
+                case "16-mixed":
+                    batch["image"] = batch["image"].to(dtype=t_float16)
 
         return batch
