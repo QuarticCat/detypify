@@ -24,8 +24,11 @@ if __name__ == "__main__":
         init_batch_size: int = typer.Option(128, help="Initial batch size"),
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
+        learning_rate: float = typer.Option(0.002, help="Learning rate used when the LR finder is disabled"),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
         find_batch_size: bool = typer.Option(False, help="Enable/Disable automatic batch size finding"),
+        find_lr: bool = typer.Option(True, "--find-lr/--no-find-lr", help="Enable/Disable learning rate finder"),
+        num_workers: int | None = typer.Option(None, help="Number of DataLoader and dataset mapping workers"),
         use_ema: bool = typer.Option(True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
         ema_start_epoch: int = typer.Option(5, help="Epoch to start EMA"),
@@ -59,8 +62,11 @@ if __name__ == "__main__":
             "init_batch_size": init_batch_size,
             "warmup_epochs": warmup_epochs,
             "total_epochs": total_epochs,
+            "learning_rate": learning_rate,
             "image_size": image_size,
             "find_batch_size": find_batch_size,
+            "find_lr": find_lr,
+            "num_workers": num_workers,
             "use_ema": use_ema,
             "ema_decay": ema_decay,
             "ema_start_epoch": ema_start_epoch,
@@ -92,7 +98,7 @@ if __name__ == "__main__":
         dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
         is_debug_dev_run = debug and dev_run
         dev_max_samples = 2048 if is_debug_dev_run else None
-        data_num_workers = 0 if is_debug_dev_run else process_cpu_count() or 1
+        data_num_workers = 0 if is_debug_dev_run else num_workers or process_cpu_count() or 1
         trainer_accelerator = "cpu" if is_debug_dev_run else "auto"
         classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=data_num_workers)
 
@@ -113,6 +119,7 @@ if __name__ == "__main__":
                 warmup_epochs=warmup_epochs,
                 total_epochs=total_epochs,
                 image_size=image_size,
+                learning_rate=learning_rate,
                 use_compile=use_compile and not debug,
             )
             for model in models
@@ -214,7 +221,7 @@ if __name__ == "__main__":
                 suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=init_batch_size)
                 batch_size = suggested_batch_size or init_batch_size
             logger.info("The final batch size is %s.", batch_size)
-            if not debug and not dev_run:
+            if find_lr and not debug and not dev_run:
                 lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-4, max_lr=1e-3)
                 fig = lr_finder.plot(suggest=True)  # type: ignore
                 save_path = final_output_dir / f"lr_{batch_size}_{image_size}.svg"
