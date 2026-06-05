@@ -119,10 +119,11 @@ architecture with a compact multi-scale fusion head.
 > [!WARNING]
 > MobileNetV5 support is experimental and still in development. Use smaller
 > size suffixes (e.g. `005`, `010`) to keep the V5 architecture close to
-> the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
+> the V4-small budget. If V5 validation loss becomes NaN, use full fp32 precision
+> with `--amp-precision 32-true`. Consider `--no-ema` for shorter V5 training runs:
 
 ```bash
-uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learning-rate 5e-4
+uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learning-rate 5e-4 --amp-precision 32-true
 ```
 
 The script will:
@@ -136,6 +137,7 @@ The script will:
 - `--out-dir`: Output directory (default: `build/train`).
 - `--debug --dev-run`: Use a small CPU-only fast dev run.
 - `--learning-rate`: Optimizer learning rate used when LR finder is disabled.
+- `--amp-precision`: Training precision (default: `bf16-mixed`; use `32-true` if V5 loss becomes NaN).
 - `--find-batch-size`: Enable Lightning batch-size scaling.
 - `--no-find-lr`: Skip Lightning learning-rate finder before training.
 - `--num-workers`: Override DataLoader and dataset mapping worker count.
