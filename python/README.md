@@ -122,13 +122,13 @@ architecture with a compact multi-scale fusion head.
 > the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
 
 ```bash
-uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --learning-rate 5e-4
+uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learning-rate 5e-4
 ```
 
 The script will:
 1. Load raw dataset data from Hugging Face and build cached rendered splits locally.
 2. Optionally find the largest batch size when `--find-batch-size` is set.
-3. Find a learning rate for non-debug, non-`--dev-run` training.
+3. Find a learning rate for non-debug, non-`--dev-run` training unless `--no-find-lr` is set.
 4. Train each requested model.
 5. Export best checkpoints to ONNX under `build/train/{model_name}/version_*/ckpts`.
 
