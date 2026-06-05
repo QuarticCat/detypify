@@ -380,13 +380,27 @@ class ExportBestModelToONNX(Callback):
 
         logger.info("Exporting best model to ONNX: %s", save_path)
 
-        # Export to ONNX
-        best_model.to_onnx(
-            save_path,
-            best_model.example_input_array,
-            dynamo=self.dynamo,
-            external_data=self.external_data,
-            optimize=self.use_compile,
-        )
+        # Export to ONNX. The dynamo exporter can fail on some PyTorch/timm
+        # operator combinations; keep the training run successful by falling
+        # back to the legacy exporter.
+        try:
+            best_model.to_onnx(
+                save_path,
+                best_model.example_input_array,
+                dynamo=self.dynamo,
+                external_data=self.external_data,
+                optimize=self.use_compile,
+            )
+        except Exception:
+            if not self.dynamo:
+                raise
+            logger.exception("Dynamo ONNX export failed. Retrying with dynamo=False.")
+            best_model.to_onnx(
+                save_path,
+                best_model.example_input_array,
+                dynamo=False,
+                external_data=self.external_data,
+                optimize=False,
+            )
 
         logger.info("Successfully exported best model to: %s", save_path)
