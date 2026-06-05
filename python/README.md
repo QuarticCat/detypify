@@ -122,7 +122,7 @@ architecture with a compact multi-scale fusion head.
 > the V4-small budget, and consider `--no-ema` for shorter V5 training runs:
 
 ```bash
-uv run python/train.py --models mobilenet_v5_010 --models mobilenet_v5_005 --no-ema
+uv run --extra <accelerator> python/train.py --models mobilenet_v5_010 --models mobilenet_v5_005 --no-ema
 ```
 
 The script will:

@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision"]
 cuda = [
+  "lxml>=6.0.2",
   "torch>=2.6.0 ; sys_platform != 'darwin'",
   "torchvision ; sys_platform != 'darwin'"
 ]
