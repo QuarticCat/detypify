@@ -75,7 +75,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
             num_features=384,
             stem_size=24,
-            use_msfa=False,
+            use_msfa=True,
             norm_layer=nn.BatchNorm2d,
             act_layer=_GELU,
             round_chs_fn=partial(round_channels, multiplier=model_spec.size),
