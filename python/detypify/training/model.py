@@ -27,9 +27,11 @@ _MOBILENET_V5_ARCH_DEF = [
         "uir_r1_a5_k5_s2_e6_c192",
         "uir_r1_a0_k0_s1_e2_c192",
         "uir_r1_a0_k0_s1_e2_c192",
+        "uir_r1_a0_k0_s1_e2_c192",
     ],
     [
         "uir_r1_a5_k5_s2_e6_c256",
+        "uir_r1_a0_k0_s1_e2_c256",
         "uir_r1_a0_k0_s1_e2_c256",
     ],
 ]
