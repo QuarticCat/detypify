@@ -84,6 +84,17 @@ To print the digest used by CI to detect effective LaTeX-to-Typst mapping change
 uv run --extra data python/proc_data.py --print-tex-typ-map-digest
 ```
 
+To browse mapped dataset samples locally, including truth labels, source, sample
+index, pagination, and search:
+
+```bash
+uv run --extra cpu python/proc_data.py --preview-dataset
+```
+
+The browser is served at `http://127.0.0.1:8000` by default. Use
+`--datasets`, `--preview-port`, `--preview-page-size`, and
+`--preview-image-size` to change what is shown.
+
 See more options with:
 
 ```bash
