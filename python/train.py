@@ -162,9 +162,9 @@ if __name__ == "__main__":
 
             # Lazy import callbacks only when needed
             if log_pred:
-                from detypify.training.callbacks import LogPredictCallback
+                from detypify.training.callbacks import LogPredictCallback, LogTestConfusionCallback
 
-                callbacks.append(LogPredictCallback(sorted(classes)))
+                callbacks.extend([LogPredictCallback(sorted(classes)), LogTestConfusionCallback(sorted(classes))])
 
             if use_ema:
                 from detypify.training.callbacks import EMAWeightAveraging
