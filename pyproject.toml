@@ -1,15 +1,17 @@
 [project]
 name = "detypify-model"
 version = "0.3.0"
-requires-python = ">=3.13, <3.14"
+requires-python = ">=3.13"
 authors = [
   { name = "QuarticCat", email = "QuarticCat@pm.me" },
   { name = "Cloud0310", email = "gh@touchingfish.day" },
+  { name = "Edward40", email = "sasuke688848@gmail.com" },
 ]
 dependencies = [
   "beautifulsoup4>=4.14.3",
   "datasets>=4.5.0",
   "lightning>=2.6.0",
+  "lxml>=6.0.2",
   "msgspec>=0.20.0",
   "onnx>=1.20.0",
   "onnxscript>=0.5.7",
@@ -20,8 +22,11 @@ dependencies = [
 
 [project.optional-dependencies]
 cpu = ["torch>=2.6.0", "torchvision"]
-cuda = [
-  "lxml>=6.0.2",
+cuda12 = [
+  "torch>=2.6.0 ; sys_platform != 'darwin'",
+  "torchvision ; sys_platform != 'darwin'"
+]
+cuda13 = [
   "torch>=2.6.0 ; sys_platform != 'darwin'",
   "torchvision ; sys_platform != 'darwin'"
 ]
@@ -63,11 +68,16 @@ dev = [
 search-path = ["./python"]
 
 [tool.uv]
-environments = ["sys_platform == 'darwin'", "sys_platform == 'linux'", "sys_platform == 'win32'"]
+environments = [
+  "sys_platform == 'darwin'",
+  "sys_platform == 'linux'",
+  "sys_platform == 'win32'"
+]
 conflicts = [
   [
     { extra = "cpu" },
-    { extra = "cuda" },
+    { extra = "cuda13" },
+    { extra = "cuda12" },
     { extra = "rocm" },
   ],
 ]
@@ -76,12 +86,14 @@ conflicts = [
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu12", extra = "cuda12", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu13", extra = "cuda13", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cuda", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu12", extra = "cuda12", marker = "platform_system != 'Darwin'" },
+  { index = "pytorch-cu13", extra = "cuda13", marker = "platform_system != 'Darwin'" },
   { index = "pytorch-rocm", extra = "rocm", marker = "platform_system == 'Linux'" },
 ]
 triton-rocm = [
@@ -94,8 +106,13 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu12"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu13"
+url = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 [[tool.uv.index]]
