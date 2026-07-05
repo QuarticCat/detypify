@@ -161,4 +161,14 @@ To view the training/test logs:
 uv run tensorboard --logdir ./build/train
 ```
 
+To run the test diagnostics for an existing checkpoint without retraining:
+
+```bash
+uv run --extra <accelerator> python/test.py --ckpt-path build/train/mobilenet_v4_035/version_0/ckpts/best-epoch=00-val_acc=0.0000.ckpt
+```
+
+This writes TensorBoard logs under `build/train/eval/existing_model/version_*`,
+including `test/confusion_matrix`, `test/top_false_predicted_labels`, and
+`test/top_false_predicted_label_examples`.
+
 See more tunable options with: `uv run python/train.py --help`
