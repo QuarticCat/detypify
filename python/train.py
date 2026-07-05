@@ -25,6 +25,7 @@ if __name__ == "__main__":
         warmup_epochs: int = typer.Option(3, help="Number of warmup epochs"),
         total_epochs: int = typer.Option(40, help="Total number of epochs"),
         learning_rate: float = typer.Option(0.002, help="Learning rate used when the LR finder is disabled"),
+        label_smoothing: float = typer.Option(0.0, help="Cross entropy label smoothing factor"),
         image_size: int = typer.Option(224, help="Image size (e.g., 128, 224, 256)"),
         find_batch_size: bool = typer.Option(False, help="Enable/Disable automatic batch size finding"),
         find_lr: bool = typer.Option(True, "--find-lr/--no-find-lr", help="Enable/Disable learning rate finder"),
@@ -63,6 +64,7 @@ if __name__ == "__main__":
             "warmup_epochs": warmup_epochs,
             "total_epochs": total_epochs,
             "learning_rate": learning_rate,
+            "label_smoothing": label_smoothing,
             "image_size": image_size,
             "find_batch_size": find_batch_size,
             "find_lr": find_lr,
@@ -120,6 +122,7 @@ if __name__ == "__main__":
                 total_epochs=total_epochs,
                 image_size=image_size,
                 learning_rate=learning_rate,
+                label_smoothing=label_smoothing,
                 use_compile=use_compile and not debug,
             )
             for model in models
@@ -222,25 +225,29 @@ if __name__ == "__main__":
                 batch_size = suggested_batch_size or init_batch_size
             logger.info("The final batch size is %s.", batch_size)
             if find_lr and not debug and not dev_run:
-                lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=1e-4, max_lr=1e-3)
+                min_lr = min(1e-4, learning_rate / 20)
+                max_lr = max(1e-3, learning_rate * 5)
+                lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=min_lr, max_lr=max_lr)
                 fig = lr_finder.plot(suggest=True)  # type: ignore
                 save_path = final_output_dir / f"lr_{batch_size}_{image_size}.svg"
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path)  # type: ignore
-                model.hparams.learning_rate = lr_finder.suggestion()  # type: ignore
+                suggested_lr = lr_finder.suggestion()
+                if suggested_lr is not None:
+                    model.learning_rate = suggested_lr
+                    model.hparams["learning_rate"] = suggested_lr
 
             current_args["final_batch_size"] = batch_size
-            lr = model.hparams.get("learning_rate")
-            if lr is not None:
-                current_args["suggested_learning_rate"] = lr
-                logger.info(f"The optimal learning rate is {lr}")
+            current_args["effective_learning_rate"] = model.learning_rate
+            logger.info("The effective learning rate is %s.", model.learning_rate)
 
             with train_args_path.open("wb") as f:
                 f.write(yaml.encode(current_args))
 
             # training
+            dm.batch_size = batch_size
             model.use_compile = use_compile and not debug
             trainer.fit(model, datamodule=dm)
-            trainer.test(model, datamodule=dm)
+            trainer.test(model, datamodule=dm, ckpt_path="best")
 
     app()
