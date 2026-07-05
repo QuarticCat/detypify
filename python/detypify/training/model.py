@@ -94,18 +94,21 @@ class BaseModel(LightningModule):
         total_epochs: int,
         warmup_epochs: int = 5,
         learning_rate: float = 4e-4,
+        label_smoothing: float = 0.0,
         *,
         use_compile: bool = False,
     ):
         super().__init__()
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.train_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.train_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.val_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.val_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.val_acc_top5 = Accuracy(task="multiclass", num_classes=num_classes, top_k=5)
         self.val_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.test_acc_top1 = Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         self.test_acc_top3 = Accuracy(task="multiclass", num_classes=num_classes, top_k=3)
+        self.test_acc_top5 = Accuracy(task="multiclass", num_classes=num_classes, top_k=5)
         self.test_f1_macro = F1Score(task="multiclass", num_classes=num_classes, average="macro")
         self.use_compile = use_compile
         self.learning_rate = learning_rate
@@ -141,6 +144,7 @@ class BaseModel(LightningModule):
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", self.val_acc_top1(pred, label), prog_bar=True)
         self.log("val_top3", self.val_acc_top3(pred, label))
+        self.log("val_top5", self.val_acc_top5(pred, label))
         self.log("val_f1", self.val_f1_macro(pred, label), prog_bar=True)
         return loss
 
@@ -150,8 +154,12 @@ class BaseModel(LightningModule):
         _check_image_input("test input", image)
         pred = self.forward(image)
         _check_finite("test logits", pred)
+        loss = self.criterion(pred, label)
+        _check_finite("test loss", loss)
+        self.log("test_loss", loss, prog_bar=True)
         self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
         self.log("test_top3", self.test_acc_top3(pred, label))
+        self.log("test_top5", self.test_acc_top5(pred, label))
         self.log("test_f1", self.test_f1_macro(pred, label), prog_bar=True)
         return pred
 
@@ -206,6 +214,7 @@ class MobileNetModel(BaseModel):
         image_size: int,
         warmup_epochs: int = 5,
         learning_rate: float = 0.002,
+        label_smoothing: float = 0.0,
         *,
         use_compile: bool = False,
     ):
@@ -215,6 +224,7 @@ class MobileNetModel(BaseModel):
             total_epochs=total_epochs,
             warmup_epochs=warmup_epochs,
             learning_rate=learning_rate,
+            label_smoothing=label_smoothing,
             use_compile=use_compile,
         )
         self.save_hyperparameters(
@@ -224,6 +234,7 @@ class MobileNetModel(BaseModel):
             "total_epochs",
             "image_size",
             "learning_rate",
+            "label_smoothing",
         )
         model = create_project_model(
             model_name,
