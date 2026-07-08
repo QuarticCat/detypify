@@ -22,6 +22,7 @@
     "types": "./dist/index.d.mts",
     "files": [
         "dist",
+        "train/*.json",
         "train/*.onnx"
     ],
     "scripts": {
