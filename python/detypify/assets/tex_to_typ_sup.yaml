@@ -156,7 +156,7 @@
 \dashrightarrow: arrow.r.dashed
 \lightning: arrow.zigzag
 \circ: compose
-\bowtie: join
+\bowtie: bowtie.stroked.big
 \MVAt: at
 \EUR: euro
 \blacksquare: qed
