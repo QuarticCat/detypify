@@ -1,5 +1,10 @@
 packages:
   - 'frontend/*'
+allowBuilds:
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  workerd: true
 overrides:
   brace-expansion@>=2.0.0 <3: 2.0.3
   brace-expansion@>=4.0.0 <6: 5.0.5

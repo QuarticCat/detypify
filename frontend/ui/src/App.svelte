@@ -10,7 +10,7 @@
     import { fade } from "svelte/transition";
 
     ortEnv.wasm.numThreads = 1;
-    ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+    ortEnv.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
 
     let activeHash = $state("#");
 

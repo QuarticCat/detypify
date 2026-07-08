@@ -31,10 +31,10 @@
         "prepare": "tsdown"
     },
     "dependencies": {
-        "onnxruntime-web": "^1.24.3"
+        "onnxruntime-web": "=1.27.0"
     },
     "devDependencies": {
-        "tsdown": "^0.21.4",
+        "tsdown": "^0.21.10",
         "typescript": "^5.9.3"
     }
 }
