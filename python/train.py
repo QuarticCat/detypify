@@ -206,7 +206,7 @@ if __name__ == "__main__":
                 save_path = final_output_dir / f"lr_{batch_size}_{args.image_size}.svg"
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path)  # type: ignore
-                suggested_lr = lr_finder.suggestion()
+                suggested_lr = lr_finder.suggestion()  # type: ignore
                 if suggested_lr is not None:
                     model.learning_rate = suggested_lr
                     model.hparams["learning_rate"] = suggested_lr
