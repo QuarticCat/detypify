@@ -39,18 +39,16 @@ _MOBILENET_V5_ARCH_DEF = [
 
 def create_project_model(model_name: str, **kwargs) -> nn.Module:
     model_spec = parse_mobilenet_model_name(model_name)
-    if model_spec.family == ModelFamily.v4:
-        from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
+    with set_layer_config(exportable=True):
+        if model_spec.family == ModelFamily.v4:
+            from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
 
-        with set_layer_config(exportable=True):
             return _gen_mobilenet_v4(
                 "mobilenetv4_conv_small",
                 channel_multiplier=model_spec.size,
                 aa_layer="blurpc",
                 **kwargs,
             )
-
-    with set_layer_config(exportable=True):
         return MobileNetV5(
             block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
             num_features=384,
@@ -62,6 +60,9 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
             layer_scale_init_value=1e-5,
             **kwargs,
         )
+
+    err_msg = f"Unsupported model family: {model_spec.family!r}"
+    raise AssertionError(err_msg)
 
 
 class BaseModel(LightningModule):
