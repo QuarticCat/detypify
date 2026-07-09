@@ -37,26 +37,6 @@ _MOBILENET_V5_ARCH_DEF = [
 ]
 
 
-def _check_finite(name: str, tensor: Tensor) -> None:
-    if torch.isfinite(tensor).all():
-        return
-    finite = tensor[torch.isfinite(tensor)]
-    if finite.numel() == 0:
-        msg = f"{name} contains no finite values."
-    else:
-        msg = f"{name} contains non-finite values. finite_min={finite.min().item()}, finite_max={finite.max().item()}"
-    raise FloatingPointError(msg)
-
-
-def _check_image_input(name: str, image: Tensor) -> None:
-    _check_finite(name, image)
-    image_min = image.min().item()
-    image_max = image.max().item()
-    if image_min < _IMAGE_MIN or image_max > _IMAGE_MAX:
-        msg = f"{name} is outside [0, 1]. min={image_min}, max={image_max}, dtype={image.dtype}"
-        raise ValueError(msg)
-
-
 def create_project_model(model_name: str, **kwargs) -> nn.Module:
     model_spec = parse_mobilenet_model_name(model_name)
     if model_spec.family == ModelFamily.v4:
@@ -123,11 +103,8 @@ class BaseModel(LightningModule):
     @override
     def training_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
-        _check_image_input("train input", image)
         pred = self.forward(image)
-        _check_finite("train logits", pred)
         loss = self.criterion(pred, label)
-        _check_finite("train loss", loss)
         self.log("train_loss", loss)
         self.log("train_acc", self.train_acc_top1(pred, label))
         self.log("train_f1", self.train_f1_macro(pred, label))
@@ -136,11 +113,8 @@ class BaseModel(LightningModule):
     @override
     def validation_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
-        _check_image_input("validation input", image)
         pred = self.forward(image)
-        _check_finite("validation logits", pred)
         loss = self.criterion(pred, label)
-        _check_finite("validation loss", loss)
         self.log("val_loss", loss, prog_bar=True)
         self.log("val_acc", self.val_acc_top1(pred, label), prog_bar=True)
         self.log("val_top3", self.val_acc_top3(pred, label))
@@ -151,11 +125,8 @@ class BaseModel(LightningModule):
     @override
     def test_step(self, batch, batch_idx=0):
         image, label = batch["image"], batch["label"]
-        _check_image_input("test input", image)
         pred = self.forward(image)
-        _check_finite("test logits", pred)
         loss = self.criterion(pred, label)
-        _check_finite("test loss", loss)
         self.log("test_loss", loss, prog_bar=True)
         self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
         self.log("test_top3", self.test_acc_top3(pred, label))
