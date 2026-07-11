@@ -439,8 +439,6 @@ class EMAWeightAveraging(WeightAveraging):
         update_every_n_steps: Update the EMA model every N optimizer steps. Default 1.
         update_starting_at_step: Start updates after this step index (0-based).
             If None, starts immediately.
-        update_starting_at_epoch: Start updates after this epoch index (0-based).
-            If None, epoch-based control is disabled.
 
     Note:
         Like WeightAveraging, this callback doesn't support sharded models and may
@@ -456,7 +454,6 @@ class EMAWeightAveraging(WeightAveraging):
         warmup_power: float = 3 / 4,
         update_every_n_steps: int = 1,
         update_starting_at_step: int | None = None,
-        update_starting_at_epoch: int | None = None,
         *,
         use_buffers: bool = True,
         use_warmup: bool = True,
@@ -471,7 +468,6 @@ class EMAWeightAveraging(WeightAveraging):
         )
         self.update_every_n_steps = update_every_n_steps
         self.update_starting_at_step = update_starting_at_step
-        self.update_starting_at_epoch = update_starting_at_epoch
 
     @override
     def should_update(self, step_idx: int | None = None, epoch_idx: int | None = None) -> bool:
@@ -484,22 +480,13 @@ class EMAWeightAveraging(WeightAveraging):
             bool: True if the model weights should be updated, False otherwise.
 
         """
-        if step_idx is not None:
-            # Check step-based conditions only if we have a valid step_idx
-            meets_step_requirement = self.update_starting_at_step is None or step_idx >= self.update_starting_at_step
-            meets_step_frequency = self.update_every_n_steps > 0 and step_idx % self.update_every_n_steps == 0
-            if meets_step_requirement and meets_step_frequency:
-                return True
-
-        if epoch_idx is not None:
-            # Check epoch-based condition only if we specify one
-            meets_epoch_requirement = (
-                self.update_starting_at_epoch is not None and epoch_idx >= self.update_starting_at_epoch
-            )
-            if meets_epoch_requirement:
-                return True
-
-        return False
+        return (
+            step_idx is not None
+            and epoch_idx is None
+            and (self.update_starting_at_step is None or step_idx >= self.update_starting_at_step)
+            and self.update_every_n_steps > 0
+            and step_idx % self.update_every_n_steps == 0
+        )
 
 
 class ExportBestModelToONNX(Callback):
