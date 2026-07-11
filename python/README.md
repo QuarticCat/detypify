@@ -34,7 +34,7 @@ uv sync
 If you're interested in processing data:
 
 ```bash
-uv sync --extra data
+uv sync
 ```
 
 ### Data Preprocessing
@@ -52,13 +52,13 @@ Generated frontend metadata is written to `build/generated`:
 To generate frontend inference metadata:
 
 ```bash
-uv run --extra data python/proc_data.py --gen-metadata
+uv run python/proc_data.py --gen-metadata
 ```
 
 To compose the raw dataset (Detexify + MathWriting) and upload it to Hugging Face:
 
 ```bash
-uv run --extra data python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting
+uv run python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting
 ```
 
 The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
@@ -66,7 +66,7 @@ The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
 To include the contributed dataset in the raw upload, first review D1 samples:
 
 ```bash
-uv run --extra data python/review_contrib.py
+uv run python/review_contrib.py
 ```
 
 The review command reads the fetched D1 dump from `build/raw/contrib/dataset.json`,
@@ -75,13 +75,13 @@ renders images into `build/review/contrib`, and writes accepted samples to
 when `--datasets contrib` is present:
 
 ```bash
-uv run --extra data python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting --datasets contrib
+uv run python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting --datasets contrib
 ```
 
 To print the digest used by CI to detect effective LaTeX-to-Typst mapping changes:
 
 ```bash
-uv run --extra data python/proc_data.py --print-tex-typ-map-digest
+uv run python/proc_data.py --print-tex-typ-map-digest
 ```
 
 To browse mapped dataset samples locally, including truth labels, source, sample
@@ -98,7 +98,7 @@ The browser is served at `http://127.0.0.1:8000` by default. Use
 See more options with:
 
 ```bash
-uv run --extra data python/proc_data.py --help
+uv run python/proc_data.py --help
 ```
 
 ### Model Training
