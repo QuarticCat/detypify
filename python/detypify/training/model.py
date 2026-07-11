@@ -211,6 +211,7 @@ class MobileNetModel(BaseModel):
 
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)
-        if self.use_compile and self.model_opt is not None:
-            return self.model_opt(x)
+        if self.use_compile and not self._model_is_compiled:
+            self.model.compile(mode="max-autotune", dynamic=False)
+            self._model_is_compiled = True
         return self.model(x)
