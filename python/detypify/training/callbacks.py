@@ -201,10 +201,7 @@ class LogTestConfusionCallback(Callback):
         labels_cpu = label.detach().to("cpu", dtype=torch.int64)
         preds_cpu = preds.detach().to("cpu", dtype=torch.int64)
         valid_mask = (
-            (labels_cpu >= 0)
-            & (labels_cpu < len(self.classes))
-            & (preds_cpu >= 0)
-            & (preds_cpu < len(self.classes))
+            (labels_cpu >= 0) & (labels_cpu < len(self.classes)) & (preds_cpu >= 0) & (preds_cpu < len(self.classes))
         )
         if not valid_mask.any():
             return

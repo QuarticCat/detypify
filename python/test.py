@@ -22,8 +22,9 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 def main(
     *,
     ckpt_path: Annotated[Path, typer.Option("--ckpt-path", "-c", help="Checkpoint path to evaluate.")],
-    out_dir: Annotated[Path, typer.Option("--out-dir", help="TensorBoard output directory.")] = DEFAULT_DATA_PATHS.train_dir
-    / "eval",
+    out_dir: Annotated[
+        Path, typer.Option("--out-dir", help="TensorBoard output directory.")
+    ] = DEFAULT_DATA_PATHS.train_dir / "eval",
     run_name: Annotated[str, typer.Option("--run-name", help="TensorBoard run name.")] = "existing_model",
     datasets: Annotated[
         list[DataSetName] | None,
@@ -34,9 +35,15 @@ def main(
         int | None,
         typer.Option("--image-size", help="Override image size. Defaults to the checkpoint hparams image_size."),
     ] = None,
-    num_workers: Annotated[int | None, typer.Option("--num-workers", help="DataLoader and dataset mapping workers.")] = None,
-    max_samples: Annotated[int | None, typer.Option("--max-samples", help="Limit samples for a quick test run.")] = None,
-    amp_precision: Annotated[str, typer.Option("--amp-precision", help="Precision: 64, 32, 16-mixed, bf16-mixed.")] = "32-true",
+    num_workers: Annotated[
+        int | None, typer.Option("--num-workers", help="DataLoader and dataset mapping workers.")
+    ] = None,
+    max_samples: Annotated[
+        int | None, typer.Option("--max-samples", help="Limit samples for a quick test run.")
+    ] = None,
+    amp_precision: Annotated[
+        str, typer.Option("--amp-precision", help="Precision: 64, 32, 16-mixed, bf16-mixed.")
+    ] = "32-true",
     log_predictions: Annotated[
         bool,
         typer.Option("--log-predictions/--no-log-predictions", help="Log prediction image grids."),
