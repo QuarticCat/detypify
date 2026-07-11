@@ -32,7 +32,6 @@ if __name__ == "__main__":
         num_workers: int | None = typer.Option(None, help="Number of DataLoader and dataset mapping workers"),
         use_ema: bool = typer.Option(True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
-        ema_start_epoch: int = typer.Option(5, help="Epoch to start EMA"),
         ema_warmup: bool = typer.Option(True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."),
         ema_warmup_gamma: float = typer.Option(25.0, help="EMA warmup gamma."),
         ema_warmup_power: float = typer.Option(0.7, help="EMA warmup power."),
@@ -71,7 +70,6 @@ if __name__ == "__main__":
             "num_workers": num_workers,
             "use_ema": use_ema,
             "ema_decay": ema_decay,
-            "ema_start_epoch": ema_start_epoch,
             "ema_warmup": ema_warmup,
             "ema_warmup_gamma": ema_warmup_gamma,
             "ema_warmup_power": ema_warmup_power,
@@ -172,7 +170,6 @@ if __name__ == "__main__":
                 callbacks.append(
                     EMAWeightAveraging(
                         decay=ema_decay,
-                        update_starting_at_epoch=ema_start_epoch,
                         use_warmup=ema_warmup,
                         warmup_gamma=ema_warmup_gamma,
                         warmup_power=ema_warmup_power,
