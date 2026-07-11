@@ -152,7 +152,6 @@ The script will:
 - `--find-batch-size`: Enable Lightning batch-size scaling.
 - `--no-find-lr`: Skip Lightning learning-rate finder before training.
 - `--num-workers`: Override DataLoader and dataset mapping worker count.
-- `--ema-start-epoch`: Epoch to start EMA (default: 5).
 - `--log-pred`: Enable logging of predictions (default: True).
 
 To view the training/test logs:
