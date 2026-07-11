@@ -61,19 +61,18 @@ class LogPredictCallback(Callback):
 
         # Select the requested outcomes before converting images back to display-friendly uint8.
         if self.log_type == "wrong":
-            mask = preds != label
+            selected_indices = (preds != label).nonzero(as_tuple=True)[0][:16]
         elif self.log_type == "right":
-            mask = preds == label
+            selected_indices = (preds == label).nonzero(as_tuple=True)[0][:16]
         else:
-            mask = torch.ones_like(label, dtype=torch.bool)
+            selected_indices = torch.arange(min(label.numel(), 16), device=label.device)
 
-        if not mask.any():
+        if selected_indices.numel() == 0:
             return
 
-        selected_images: Tensor = image[mask] * 255
-        selected_images = selected_images.to(dtype=torch.uint8)
-        selected_preds = preds[mask]
-        true_labels = label[mask]
+        selected_images: Tensor = (image[selected_indices] * 255).to(dtype=torch.uint8, device="cpu")
+        selected_preds = preds[selected_indices].to(device="cpu")
+        true_labels = label[selected_indices].to(device="cpu")
 
         # Bound figure size independently of the evaluation batch size.
         num_to_log = min(len(selected_images), 16)
@@ -154,7 +153,8 @@ class LogTestConfusionCallback(Callback):
         import torch
 
         num_classes = len(self.classes)
-        self.confusion_matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64)
+        matrix_device = pl_module.device if pl_module.device.type == "cuda" else "cpu"
+        self.confusion_matrix = torch.zeros((num_classes, num_classes), dtype=torch.int64, device=matrix_device)
         self.false_pred_examples: dict[int, list[tuple[Tensor, int, int]]] = {}
 
     @override
@@ -178,41 +178,55 @@ class LogTestConfusionCallback(Callback):
 
         pred_logits = outputs
         image, label = batch["image"], batch["label"]
-        preds = torch.argmax(pred_logits, dim=1)
+        preds = torch.argmax(pred_logits, dim=1).detach()
 
-        labels_cpu = label.detach().to("cpu", dtype=torch.int64)
-        preds_cpu = preds.detach().to("cpu", dtype=torch.int64)
+        matrix_device = self.confusion_matrix.device
+        matrix_labels = label.detach().to(device=matrix_device, dtype=torch.int64)
+        matrix_preds = preds.to(device=matrix_device, dtype=torch.int64)
         valid_mask = (
-            (labels_cpu >= 0) & (labels_cpu < len(self.classes)) & (preds_cpu >= 0) & (preds_cpu < len(self.classes))
+            (matrix_labels >= 0)
+            & (matrix_labels < len(self.classes))
+            & (matrix_preds >= 0)
+            & (matrix_preds < len(self.classes))
         )
         if not valid_mask.any():
             return
 
-        labels_cpu = labels_cpu[valid_mask]
-        preds_cpu = preds_cpu[valid_mask]
+        matrix_labels = matrix_labels[valid_mask]
+        valid_preds = matrix_preds[valid_mask]
         # Encode (truth, prediction) pairs as flat indices for one vectorized histogram update.
         num_classes = len(self.classes)
-        flat_indices = labels_cpu * num_classes + preds_cpu
+        flat_indices = matrix_labels * num_classes + valid_preds
         batch_confusion = torch.bincount(flat_indices, minlength=num_classes * num_classes)
         self.confusion_matrix += batch_confusion.reshape(num_classes, num_classes)
 
-        wrong_mask = preds != label
-        if not wrong_mask.any():
+        wrong_indices = (preds != label).nonzero(as_tuple=True)[0]
+        if wrong_indices.numel() == 0:
             return
 
-        wrong_images = (image[wrong_mask].detach().to("cpu") * 255).to(dtype=torch.uint8)
-        wrong_preds = preds[wrong_mask].detach().to("cpu", dtype=torch.int64)
-        wrong_labels = label[wrong_mask].detach().to("cpu", dtype=torch.int64)
+        selected_offsets = []
+        pending_counts: dict[int, int] = {}
+        for offset, pred_idx in enumerate(preds[wrong_indices].to(device="cpu").tolist()):
+            if not 0 <= pred_idx < len(self.classes):
+                continue
+            stored = len(self.false_pred_examples.get(pred_idx, ()))
+            if stored + pending_counts.get(pred_idx, 0) < self.examples_per_label:
+                selected_offsets.append(offset)
+                pending_counts[pred_idx] = pending_counts.get(pred_idx, 0) + 1
+
+        if not selected_offsets:
+            return
+
+        selected_indices = wrong_indices[wrong_indices.new_tensor(selected_offsets)]
+        wrong_images = (image[selected_indices].detach() * 255).to(device="cpu", dtype=torch.uint8)
+        wrong_preds = preds[selected_indices].to(device="cpu")
+        wrong_labels = label[selected_indices].detach().to(device="cpu", dtype=torch.int64)
 
         # Retain only a small example set per predicted class while counts continue over the full epoch.
         for img, pred_idx, true_idx in zip(wrong_images, wrong_preds, wrong_labels, strict=True):
             pred_label_idx = int(pred_idx.item())
-            if pred_label_idx < 0 or pred_label_idx >= len(self.classes):
-                continue
-
             examples = self.false_pred_examples.setdefault(pred_label_idx, [])
-            if len(examples) < self.examples_per_label:
-                examples.append((img, int(true_idx.item()), pred_label_idx))
+            examples.append((img, int(true_idx.item()), pred_label_idx))
 
     @override
     def on_test_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
@@ -232,7 +246,7 @@ class LogTestConfusionCallback(Callback):
         import matplotlib.pyplot as plt
 
         tensorboard = trainer.logger.experiment
-        confusion = self.confusion_matrix
+        confusion = self.confusion_matrix.to(device="cpu")
 
         # Rank columns by false predictions to expose labels the model over-predicts most often.
         false_by_pred = confusion.sum(dim=0) - confusion.diag()
