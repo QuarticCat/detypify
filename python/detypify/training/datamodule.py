@@ -38,12 +38,12 @@ class MathSymbolDataModule(LightningDataModule):
         self.train_transform = v2.Compose(
             [
                 v2.ToImage(),
+                v2.ToDtype(dtype=t_float32, scale=True),
                 v2.RandomAffine(
                     degrees=10,  # type: ignore[arg-type]
                     translate=(0.1, 0.1),
                     shear=10,
                 ),
-                v2.ToDtype(dtype=t_float32, scale=True),
             ]
         )
 
