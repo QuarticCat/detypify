@@ -8,14 +8,10 @@
         <link rel="preload" href="/NewCMMath-Detypify.woff2" as="font" type="font/woff2" crossorigin />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-        <link
-            rel="modulepreload"
-            href="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort-wasm-simd-threaded.mjs"
-            crossorigin
-        />
+        <link rel="modulepreload" href="%VITE_ORT_DIST_URL%ort-wasm-simd-threaded.mjs" crossorigin />
         <link
             rel="preload"
-            href="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort-wasm-simd-threaded.wasm"
+            href="%VITE_ORT_DIST_URL%ort-wasm-simd-threaded.wasm"
             as="fetch"
             type="application/wasm"
             crossorigin
