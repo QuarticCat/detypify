@@ -16,7 +16,7 @@
             type="application/wasm"
             crossorigin
         />
-        <!-- TODO: The ONNX file is not preloaded. -->
+        <link rel="preload" href="../service/train/model.onnx" as="fetch" crossorigin />
     </head>
     <body class="bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100">
         <div id="app"></div>
