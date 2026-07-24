@@ -5,13 +5,21 @@ from __future__ import annotations
 import base64
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import cv2
 import numpy as np
 from detypify.config import DataSetName
 from detypify.data.datasets import map_raw_dataset
+from detypify.data.paths import DEFAULT_DATA_PATHS
 from detypify.data.rendering import rasterize_strokes
+from detypify.data.synthetic import SyntheticSettings, get_synthetic_dataset_splits
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from datasets import Dataset
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -29,13 +37,17 @@ def _int_param(params: dict[str, list[str]], name: str, default: int, minimum: i
     return max(minimum, min(maximum, value))
 
 
-def _image_data_url(strokes: list, image_size: int) -> str:
-    image = np.asarray(rasterize_strokes(strokes, image_size), dtype=np.uint8)
+def _array_image_data_url(image: np.ndarray) -> str:
     ok, encoded = cv2.imencode(".png", image)
     if not ok:
         msg = "Failed to encode rendered sample as PNG"
         raise RuntimeError(msg)
     return "data:image/png;base64," + base64.b64encode(encoded).decode("ascii")
+
+
+def _image_data_url(strokes: list, image_size: int) -> str:
+    image = np.asarray(rasterize_strokes(strokes, image_size), dtype=np.uint8)
+    return _array_image_data_url(image)
 
 
 def _page_options(current: int) -> str:
@@ -52,14 +64,35 @@ class DatasetPreviewServer:
         image_size: int,
         default_page_size: int,
         num_proc: int | None,
+        *,
+        synthetic: bool = False,
+        synthetic_settings: SyntheticSettings | None = None,
+        synthetic_font: Path = DEFAULT_DATA_PATHS.math_font,
     ) -> None:
-        self.dataset, _ = map_raw_dataset(dataset_names, num_proc=num_proc)
+        self.synthetic = synthetic
+        self.synthetic_fingerprint: str | None = None
+        self.dataset: Dataset
+        if synthetic:
+            settings = synthetic_settings or SyntheticSettings(image_size=image_size)
+            splits, self.classes, self.synthetic_fingerprint = get_synthetic_dataset_splits(
+                dataset_names,
+                settings,
+                synthetic_font,
+                num_proc=num_proc,
+            )
+            self.dataset = splits["train"].with_format(None)
+        else:
+            self.dataset, _ = map_raw_dataset(dataset_names, num_proc=num_proc)
+            self.classes = sorted(self.dataset.unique("label"))
         self.image_size = image_size
         self.default_page_size = default_page_size
-        self.classes = sorted(self.dataset.unique("label"))
         self.class_to_index = {label: index for index, label in enumerate(self.classes)}
-        self.search_labels = [str(label).lower() for label in self.dataset["label"]]
-        self.search_sources = [str(source).lower() for source in self.dataset["source"]]
+        if synthetic:
+            self.search_labels = [self.classes[int(label)].lower() for label in self.dataset["label"]]
+            self.search_sources = [str(source).lower() for source in self.dataset["synthetic_source"]]
+        else:
+            self.search_labels = [str(label).lower() for label in self.dataset["label"]]
+            self.search_sources = [str(source).lower() for source in self.dataset["source"]]
         self.filter_cache: dict[str, tuple[int, ...]] = {}
 
     def filtered_indices(self, query: str) -> tuple[int, ...]:
@@ -93,14 +126,21 @@ class DatasetPreviewServer:
         start = (page - 1) * page_size
         end = min(total, start + page_size)
         page_indices = filtered_indices[start:end]
-        rows = self.dataset.select(page_indices) if page_indices else []
+        selected = cast("Dataset", self.dataset.select(page_indices)) if page_indices else None
+        rows = cast("list[dict[str, Any]]", selected.to_list()) if selected is not None else []
 
         cards = []
         for sample_index, row in zip(page_indices, rows, strict=True):
-            label = str(row["label"])
-            source = str(row["source"])
-            label_index = self.class_to_index[label]
-            data_url = _image_data_url(row["strokes"], self.image_size)
+            if self.synthetic:
+                label_index = int(row["label"])
+                label = self.classes[label_index]
+                source = str(row["synthetic_source"])
+                data_url = _array_image_data_url(np.asarray(row["image"], dtype=np.uint8))
+            else:
+                label = str(row["label"])
+                source = str(row["source"])
+                label_index = self.class_to_index[label]
+                data_url = _image_data_url(row["strokes"], self.image_size)
             cards.append(
                 f"""
                 <article class="card">
@@ -118,6 +158,8 @@ class DatasetPreviewServer:
         next_page = min(total_pages, page + 1)
         query_arg = f"&q={quote_plus(query)}" if query else ""
         summary = f"{len(self.dataset):,} samples, {len(self.classes):,} classes"
+        if self.synthetic_fingerprint:
+            summary += f", cache {self.synthetic_fingerprint[:10]}"
         if query:
             summary += f", {total:,} matches"
         elif total:
@@ -199,12 +241,19 @@ def serve_dataset_preview(
     image_size: int = DEFAULT_IMAGE_SIZE,
     page_size: int = DEFAULT_PAGE_SIZE,
     num_proc: int | None = 1,
+    *,
+    synthetic: bool = False,
+    synthetic_settings: SyntheticSettings | None = None,
+    synthetic_font: Path = DEFAULT_DATA_PATHS.math_font,
 ) -> None:
     preview = DatasetPreviewServer(
         dataset_names=dataset_names,
         image_size=image_size,
         default_page_size=page_size,
         num_proc=num_proc,
+        synthetic=synthetic,
+        synthetic_settings=synthetic_settings,
+        synthetic_font=synthetic_font,
     )
     server = ThreadingHTTPServer((host, port), preview.handler_class())
     print(f"Serving dataset preview at http://{host}:{port}")  # noqa: T201

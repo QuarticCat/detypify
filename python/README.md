@@ -101,6 +101,48 @@ See more options with:
 uv run python/proc_data.py --help
 ```
 
+### Synthetic Training Data
+
+Synthetic mode uses a deterministic 50/50 mix of deformed handwriting strokes
+and distorted font glyphs. It trains on generated images only while keeping
+validation and test splits as untouched real handwriting. Existing real-data
+training remains the default.
+
+Install New Computer Modern Math at:
+
+```text
+external/fonts/NewCMMath-Regular.otf
+```
+
+You can instead pass another OpenType math font with `--synthetic-font`. The
+font contents, source dataset, Typst mapping, split seed, and generator settings
+are included in the cache fingerprint.
+
+Generate the default 500 samples per class at 224px:
+
+```bash
+uv run --extra cpu python/proc_data.py --gen-synthetic
+```
+
+Inspect the generated cache in the local browser:
+
+```bash
+uv run --extra cpu python/proc_data.py --preview-synthetic
+```
+
+Train exclusively on the synthetic training split and evaluate on real
+validation/test samples:
+
+```bash
+uv run --extra <accelerator> python/train.py --training-data synthetic
+```
+
+Useful overrides are `--synthetic-samples-per-class`, `--synthetic-image-size`
+(preprocessing), `--image-size` (training), `--synthetic-seed`, and
+`--synthetic-font`. Preprocessing and training settings must use the same image
+size to reuse the same cache. Generated datasets remain local under
+`build/datasets/synthetic/<fingerprint>` and are never uploaded.
+
 ### Model Training
 
 >[!NOTE]

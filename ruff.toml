@@ -653,5 +653,8 @@ extend-select = [
   "YTT303",
 ]
 
+[lint.per-file-ignores]
+"python/tests/*" = ["PLC2701", "PLR2004", "S101"]
+
 [lint.pydocstyle]
 convention = "google"

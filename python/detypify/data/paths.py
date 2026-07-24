@@ -56,6 +56,10 @@ class DataPaths:
         return self.dataset_artifacts_dir / "raw" / "data.parquet"
 
     @property
+    def synthetic_datasets_dir(self) -> Path:
+        return self.dataset_artifacts_dir / "synthetic"
+
+    @property
     def review_dir(self) -> Path:
         return self.build_dir / "review"
 

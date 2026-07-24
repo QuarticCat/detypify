@@ -1,7 +1,13 @@
 from detypify.types import Strokes
 
 
-def rasterize_strokes(strokes: Strokes, output_size: int):
+def rasterize_strokes(
+    strokes: Strokes,
+    output_size: int,
+    *,
+    padding_ratio: float = 0.04,
+    thickness_scale: float = 1.0,
+):
     """Normalize vector strokes and rasterize them into a uint8 image."""
     import cv2
     import numpy as np
@@ -16,7 +22,7 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     all_points = np.vstack(stroke_arrays)
     min_x, min_y = all_points.min(axis=0)
     max_x, max_y = all_points.max(axis=0)
-    padding = max(1, round(output_size * 0.04))
+    padding = max(1, round(output_size * padding_ratio))
     target_size = max(1, output_size - (2 * padding))
 
     width = max(max_x - min_x, max_y - min_y)
@@ -30,10 +36,20 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     lengths = [len(a) for a in stroke_arrays]
     split_indices = np.cumsum(lengths)[:-1]
     normalized_strokes = np.split(all_points.astype(np.int32), split_indices)
-    normalized_strokes = [stroke for stroke in normalized_strokes if len(stroke) > 1]
 
     canvas = np.zeros((output_size, output_size), dtype=np.uint8)
-    if normalized_strokes:
-        thickness = max(1, output_size // 25)
-        cv2.polylines(canvas, normalized_strokes, isClosed=False, color=255, thickness=thickness, lineType=cv2.LINE_AA)
+    thickness = max(1, round((output_size // 25) * thickness_scale))
+    line_strokes = [stroke for stroke in normalized_strokes if len(stroke) > 1]
+    if line_strokes:
+        cv2.polylines(canvas, line_strokes, isClosed=False, color=255, thickness=thickness, lineType=cv2.LINE_AA)
+    for stroke in normalized_strokes:
+        if len(stroke) == 1:
+            cv2.circle(
+                canvas,
+                center=tuple(int(value) for value in stroke[0]),
+                radius=max(1, thickness // 2),
+                color=255,
+                thickness=-1,
+                lineType=cv2.LINE_AA,
+            )
     return canvas

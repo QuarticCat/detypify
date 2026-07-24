@@ -2,7 +2,7 @@
 
 from os import process_cpu_count
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from detypify.config import DataSetName
@@ -14,6 +14,9 @@ from detypify.training.model import MobileNetModel
 from lightning import Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
 from torch.cuda import is_bf16_supported
+
+if TYPE_CHECKING:
+    from lightning.pytorch import Callback
 
 app = typer.Typer(pretty_exceptions_show_locals=False)
 
@@ -83,7 +86,7 @@ def main(
         num_workers=data_num_workers,
     )
 
-    callbacks = [
+    callbacks: list[Callback] = [
         LogTestConfusionCallback(
             classes,
             top_k_false_predicted_labels=top_false_labels,

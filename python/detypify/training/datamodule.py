@@ -1,9 +1,16 @@
 from os import process_cpu_count
+from pathlib import Path
 from typing import override
 
-from detypify.config import DataSetName
-from detypify.data.datasets import get_rendered_dataset_splits, load_raw_dataset
+from detypify.config import DataSetName, TrainingDataMode
+from detypify.data.datasets import DETERMINISTIC_SPLIT_SEED, get_rendered_dataset_splits, load_raw_dataset
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
+from detypify.data.synthetic import (
+    SyntheticSettings,
+    get_synthetic_dataset_splits,
+    prepare_synthetic_training_dataset,
+    validate_synthetic_font,
+)
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
@@ -17,6 +24,10 @@ class MathSymbolDataModule(LightningDataModule):
         dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
         paths: DataPaths = DEFAULT_DATA_PATHS,
         max_samples: int | None = None,
+        training_data: TrainingDataMode = TrainingDataMode.real,
+        synthetic_samples_per_class: int = 500,
+        synthetic_seed: int = DETERMINISTIC_SPLIT_SEED,
+        synthetic_font: Path | None = None,
     ):
         from torch import float32 as t_float32
         from torchvision.transforms import v2
@@ -28,6 +39,14 @@ class MathSymbolDataModule(LightningDataModule):
         self.dataset_names = dataset_names
         self.paths = paths
         self.max_samples = max_samples
+        self.training_data = training_data
+        self.synthetic_settings = SyntheticSettings(
+            image_size=image_size,
+            samples_per_class=synthetic_samples_per_class,
+            seed=synthetic_seed,
+        )
+        self.synthetic_font = synthetic_font or paths.math_font
+        self.synthetic_cache_fingerprint: str | None = None
         self.classes: list[str] = []
 
         self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
@@ -45,17 +64,38 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def prepare_data(self):
+        if self.training_data is TrainingDataMode.synthetic:
+            validate_synthetic_font(self.synthetic_font)
         load_raw_dataset(self.dataset_names, self.paths)
+        if self.training_data is TrainingDataMode.synthetic:
+            _, _, self.synthetic_cache_fingerprint = prepare_synthetic_training_dataset(
+                self.dataset_names,
+                self.synthetic_settings,
+                self.synthetic_font,
+                num_proc=self.num_workers,
+                paths=self.paths,
+                max_samples=self.max_samples,
+            )
 
     @override
     def setup(self, stage: str | None = None):
-        dataset, self.classes = get_rendered_dataset_splits(
-            self.dataset_names,
-            self.image_size,
-            num_proc=self.num_workers,
-            paths=self.paths,
-            max_samples=self.max_samples,
-        )
+        if self.training_data is TrainingDataMode.synthetic:
+            dataset, self.classes, self.synthetic_cache_fingerprint = get_synthetic_dataset_splits(
+                self.dataset_names,
+                self.synthetic_settings,
+                self.synthetic_font,
+                num_proc=self.num_workers,
+                paths=self.paths,
+                max_samples=self.max_samples,
+            )
+        else:
+            dataset, self.classes = get_rendered_dataset_splits(
+                self.dataset_names,
+                self.image_size,
+                num_proc=self.num_workers,
+                paths=self.paths,
+                max_samples=self.max_samples,
+            )
 
         if stage == "fit" or stage is None:
             self.train_dataset = dataset["train"]

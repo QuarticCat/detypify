@@ -2,8 +2,11 @@
 
 import logging
 from os import process_cpu_count
+from pathlib import Path
 
 import typer
+from detypify.config import TrainingDataMode
+from detypify.data.datasets import DETERMINISTIC_SPLIT_SEED
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
@@ -30,6 +33,19 @@ if __name__ == "__main__":
         find_batch_size: bool = typer.Option(False, help="Enable/Disable automatic batch size finding"),
         find_lr: bool = typer.Option(True, "--find-lr/--no-find-lr", help="Enable/Disable learning rate finder"),
         num_workers: int | None = typer.Option(None, help="Number of DataLoader and dataset mapping workers"),
+        training_data: TrainingDataMode = typer.Option(  # noqa: B008
+            TrainingDataMode.real,
+            help="Training data source. Synthetic mode keeps validation and test data real.",
+        ),
+        synthetic_samples_per_class: int = typer.Option(500, min=1, help="Synthetic training samples per class."),
+        synthetic_seed: int = typer.Option(
+            DETERMINISTIC_SPLIT_SEED,
+            help="Global seed for deterministic synthetic generation.",
+        ),
+        synthetic_font: Path = typer.Option(  # noqa: B008
+            DEFAULT_DATA_PATHS.math_font,
+            help="OpenType math font used for glyph-derived synthetic samples.",
+        ),
         use_ema: bool = typer.Option(True, "--ema/--no-ema", help="Enable/Disable EMA weight averaging"),
         ema_decay: float = typer.Option(0.995, help="EMA decay rate"),
         ema_warmup: bool = typer.Option(True, "--ema-warmup/--no-ema-warmup", help="Enable/Disable EMA warmup."),
@@ -68,6 +84,10 @@ if __name__ == "__main__":
             "find_batch_size": find_batch_size,
             "find_lr": find_lr,
             "num_workers": num_workers,
+            "training_data": training_data.value,
+            "synthetic_samples_per_class": synthetic_samples_per_class,
+            "synthetic_seed": synthetic_seed,
+            "synthetic_font": str(synthetic_font),
             "use_ema": use_ema,
             "ema_decay": ema_decay,
             "ema_warmup": ema_warmup,
@@ -79,10 +99,9 @@ if __name__ == "__main__":
         }
 
         # Lazy import
-        from pathlib import Path
-
         from detypify.config import DataSetName
         from detypify.data.datasets import get_dataset_classes
+        from detypify.data.synthetic import validate_synthetic_font
         from detypify.training.datamodule import MathSymbolDataModule
         from detypify.training.model import MobileNetModel
         from lightning import Trainer
@@ -96,6 +115,8 @@ if __name__ == "__main__":
         out_dir_path = Path(out_dir)
 
         dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
+        if training_data is TrainingDataMode.synthetic:
+            validate_synthetic_font(synthetic_font)
         is_debug_dev_run = debug and dev_run
         dev_max_samples = 2048 if is_debug_dev_run else None
         data_num_workers = 0 if is_debug_dev_run else num_workers or process_cpu_count() or 1
@@ -133,7 +154,14 @@ if __name__ == "__main__":
             dataset_names=dataset_names,
             max_samples=dev_max_samples,
             num_workers=data_num_workers,
+            training_data=training_data,
+            synthetic_samples_per_class=synthetic_samples_per_class,
+            synthetic_seed=synthetic_seed,
+            synthetic_font=synthetic_font,
         )
+        if training_data is TrainingDataMode.synthetic:
+            dm.prepare_data()
+            args_dict["synthetic_cache_fingerprint"] = dm.synthetic_cache_fingerprint
 
         for model in model_instances:
             model_name_str = model.model_name
@@ -229,7 +257,7 @@ if __name__ == "__main__":
                 save_path = final_output_dir / f"lr_{batch_size}_{image_size}.svg"
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path)  # type: ignore
-                suggested_lr = lr_finder.suggestion()
+                suggested_lr = lr_finder.suggestion() if lr_finder is not None else None
                 if suggested_lr is not None:
                     model.learning_rate = suggested_lr
                     model.hparams["learning_rate"] = suggested_lr
@@ -245,6 +273,6 @@ if __name__ == "__main__":
             dm.batch_size = batch_size
             model.use_compile = use_compile and not debug
             trainer.fit(model, datamodule=dm)
-            trainer.test(model, datamodule=dm, ckpt_path="best")
+            trainer.test(model, datamodule=dm, ckpt_path=None if is_debug_dev_run else "best")
 
     app()

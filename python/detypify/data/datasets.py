@@ -222,10 +222,30 @@ def get_rendered_dataset_splits(
     min_split_class_count: int | None = None,
 ) -> tuple[DatasetDict, list[str]]:
     """Build rendered train/test/val splits using Hugging Face dataset caches."""
+    vector_splits, classes = get_mapped_dataset_splits(
+        dataset_names,
+        split_ratio=split_ratio,
+        num_proc=num_proc,
+        paths=paths,
+        max_samples=max_samples,
+        min_split_class_count=min_split_class_count,
+    )
+    return render_mapped_dataset_splits(vector_splits, classes, image_size, num_proc=num_proc), classes
+
+
+def get_mapped_dataset_splits(
+    dataset_names: tuple[DataSetName, ...],
+    split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    num_proc: int | None = None,
+    paths: DataPaths = DEFAULT_DATA_PATHS,
+    max_samples: int | None = None,
+    min_split_class_count: int | None = None,
+) -> tuple[DatasetDict, list[str]]:
+    """Split mapped vector samples before any rendering or synthetic generation."""
     from collections import Counter
     from math import ceil
 
-    from datasets import Array2D, ClassLabel, DatasetDict, Features, concatenate_datasets
+    from datasets import ClassLabel, DatasetDict, concatenate_datasets
 
     mapped, _ = map_raw_dataset(dataset_names, num_proc=num_proc, paths=paths)
     if max_samples is not None:
@@ -235,49 +255,24 @@ def get_rendered_dataset_splits(
             shuffled.select(range(min(max_samples, len(shuffled)))),
         )
     classes = sorted(cast("list[str]", mapped.unique("label")))
-    label_to_idx = {label: idx for idx, label in enumerate(classes)}
-
-    def rasterize_batch(batch, size: int, labels: dict[str, int]):
-        return {
-            "label": [labels[label] for label in batch["label"]],
-            "image": [rasterize_strokes(strokes, size).tolist() for strokes in batch["strokes"]],
-        }
-
-    rendered = cast(
-        "Dataset",
-        mapped.map(
-            rasterize_batch,
-            batched=True,
-            num_proc=num_proc,
-            fn_kwargs={"size": image_size, "labels": label_to_idx},
-            remove_columns=mapped.column_names,
-            writer_batch_size=128,
-            features=Features(
-                {
-                    "label": ClassLabel(names=classes),
-                    "image": Array2D(shape=(image_size, image_size), dtype="uint8"),
-                }
-            ),
-            desc=f"Rasterizing {image_size}px symbols",
-        ),
-    )
+    mapped = cast("Dataset", mapped.cast_column("label", ClassLabel(names=classes)))
 
     _, test_r, val_r = split_ratio
     holdout_r = test_r + val_r
     if min_split_class_count is None:
         min_split_class_count = max(2, ceil(2 / holdout_r))
 
-    label_counts = Counter(cast("list[int]", rendered["label"]))
+    label_counts = Counter(cast("list[int]", mapped["label"]))
     rare_labels = {label for label, count in label_counts.items() if count < min_split_class_count}
     if rare_labels and len(rare_labels) < len(label_counts):
-        rare = cast("Dataset", rendered.filter(lambda label: label in rare_labels, input_columns="label"))
-        rendered = cast("Dataset", rendered.filter(lambda label: label not in rare_labels, input_columns="label"))
+        rare = cast("Dataset", mapped.filter(lambda label: label in rare_labels, input_columns="label"))
+        mapped = cast("Dataset", mapped.filter(lambda label: label not in rare_labels, input_columns="label"))
     else:
         rare = None
 
     split = cast(
         "DatasetDict",
-        rendered.train_test_split(
+        mapped.train_test_split(
             test_size=holdout_r,
             seed=DETERMINISTIC_SPLIT_SEED,
             stratify_by_column=None if max_samples is not None else "label",
@@ -296,11 +291,79 @@ def get_rendered_dataset_splits(
     if rare is not None:
         train = concatenate_datasets([train, rare])
 
-    splits = DatasetDict(
-        {
-            "train": train,
-            "test": test_val["train"],
-            "val": test_val["test"],
-        }
+    return (
+        DatasetDict(
+            {
+                "train": train,
+                "test": test_val["train"],
+                "val": test_val["test"],
+            }
+        ),
+        classes,
     )
-    return splits.with_format("torch"), classes
+
+
+def render_mapped_dataset_splits(
+    vector_splits: DatasetDict,
+    classes: list[str],
+    image_size: int,
+    *,
+    num_proc: int | None = None,
+) -> DatasetDict:
+    """Rasterize already-split vector samples without changing split membership."""
+    from datasets import DatasetDict
+
+    rendered = {}
+    for split_name, dataset in vector_splits.items():
+        rendered[split_name] = render_mapped_dataset(
+            dataset,
+            classes,
+            image_size,
+            num_proc=num_proc,
+            description=f"Rasterizing {split_name} at {image_size}px",
+        )
+
+    return DatasetDict(
+        {
+            "train": rendered["train"],
+            "test": rendered["test"],
+            "val": rendered["val"],
+        }
+    ).with_format("torch")
+
+
+def render_mapped_dataset(
+    dataset: Dataset,
+    classes: list[str],
+    image_size: int,
+    *,
+    num_proc: int | None = None,
+    description: str | None = None,
+) -> Dataset:
+    """Rasterize one mapped vector dataset."""
+    from datasets import Array2D, ClassLabel, Features
+
+    def rasterize_batch(batch, size: int):
+        return {
+            "label": batch["label"],
+            "image": [rasterize_strokes(strokes, size).tolist() for strokes in batch["strokes"]],
+        }
+
+    return cast(
+        "Dataset",
+        dataset.map(
+            rasterize_batch,
+            batched=True,
+            num_proc=num_proc,
+            fn_kwargs={"size": image_size},
+            remove_columns=dataset.column_names,
+            writer_batch_size=128,
+            features=Features(
+                {
+                    "label": ClassLabel(names=classes),
+                    "image": Array2D(shape=(image_size, image_size), dtype="uint8"),
+                }
+            ),
+            desc=description or f"Rasterizing {image_size}px symbols",
+        ),
+    )

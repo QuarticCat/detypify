@@ -12,6 +12,11 @@ class DataSetName(StrEnum):
     contrib = "contrib"
 
 
+class TrainingDataMode(StrEnum):
+    real = "real"
+    synthetic = "synthetic"
+
+
 class ModelFamily(StrEnum):
     v4 = "v4"
     v5 = "v5"
