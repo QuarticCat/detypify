@@ -1,16 +1,17 @@
 """Contribution review entry script."""
 
-import typer
+from dataclasses import dataclass
+
+import cappa
 from detypify.tools.review_contrib import main as review_contrib
 
-app = typer.Typer(pretty_exceptions_show_locals=False)
 
-
-@app.command()
-def main():
+@cappa.command(name="review-contrib")
+@dataclass
+class Args:
     """Review and collect contributed symbol samples."""
-    review_contrib()
 
 
 if __name__ == "__main__":
-    app()
+    args = cappa.parse(Args, completion=False)
+    review_contrib()
