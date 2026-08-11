@@ -23,14 +23,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cpu = ["torch>=2.6.0", "torchvision"]
+cpu = [
+  "torch>=2.6.0",
+  "torchvision",
+]
 cuda12 = [
   "torch>=2.6.0 ; sys_platform != 'darwin'",
-  "torchvision ; sys_platform != 'darwin'"
+  "torchvision ; sys_platform != 'darwin'",
 ]
 cuda13 = [
   "torch>=2.6.0 ; sys_platform != 'darwin'",
-  "torchvision ; sys_platform != 'darwin'"
+  "torchvision ; sys_platform != 'darwin'",
 ]
 rocm = [
   "torch>=2.6.0",
@@ -57,8 +60,6 @@ dev = [
   "torch-tb-profiler>=0.4.3",
   # profiler
   "viztracer>=1.1.1",
-  # lsp
-  "zuban",
 ]
 
 [tool.pyrefly]
@@ -68,7 +69,7 @@ search-path = ["./python"]
 environments = [
   "sys_platform == 'darwin'",
   "sys_platform == 'linux'",
-  "sys_platform == 'win32'"
+  "sys_platform == 'win32'",
 ]
 conflicts = [
   [
@@ -116,7 +117,3 @@ explicit = true
 name = "pytorch-rocm"
 url = "https://download.pytorch.org/whl/rocm7.2"
 explicit = true
-
-# zuban sys.path finding, for lsp
-[tool.zuban]
-mypy_path = ["python"]
