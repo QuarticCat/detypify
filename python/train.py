@@ -148,11 +148,7 @@ if __name__ == "__main__":
         train_args_path = final_output_dir / "training_args.yaml"
         train_args_path.parent.mkdir(parents=True, exist_ok=True)
 
-        current_args = {
-            **asdict(args),
-            "model_name": model_name_str,
-            "num_classes": len(classes),
-        }
+        current_args = {**asdict(args), "model_name": model_name_str, "num_classes": len(classes)}
 
         if not args.debug:
             with train_args_path.open("wb") as f:
@@ -164,7 +160,7 @@ if __name__ == "__main__":
         if args.log_pred:
             from detypify.training.callbacks import LogPredictCallback, LogTestConfusionCallback
 
-            callbacks.extend([LogPredictCallback(sorted(classes)), LogTestConfusionCallback(sorted(classes))])
+            callbacks.extend([LogPredictCallback(classes), LogTestConfusionCallback(classes)])
 
         if args.use_ema:
             from detypify.training.callbacks import EMAWeightAveraging

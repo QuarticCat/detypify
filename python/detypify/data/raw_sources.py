@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.types import DetexifySymInfo, MathSymbolSample
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from detypify.data.paths import DataPaths
 
 RAW_POINT_COORD_COUNT = 3
 
@@ -38,7 +39,7 @@ def parse_mathwriting_symbol(filepath: Path) -> MathSymbolSample | None:
     )
 
 
-def collect_mathwriting_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
+def collect_mathwriting_raw(paths: DataPaths):
     """Collect raw MathWriting data with original LaTeX labels."""
     from concurrent.futures import ProcessPoolExecutor
 
@@ -54,14 +55,11 @@ def collect_mathwriting_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
             label_acc.append(result.label)
             data_acc.append(result.symbol)
 
-    pl_schema = {
-        "latex_label": pl.String,
-        "symbol": pl.List(pl.List(pl.Array(pl.Float32, 2))),
-    }
+    pl_schema = {"latex_label": pl.String, "symbol": pl.List(pl.List(pl.Array(pl.Float32, 2)))}
     return pl.LazyFrame({"latex_label": label_acc, "symbol": data_acc}, schema=pl_schema)
 
 
-def collect_detexify_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
+def collect_detexify_raw(paths: DataPaths):
     """Collect raw Detexify data with original command labels."""
     import polars as pl
     from msgspec import json

@@ -1,4 +1,3 @@
-from os import process_cpu_count
 from typing import override
 
 from detypify.config import DataSetName
@@ -12,11 +11,11 @@ class MathSymbolDataModule(LightningDataModule):
     def __init__(
         self,
         image_size: int,
-        batch_size: int = 64,
-        num_workers: int = process_cpu_count() or 1,
-        dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
+        batch_size: int,
+        num_workers: int,
+        dataset_names: tuple[DataSetName, ...],
+        max_samples: int | None,
         paths: DataPaths = DEFAULT_DATA_PATHS,
-        max_samples: int | None = None,
     ):
         from torch import float32 as t_float32
         from torchvision.transforms import v2

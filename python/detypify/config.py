@@ -29,7 +29,4 @@ def parse_mobilenet_model_name(model_name: str) -> MobileNetModelSpec:
         raise ValueError(msg)
 
     family, size_label = match.groups()
-    return MobileNetModelSpec(
-        family=ModelFamily(family),
-        size=int(size_label) / 100,
-    )
+    return MobileNetModelSpec(family=ModelFamily(family), size=int(size_label) / 100)

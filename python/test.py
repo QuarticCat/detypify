@@ -72,7 +72,7 @@ if __name__ == "__main__":
     model = MobileNetModel.load_from_checkpoint(args.ckpt_path)
     args.image_size = args.image_size or int(model.hparams["image_size"])
     dataset_names = tuple(dict.fromkeys(args.datasets))
-    classes = sorted(get_dataset_classes(dataset_names, max_samples=args.max_samples, num_proc=args.num_workers))
+    classes = get_dataset_classes(dataset_names, max_samples=args.max_samples, num_proc=args.num_workers)
 
     dm = MathSymbolDataModule(
         batch_size=args.batch_size,

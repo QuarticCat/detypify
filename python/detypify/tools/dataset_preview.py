@@ -5,18 +5,19 @@ from __future__ import annotations
 import base64
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import cv2
 import numpy as np
-from detypify.config import DataSetName
 from detypify.data.datasets import map_raw_dataset
 from detypify.data.rendering import rasterize_strokes
 
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8000
-DEFAULT_IMAGE_SIZE = 224
-DEFAULT_PAGE_SIZE = 120
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from detypify.config import DataSetName
+
 MAX_PAGE_SIZE = 500
 FILTER_CACHE_SIZE = 32
 
@@ -48,10 +49,10 @@ def _page_options(current: int) -> str:
 class DatasetPreviewServer:
     def __init__(
         self,
-        dataset_names: tuple[DataSetName, ...],
+        dataset_names: Sequence[DataSetName],
         image_size: int,
         default_page_size: int,
-        num_proc: int | None,
+        num_proc: int,
     ) -> None:
         self.dataset, _ = map_raw_dataset(dataset_names, num_proc=num_proc)
         self.image_size = image_size
@@ -193,12 +194,12 @@ class DatasetPreviewServer:
 
 
 def serve_dataset_preview(
-    dataset_names: tuple[DataSetName, ...] = (DataSetName.detexify, DataSetName.mathwriting),
-    host: str = DEFAULT_HOST,
-    port: int = DEFAULT_PORT,
-    image_size: int = DEFAULT_IMAGE_SIZE,
-    page_size: int = DEFAULT_PAGE_SIZE,
-    num_proc: int | None = 1,
+    dataset_names: Sequence[DataSetName],
+    host: str,
+    port: int,
+    image_size: int,
+    page_size: int,
+    num_proc: int,
 ) -> None:
     preview = DatasetPreviewServer(
         dataset_names=dataset_names,

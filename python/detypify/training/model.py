@@ -9,11 +9,7 @@ from timm.layers import set_layer_config
 from timm.models._efficientnet_builder import decode_arch_def, round_channels  # noqa: PLC2701
 from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
-from torch.optim.lr_scheduler import (
-    CosineAnnealingLR,
-    LinearLR,
-    SequentialLR,
-)
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics import Accuracy, F1Score
 
 _GELU = partial(nn.GELU, approximate="tanh")
@@ -23,17 +19,8 @@ _IMAGE_MAX = 1.0001
 _MOBILENET_V5_ARCH_DEF = [
     ["er_r1_k3_s2_e4_c64", "er_r1_k3_s1_e4_c64"],
     ["uir_r1_a3_k5_s2_e6_c128", "uir_r1_a3_k0_s1_e4_c128"],
-    [
-        "uir_r1_a5_k5_s2_e6_c192",
-        "uir_r1_a0_k0_s1_e2_c192",
-        "uir_r1_a0_k0_s1_e2_c192",
-        "uir_r1_a0_k0_s1_e2_c192",
-    ],
-    [
-        "uir_r1_a5_k5_s2_e6_c256",
-        "uir_r1_a0_k0_s1_e2_c256",
-        "uir_r1_a0_k0_s1_e2_c256",
-    ],
+    ["uir_r1_a5_k5_s2_e6_c192", "uir_r1_a0_k0_s1_e2_c192", "uir_r1_a0_k0_s1_e2_c192", "uir_r1_a0_k0_s1_e2_c192"],
+    ["uir_r1_a5_k5_s2_e6_c256", "uir_r1_a0_k0_s1_e2_c256", "uir_r1_a0_k0_s1_e2_c256"],
 ]
 
 
@@ -73,11 +60,11 @@ class BaseModel(LightningModule):
         num_classes: int,
         image_size: int,
         total_epochs: int,
-        warmup_epochs: int = 5,
-        learning_rate: float = 4e-4,
-        label_smoothing: float = 0.0,
+        warmup_epochs: int,
+        learning_rate: float,
+        label_smoothing: float,
         *,
-        use_compile: bool = False,
+        use_compile: bool,
     ):
         super().__init__()
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -102,7 +89,7 @@ class BaseModel(LightningModule):
         """Forward pass - must be implemented by subclasses."""
 
     @override
-    def training_step(self, batch, batch_idx=0):
+    def training_step(self, batch, batch_idx):
         image, label = batch["image"], batch["label"]
         pred = self.forward(image)
         loss = self.criterion(pred, label)
@@ -112,7 +99,7 @@ class BaseModel(LightningModule):
         return loss
 
     @override
-    def validation_step(self, batch, batch_idx=0):
+    def validation_step(self, batch, batch_idx):
         image, label = batch["image"], batch["label"]
         pred = self.forward(image)
         loss = self.criterion(pred, label)
@@ -124,7 +111,7 @@ class BaseModel(LightningModule):
         return loss
 
     @override
-    def test_step(self, batch, batch_idx=0):
+    def test_step(self, batch, batch_idx):
         image, label = batch["image"], batch["label"]
         pred = self.forward(image)
         loss = self.criterion(pred, label)
@@ -154,10 +141,7 @@ class BaseModel(LightningModule):
 
         optimizer = optim.AdamW(optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7)
 
-        warmup_scheduler = LinearLR(
-            optimizer,
-            total_iters=self.warm_up_epochs,
-        )
+        warmup_scheduler = LinearLR(optimizer, total_iters=self.warm_up_epochs)
 
         decay_scheduler = CosineAnnealingLR(optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=1e-6)
 
@@ -184,9 +168,9 @@ class MobileNetModel(BaseModel):
         model_name: str,
         total_epochs: int,
         image_size: int,
-        warmup_epochs: int = 5,
-        learning_rate: float = 0.002,
-        label_smoothing: float = 0.0,
+        warmup_epochs: int,
+        learning_rate: float,
+        label_smoothing: float,
         *,
         use_compile: bool = False,
     ):
@@ -208,12 +192,7 @@ class MobileNetModel(BaseModel):
             "learning_rate",
             "label_smoothing",
         )
-        model = create_project_model(
-            model_name,
-            num_classes=num_classes,
-            in_chans=1,
-            drop_rate=0.15,
-        )
+        model = create_project_model(model_name, num_classes=num_classes, in_chans=1, drop_rate=0.15)
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
 
         self.model_opt = torch.compile(self.model, mode="max-autotune", dynamic=False) if use_compile else None
