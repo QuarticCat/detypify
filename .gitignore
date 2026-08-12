@@ -7,7 +7,6 @@ node_modules/
 
 build/
 /data/
-external/fonts/
 train/
 dist/
 *.woff2

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from detypify.config import HF_DATASET_REPO, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
-from detypify.data.raw_sources import collect_contrib_raw, collect_detexify_raw, collect_mathwriting_raw
+from detypify.data.raw_sources import collect_detexify_raw, collect_mathwriting_raw
 from detypify.data.rendering import rasterize_strokes
 from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
 
@@ -36,8 +36,6 @@ def create_raw_dataset(dataset_names: list[DataSetName], paths: DataPaths = DEFA
                 lfs.append(collect_mathwriting_raw(paths).with_columns(pl.lit(dataset_name.value).alias("source")))
             case DataSetName.detexify:
                 lfs.append(collect_detexify_raw(paths).with_columns(pl.lit(dataset_name.value).alias("source")))
-            case DataSetName.contrib:
-                lfs.append(collect_contrib_raw(paths).with_columns(pl.lit(dataset_name.value).alias("source")))
 
     if not lfs:
         msg = "No valid datasets to process"
