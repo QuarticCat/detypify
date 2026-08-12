@@ -6,7 +6,7 @@ from typing import Annotated
 
 import cappa
 from detypify.config import DataSetName
-from detypify.data.datasets import create_raw_dataset, get_dataset_classes
+from detypify.data.datasets import create_raw_dataset
 from detypify.data.metadata import generate_data_info
 from detypify.data.symbols import get_tex_typ_map_digest
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         case Upload(datasets=datasets):
             create_raw_dataset(dataset_names=list(dict.fromkeys(datasets)))
         case GenMetadata(datasets=datasets):
-            generate_data_info(classes=get_dataset_classes(list(dict.fromkeys(datasets))))
+            generate_data_info(dataset_names=list(dict.fromkeys(datasets)))
         case Preview() as preview:
             from detypify.tools.dataset_preview import serve_dataset_preview
 

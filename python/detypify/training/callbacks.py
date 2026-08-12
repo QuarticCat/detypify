@@ -142,11 +142,7 @@ class LogPredictCallback(Callback):
             else:
                 tag = "predictions"
 
-            tensorboard.add_figure(
-                tag,
-                fig,
-                global_step=batch_idx,
-            )
+            tensorboard.add_figure(tag, fig, global_step=batch_idx)
             plt.close(fig)
 
         self.logged_batches += 1
@@ -345,14 +341,7 @@ class LogTestConfusionCallback(Callback):
         plt.close(fig)
 
 
-def get_ema_multi_avg_fn(
-    decay: float = 0.995,
-    min_decay: float = 0.0,
-    warmup_gamma: float = 25.0,
-    warmup_power: float = 0.7,
-    *,
-    use_warmup: bool = True,
-):
+def get_ema_multi_avg_fn(decay: float, min_decay: float, warmup_gamma: float, warmup_power: float, *, use_warmup: bool):
     """
     Get a multi_avg_fn applying EMA with Inverse Gamma warmup schedule,
     adapted from torch lightning's and timm's implementation
@@ -365,11 +354,7 @@ def get_ema_multi_avg_fn(
     import torch
 
     @torch.no_grad()
-    def ema_multi_update(
-        averaged_param_list: list[Tensor],
-        current_param_list: list[Tensor],
-        num_averaged: Tensor,
-    ):
+    def ema_multi_update(averaged_param_list: list[Tensor], current_param_list: list[Tensor], num_averaged: Tensor):
         step = num_averaged.item()
 
         # Warmup
@@ -499,7 +484,6 @@ class ExportBestModelToONNX(Callback):
         onnx_dir: Directory where ONNX file will be saved
         model_name: Name to use for the ONNX file (without extension)
         checkpoint_callback: The ModelCheckpoint callback used during training.
-            If None, the callback will try to find it automatically.
         use_compile: Whether training used torch.compile. Also controls ONNX export optimization.
         dynamo: Whether to use torch.dynamo for ONNX export (default: True)
         external_data: Whether to save weights as external data (default: False)
@@ -509,9 +493,9 @@ class ExportBestModelToONNX(Callback):
         self,
         save_dir: Path,
         model_name: str,
-        checkpoint_callback: ModelCheckpoint | None = None,
+        checkpoint_callback: ModelCheckpoint,
         *,
-        use_compile: bool = False,
+        use_compile: bool,
         dynamo: bool = True,
         external_data: bool = False,
     ) -> None:
@@ -526,18 +510,7 @@ class ExportBestModelToONNX(Callback):
     @override
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Export the best model to ONNX when training finishes."""
-        # Find the checkpoint callback if not provided
         checkpoint_callback = self.checkpoint_callback
-        if checkpoint_callback is None:
-            for callback in trainer.callbacks:  # type: ignore
-                if isinstance(callback, ModelCheckpoint):
-                    checkpoint_callback = callback
-                    break
-
-        if checkpoint_callback is None:
-            logger.warning("No ModelCheckpoint callback found. Skipping ONNX export.")
-            return
-
         # Get the best model path
         best_model_path = Path(checkpoint_callback.best_model_path)
         if not best_model_path.exists():

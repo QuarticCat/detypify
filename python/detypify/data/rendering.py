@@ -6,9 +6,6 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     import cv2
     import numpy as np
 
-    if not strokes:
-        return np.zeros((output_size, output_size), dtype=np.uint8)
-
     stroke_arrays = [np.array(s, dtype=np.float32) for s in strokes if s]
     if not stroke_arrays:
         return np.zeros((output_size, output_size), dtype=np.uint8)

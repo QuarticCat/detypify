@@ -7,7 +7,6 @@ from typing import cast
 from detypify.types import TypstSymInfo
 
 
-@cache
 def is_invisible(c: str) -> bool:
     from unicodedata import category
 
@@ -76,7 +75,6 @@ def get_tex_typ_map() -> dict[str, TypstSymInfo]:
     return tex_to_typ
 
 
-@cache
 def get_tex_typ_map_digest() -> str:
     """Return a stable digest for the effective LaTeX-to-Typst mapping."""
     records = [
