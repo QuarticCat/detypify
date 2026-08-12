@@ -7,16 +7,12 @@ class DataPaths:
     build_dir: Path = Path("build")
 
     @property
-    def raw_dir(self) -> Path:
-        return self.build_dir / "raw"
-
-    @property
-    def mathwriting_raw_dir(self) -> Path:
-        return self.raw_dir / "mathwriting"
+    def mathwriting_raw_archive(self) -> Path:
+        return self.build_dir / "raw" / "mathwriting" / "mathwriting-2024.tgz"
 
     @property
     def detexify_raw_dir(self) -> Path:
-        return self.raw_dir / "detexify"
+        return self.build_dir / "raw" / "detexify"
 
     @property
     def generated_dir(self) -> Path:
@@ -35,16 +31,12 @@ class DataPaths:
         return self.generated_dir / "unmapped_latex_symbols.json"
 
     @property
-    def dataset_artifacts_dir(self) -> Path:
-        return self.build_dir / "datasets"
-
-    @property
     def datasets_cache_dir(self) -> Path:
-        return self.dataset_artifacts_dir / "cache"
+        return self.build_dir / "datasets" / "cache"
 
     @property
     def raw_dataset_parquet(self) -> Path:
-        return self.dataset_artifacts_dir / "raw" / "data.parquet"
+        return self.build_dir / "datasets" / "raw" / "data.parquet"
 
     @property
     def train_dir(self) -> Path:
