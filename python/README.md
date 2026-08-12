@@ -52,13 +52,13 @@ Generated frontend metadata is written to `build/generated`:
 To generate frontend inference metadata:
 
 ```bash
-uv run python/proc_data.py --gen-metadata
+uv run python/proc_data.py gen-metadata
 ```
 
 To compose the raw dataset (Detexify + MathWriting) and upload it to Hugging Face:
 
 ```bash
-uv run python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting
+uv run python/proc_data.py upload --datasets detexify --datasets mathwriting
 ```
 
 The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
@@ -75,25 +75,24 @@ renders images into `build/review/contrib`, and writes accepted samples to
 when `--datasets contrib` is present:
 
 ```bash
-uv run python/proc_data.py --upload-raw --datasets detexify --datasets mathwriting --datasets contrib
+uv run python/proc_data.py upload --datasets detexify --datasets mathwriting --datasets contrib
 ```
 
 To print the digest used by CI to detect effective LaTeX-to-Typst mapping changes:
 
 ```bash
-uv run python/proc_data.py --print-tex-typ-map-digest
+uv run python/proc_data.py digest
 ```
 
 To browse mapped dataset samples locally, including truth labels, source, sample
 index, pagination, and search:
 
 ```bash
-uv run --extra cpu python/proc_data.py --preview-dataset
+uv run --extra cpu python/proc_data.py preview
 ```
 
 The browser is served at `http://127.0.0.1:8000` by default. Use
-`--datasets`, `--preview-port`, `--preview-page-size`, and
-`--preview-image-size` to change what is shown.
+`--datasets`, `--port`, `--page-size`, and `--image-size` to change what is shown.
 
 See more options with:
 
