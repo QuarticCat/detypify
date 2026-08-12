@@ -1,12 +1,11 @@
 # Detypify Model
 
-This directory contains the Python package and entry scripts for data preprocessing, model training, contribution review, and frontend metadata generation.
+This directory contains the Python package and entry scripts for data preprocessing, model training, and frontend metadata generation.
 
 ## Project Structure
 
 - `proc_data.py`: Compatibility entry script for raw dataset upload and metadata generation.
 - `train.py`: Compatibility entry script for model training.
-- `review_contrib.py`: Compatibility entry script for maintainer contribution review.
 - `detypify/config.py`: Shared enum and remote dataset config.
 - `detypify/types.py`: Shared stroke aliases and msgspec structs.
 - `detypify/data/`: Raw source parsing, Typst mapping, rendering, Hugging Face dataset transforms, metadata, and path config.
@@ -62,21 +61,6 @@ uv run python/proc_data.py upload --datasets detexify --datasets mathwriting
 ```
 
 The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
-
-To include the contributed dataset in the raw upload, first review D1 samples:
-
-```bash
-uv run python/review_contrib.py
-```
-
-The review command reads the fetched D1 dump from `build/raw/contrib/dataset.json`,
-renders images into `build/review/contrib`, and writes accepted samples to
-`build/raw/contrib/accepted.json`. The upload command requires that accepted file
-when `--datasets contrib` is present:
-
-```bash
-uv run python/proc_data.py upload --datasets detexify --datasets mathwriting --datasets contrib
-```
 
 To print the digest used by CI to detect effective LaTeX-to-Typst mapping changes:
 

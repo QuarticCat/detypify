@@ -5,7 +5,6 @@ exclude = [
   ".ruff_cache",
   ".venv",
   "dist",
-  "python/review_contrib.py",
 ]
 
 [format]

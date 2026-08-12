@@ -9,7 +9,6 @@ MOBILENET_MODEL_NAME_RE = re.compile(r"^mobilenet_(v4|v5)_(\d{3})$")
 class DataSetName(StrEnum):
     mathwriting = "mathwriting"
     detexify = "detexify"
-    contrib = "contrib"
 
 
 class ModelFamily(StrEnum):

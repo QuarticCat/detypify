@@ -88,24 +88,3 @@ def collect_detexify_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
         .filter(pl.col("latex_label").is_not_null())
         .filter(pl.col("symbol").list.len() > 0)
     )
-
-
-def collect_contrib_raw(paths: DataPaths = DEFAULT_DATA_PATHS):
-    """Collect raw contributed data with symbol names."""
-    import polars as pl
-    from msgspec import json
-
-    with paths.contrib_accepted_json.open("rb") as f:
-        data = json.decode(f.read(), type=list[dict[str, str]])
-
-    return (
-        pl.LazyFrame(data)
-        .select(
-            pl.col("sym").alias("latex_label"),
-            pl.col("strokes")
-            .map_elements(json.decode, return_dtype=pl.List(pl.List(pl.Array(pl.Float32, 2))))
-            .alias("symbol"),
-        )
-        .filter(pl.col("latex_label").is_not_null())
-        .filter(pl.col("symbol").list.len() > 0)
-    )
