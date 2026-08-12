@@ -62,7 +62,7 @@ uv run python/proc_data.py upload --datasets detexify --datasets mathwriting
 
 The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
 
-To print the digest used by CI to detect effective LaTeX-to-Typst mapping changes:
+To print the digest of the effective LaTeX-to-Typst mapping:
 
 ```bash
 uv run python/proc_data.py digest
