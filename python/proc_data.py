@@ -6,8 +6,8 @@ from typing import Annotated
 
 import cappa
 from detypify.config import DataSetName
-from detypify.data.datasets import create_raw_dataset
 from detypify.data.metadata import generate_data_info
+from detypify.data.raw import convert_raw_dataset, upload_raw_dataset
 from detypify.data.symbols import get_tex_typ_map_digest
 
 
@@ -25,10 +25,16 @@ class Digest:
     """Print the effective LaTeX-to-Typst mapping digest."""
 
 
-@cappa.command(name="upload", default_long=True)
+@cappa.command(name="convert-raw", default_long=True)
 @dataclass
-class Upload(CommonArgs):
-    """Convert local raw files and upload the raw LaTeX-annotated dataset."""
+class ConvertRaw(CommonArgs):
+    """Convert original source files into the local raw Parquet dataset."""
+
+
+@cappa.command(name="upload-raw")
+@dataclass
+class UploadRaw:
+    """Upload the local raw Parquet dataset to Hugging Face."""
 
 
 @cappa.command(name="gen-metadata", default_long=True)
@@ -63,7 +69,7 @@ class Preview(CommonArgs):
 class Args:
     """Process and inspect datasets."""
 
-    command: cappa.Subcommands[Digest | Upload | GenMetadata | Preview]
+    command: cappa.Subcommands[Digest | ConvertRaw | UploadRaw | GenMetadata | Preview]
 
 
 if __name__ == "__main__":
@@ -71,8 +77,10 @@ if __name__ == "__main__":
     match args.command:
         case Digest():
             print(get_tex_typ_map_digest())  # noqa: T201
-        case Upload(datasets=datasets):
-            create_raw_dataset(dataset_names=list(dict.fromkeys(datasets)))
+        case ConvertRaw(datasets=datasets):
+            convert_raw_dataset(dataset_names=list(dict.fromkeys(datasets)))
+        case UploadRaw():
+            upload_raw_dataset()
         case GenMetadata(datasets=datasets):
             generate_data_info(dataset_names=list(dict.fromkeys(datasets)))
         case Preview() as preview:

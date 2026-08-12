@@ -43,6 +43,65 @@ Training loads the raw LaTeX-annotated dataset from Hugging Face and uses the
 `ClassLabel` splits are built locally instead of uploaded, which avoids CI/CD
 failures when labels change.
 
+#### Preparing Raw Data
+
+Raw data conversion writes a reusable cache to
+`build/datasets/raw/data.parquet`. If this file already exists, skip the source
+downloads and conversion below and proceed directly to `upload-raw`.
+
+To create the cache from the original Detexify and MathWriting data, install
+the Python dependencies and create the source directories first:
+
+```bash
+uv sync
+mkdir -p build/raw/detexify build/raw/mathwriting
+```
+
+Download the original Detexify PostgreSQL dump and symbol metadata from the
+[Detexify data archive](https://github.com/kirel/detexify-data):
+
+```bash
+curl -fL \
+  'https://drive.usercontent.google.com/download?id=0ByuYordD0JBRV01NM2pmNlpfNUE&export=download&authuser=0&confirm=t&resourcekey=0-CZHt-PBM7v0hty25FF5wsg' \
+  -o build/raw/detexify/detexify.sql.gz
+
+curl -fL \
+  'https://drive.usercontent.google.com/download?id=0ByuYordD0JBRU1Y3Q3VSNk9kdE0&export=download&authuser=0&confirm=t&resourcekey=0-V2m8tmPfD8eyNe4GGrhSxw' \
+  -o build/raw/detexify/symbols.json
+```
+
+Download the original MathWriting 2024 archive. The conversion command reads
+the individual-symbol InkML files directly from this archive, so it does not
+need to be extracted:
+
+```bash
+curl -fL \
+  https://storage.googleapis.com/mathwriting_data/mathwriting-2024.tgz \
+  -o build/raw/mathwriting/mathwriting-2024.tgz
+```
+
+The resulting layout must be:
+
+```text
+build/raw/
+├── detexify/
+│   ├── detexify.sql.gz
+│   └── symbols.json
+└── mathwriting/
+    └── mathwriting-2024.tgz
+```
+
+Verify both gzip archives:
+
+```bash
+gzip --test build/raw/detexify/detexify.sql.gz
+gzip --test build/raw/mathwriting/mathwriting-2024.tgz
+```
+
+The MathWriting dataset is licensed under CC BY-NC-SA 4.0. The Detexify
+database is licensed under ODbL 1.0. Review those terms before redistributing
+the combined dataset.
+
 Generated frontend metadata is written to `build/generated`:
 - `infer.json`: model output symbol metadata.
 - `contrib.json`: Typst symbol-name to character mapping for contribution UI.
@@ -54,13 +113,26 @@ To generate frontend inference metadata:
 uv run python/proc_data.py gen-metadata
 ```
 
-To compose the raw dataset (Detexify + MathWriting) and upload it to Hugging Face:
+Convert the original sources into the local Parquet cache:
 
 ```bash
-uv run python/proc_data.py upload --datasets detexify --datasets mathwriting
+uv run python/proc_data.py convert-raw --datasets detexify --datasets mathwriting
 ```
 
-The raw upload also writes a local copy to `build/datasets/raw/data.parquet`.
+The conversion scans `detexify.sql.gz` directly; no PostgreSQL server or
+intermediate `detexify.json` is needed. It also reads MathWriting symbol files
+directly from `mathwriting/mathwriting-2024.tgz` without extracting them.
+
+To upload the cached Parquet dataset, authenticate with a token that has write
+access to `Cloud0310/detypify-datasets`, then run:
+
+```bash
+uv run hf auth login
+uv run python/proc_data.py upload-raw
+```
+
+`upload-raw` only reads `build/datasets/raw/data.parquet`; it does not access the
+original gz/tgz files. It uploads the `raw` configuration with the `data` split.
 
 To print the digest of the effective LaTeX-to-Typst mapping:
 

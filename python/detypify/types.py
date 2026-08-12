@@ -26,8 +26,3 @@ class UnmappedSymbols(Struct, kw_only=True, omit_defaults=True):
 class DetexifySymInfo(Struct, kw_only=True, omit_defaults=True):
     command: str
     id: str
-
-
-class MathSymbolSample(Struct):
-    label: str
-    symbol: Strokes

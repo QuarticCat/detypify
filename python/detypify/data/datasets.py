@@ -3,70 +3,17 @@ from __future__ import annotations
 from functools import cache
 from hashlib import blake2b
 from json import dumps
-from os import process_cpu_count
 from typing import TYPE_CHECKING, Any, cast
 
-from detypify.config import HF_DATASET_REPO, DataSetName
+from detypify.config import DETERMINISTIC_SPLIT_SEED, HF_DATASET_REPO, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
-from detypify.data.raw_sources import collect_detexify_raw, collect_mathwriting_raw
 from detypify.data.rendering import rasterize_strokes
 from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    import polars as pl
     from datasets import Dataset, DatasetDict
-
-DETERMINISTIC_SPLIT_SEED = 114514
-
-
-def create_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths = DEFAULT_DATA_PATHS) -> pl.DataFrame:
-    """Create and upload the raw LaTeX-annotated dataset to Hugging Face."""
-    import logging
-
-    import polars as pl
-    from datasets import Dataset, DatasetInfo, Features, List, Value
-    from datasets import Sequence as DatasetSequence
-
-    logger = logging.getLogger(__name__)
-    logger.info("--- Creating Raw Dataset: %s ---", ",".join(dataset_names))
-
-    lfs: list[pl.LazyFrame] = []
-    for dataset_name in dataset_names:
-        match dataset_name:
-            case DataSetName.mathwriting:
-                lfs.append(collect_mathwriting_raw(paths).with_columns(pl.lit(dataset_name.value).alias("source")))
-            case DataSetName.detexify:
-                lfs.append(collect_detexify_raw(paths).with_columns(pl.lit(dataset_name.value).alias("source")))
-
-    df = (
-        pl.concat(lfs)
-        .collect()
-        .rename({"symbol": "strokes"})
-        .sample(fraction=1.0, shuffle=True, seed=DETERMINISTIC_SPLIT_SEED)
-    )
-
-    features: Features = Features(
-        {
-            "latex_label": Value("string"),
-            "strokes": List(List(DatasetSequence(Value("float32"), length=2))),
-            "source": Value("string"),
-        }
-    )
-    dataset_info = DatasetInfo(
-        description="Raw detypify dataset with original LaTeX labels and vector strokes.",
-        features=features,
-    )
-    dataset = Dataset.from_polars(df, info=dataset_info)
-
-    logger.info("  -> Uploading raw dataset to %s...", HF_DATASET_REPO)
-    dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data", num_proc=process_cpu_count() or 1)
-
-    paths.raw_dataset_parquet.parent.mkdir(parents=True, exist_ok=True)
-    df.write_parquet(paths.raw_dataset_parquet, compression="zstd")
-    logger.info("--- Done. Raw dataset saved and uploaded. ---")
-    return df
 
 
 def _dataset_name_values(dataset_names: tuple[DataSetName, ...]) -> list[str]:
@@ -86,8 +33,6 @@ def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: Data
 
     sources = set(_dataset_name_values(dataset_names))
     dataset = dataset.filter(lambda source: source in sources, input_columns="source")
-    if "symbol" in dataset.column_names and "strokes" not in dataset.column_names:
-        dataset = dataset.rename_column("symbol", "strokes")
     return cast("Dataset", dataset)
 
 
