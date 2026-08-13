@@ -170,19 +170,17 @@ The script will:
 1. Read the local raw Parquet data, downloading it only when absent.
 2. Build deterministic 80/10/10 Polars splits and cache their vector rows under `build/train/_dataset_splits`.
 3. Optionally find the largest batch size when `--find-batch-size` is set.
-4. Find a learning rate for non-debug, non-`--dev-run` training unless `--no-find-lr` is set.
+4. Find a learning rate unless `--no-find-lr` is set.
 5. Train each requested model and retain the best and last Lightning checkpoints.
 6. Export the best checkpoint to ONNX, then evaluate the best checkpoint on the test split.
 
-Each production run writes to `build/train/{model_name}/version_*`. Its `ckpts`
+Each run writes to `build/train/{model_name}/version_*`. Its `ckpts`
 directory contains checkpoints and the exported ONNX model; `training_args.yaml`
-records the final batch size and effective learning rate. Debug runs skip ONNX
-export.
+records the final batch size and effective learning rate.
 
 **Key Options:**
 
 - `--out-dir`: Output directory (default: `build/train`).
-- `--debug --dev-run`: Use a CPU-only Lightning fast dev run.
 - `--init-batch-size`: Initial batch size (default: `128`).
 - `--total-epochs`: Total training epochs (default: `40`).
 - `--warmup-epochs`: Linear learning-rate warmup epochs (default: `3`).
