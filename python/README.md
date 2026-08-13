@@ -8,7 +8,7 @@ This directory contains the Python package and entry scripts for data preprocess
 - `train.py`: Compatibility entry script for model training.
 - `detypify/config.py`: Shared enum and remote dataset config.
 - `detypify/types.py`: Shared stroke aliases and msgspec structs.
-- `detypify/data/`: Raw source parsing, Typst mapping, rendering, Hugging Face dataset transforms, metadata, and path config.
+- `detypify/data/`: Raw source parsing, Polars transforms, rendering, metadata, and path config.
 - `detypify/training/`: Lightning data module, model definitions, and training callbacks.
 - `detypify/tools/`: Maintainer tools.
 - `detypify/assets/tex_to_typ_sup.yaml`: Manual mapping overrides for LaTeX to Typst symbol names.
@@ -19,53 +19,36 @@ This directory contains the Python package and entry scripts for data preprocess
 
 This project uses `uv` for dependency management. Run commands from the repository root unless noted otherwise.
 
-For training only, install dependencies with:
-
-```bash
-uv sync
-```
-
 >[!WARNING]
-> Plain `uv run` can resolve and install a PyTorch build that does not match your
-> hardware. Select the correct accelerator extra before training, for example
-> `uv run --extra cpu ...`, `uv run --extra cuda ...`, or `uv run --extra rocm ...`.
-
-If you're interested in processing data:
-
-```bash
-uv sync
-```
+> On Linux, plain `uv run` still installs PyTorch indirectly through Lightning
+> and timm. The default PyPI build can be CUDA-enabled, and training automatically
+> uses CUDA when a compatible GPU is available. Select exactly one accelerator
+> extra to pin the intended PyTorch build: `cpu`, `cuda12`, `cuda13`, or `rocm`.
 
 ### Data Preprocessing
 
-Training loads the raw LaTeX-annotated dataset from Hugging Face and uses the
-`datasets` local cache for label mapping, rasterization, and splitting. Processed
-`ClassLabel` splits are built locally instead of uploaded, which avoids CI/CD
-failures when labels change.
+Training reads `build/raw/_converted/data.parquet` with Polars, using the output of
+`convert-raw` directly when available. If the file is absent, it is downloaded
+from Hugging Face through `fsspec`. Polars handles label mapping, filtering,
+sampling, and splitting, and the PyTorch data loader rasterizes samples on
+demand.
 
 #### Preparing Raw Data
 
 Raw data conversion writes a reusable cache to
-`build/datasets/raw/data.parquet`. If this file already exists, skip the source
-downloads and conversion below and proceed directly to `upload-raw`.
-
-To create the cache from the original Detexify and MathWriting data, install
-the Python dependencies and create the source directories first:
-
-```bash
-uv sync
-mkdir -p build/raw/detexify build/raw/mathwriting
-```
+`build/raw/_converted/data.parquet`. This file is also the input used by metadata
+generation, preview, training, testing, and `upload-raw`, so the entire pipeline
+can run locally without Hugging Face. If this file already exists, skip the
+source downloads and conversion below.
 
 Download the original Detexify PostgreSQL dump and symbol metadata from the
 [Detexify data archive](https://github.com/kirel/detexify-data):
 
 ```bash
-curl -fL \
+curl -fL --create-dirs \
   'https://drive.usercontent.google.com/download?id=0ByuYordD0JBRV01NM2pmNlpfNUE&export=download&authuser=0&confirm=t&resourcekey=0-CZHt-PBM7v0hty25FF5wsg' \
   -o build/raw/detexify/detexify.sql.gz
-
-curl -fL \
+curl -fL --create-dirs \
   'https://drive.usercontent.google.com/download?id=0ByuYordD0JBRU1Y3Q3VSNk9kdE0&export=download&authuser=0&confirm=t&resourcekey=0-V2m8tmPfD8eyNe4GGrhSxw' \
   -o build/raw/detexify/symbols.json
 ```
@@ -75,20 +58,9 @@ the individual-symbol InkML files directly from this archive, so it does not
 need to be extracted:
 
 ```bash
-curl -fL \
+curl -fL --create-dirs \
   https://storage.googleapis.com/mathwriting_data/mathwriting-2024.tgz \
   -o build/raw/mathwriting/mathwriting-2024.tgz
-```
-
-The resulting layout must be:
-
-```text
-build/raw/
-├── detexify/
-│   ├── detexify.sql.gz
-│   └── symbols.json
-└── mathwriting/
-    └── mathwriting-2024.tgz
 ```
 
 Verify both gzip archives:
@@ -98,14 +70,23 @@ gzip --test build/raw/detexify/detexify.sql.gz
 gzip --test build/raw/mathwriting/mathwriting-2024.tgz
 ```
 
-The MathWriting dataset is licensed under CC BY-NC-SA 4.0. The Detexify
-database is licensed under ODbL 1.0. Review those terms before redistributing
-the combined dataset.
+Convert the original sources into the local Parquet cache:
 
-Generated frontend metadata is written to `build/generated`:
-- `infer.json`: model output symbol metadata.
-- `contrib.json`: Typst symbol-name to character mapping for contribution UI.
-- `unmapped_latex_symbols.json`: unmapped source labels for review.
+```bash
+uv run python/proc_data.py convert-raw --datasets detexify --datasets mathwriting
+```
+
+To optionally publish the cached Parquet dataset, authenticate with a token that
+has write access to `Cloud0310/detypify-datasets`, then run:
+
+```bash
+uv run hf auth login
+uv run python/proc_data.py upload-raw
+```
+
+`upload-raw` only reads `build/raw/_converted/data.parquet`; it does not access the
+original gz/tgz files. It uploads that file to `raw/data.parquet` in the dataset
+repository.
 
 To generate frontend inference metadata:
 
@@ -113,26 +94,10 @@ To generate frontend inference metadata:
 uv run python/proc_data.py gen-metadata
 ```
 
-Convert the original sources into the local Parquet cache:
-
-```bash
-uv run python/proc_data.py convert-raw --datasets detexify --datasets mathwriting
-```
-
-The conversion scans `detexify.sql.gz` directly; no PostgreSQL server or
-intermediate `detexify.json` is needed. It also reads MathWriting symbol files
-directly from `mathwriting/mathwriting-2024.tgz` without extracting them.
-
-To upload the cached Parquet dataset, authenticate with a token that has write
-access to `Cloud0310/detypify-datasets`, then run:
-
-```bash
-uv run hf auth login
-uv run python/proc_data.py upload-raw
-```
-
-`upload-raw` only reads `build/datasets/raw/data.parquet`; it does not access the
-original gz/tgz files. It uploads the `raw` configuration with the `data` split.
+Generated frontend metadata is written to `build/raw/_metadata`:
+- `infer.json`: model output symbol metadata.
+- `contrib.json`: Typst symbol-name to character mapping for contribution UI.
+- `unmapped_latex_symbols.json`: unmapped source labels for review.
 
 To print the digest of the effective LaTeX-to-Typst mapping:
 
@@ -144,7 +109,7 @@ To browse mapped dataset samples locally, including truth labels, source, sample
 index, pagination, and search:
 
 ```bash
-uv run --extra cpu python/proc_data.py preview
+uv run python/proc_data.py preview
 ```
 
 The browser is served at `http://127.0.0.1:8000` by default. Use
@@ -166,7 +131,7 @@ uv run python/proc_data.py --help
 To train the default MobileNet comparison set:
 
 ```bash
-uv run --extra <accelerator> python/train.py --total-epochs 35 --image-size 224
+uv run python/train.py --total-epochs 35 --image-size 224
 ```
 
 This trains `mobilenet_v4_035`.
@@ -174,7 +139,7 @@ This trains `mobilenet_v4_035`.
 You can specify models to be trained:
 
 ```bash
-uv run --extra <accelerator> python/train.py --models mobilenet_v4_035 --models mobilenet_v4_050
+uv run python/train.py --models mobilenet_v4_035 --models mobilenet_v4_050
 ```
 
 Model names use `mobilenet_{v4|v5}_{size}`. The size suffix is divided by 100,
@@ -189,11 +154,11 @@ architecture with a compact multi-scale fusion head.
 > with `--amp-precision 32-true`. Consider `--no-ema` for shorter V5 training runs:
 
 ```bash
-uv run --extra <accelerator> python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learning-rate 5e-4 --amp-precision 32-true
+uv run python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learning-rate 5e-4 --amp-precision 32-true
 ```
 
 The script will:
-1. Load raw dataset data from Hugging Face and build cached rendered splits locally.
+1. Read the local raw Parquet data (downloading it only when absent) and cache deterministic Polars splits under `build/train/_dataset_splits`.
 2. Optionally find the largest batch size when `--find-batch-size` is set.
 3. Find a learning rate for non-debug, non-`--dev-run` training unless `--no-find-lr` is set.
 4. Train each requested model.
@@ -206,7 +171,7 @@ The script will:
 - `--amp-precision`: Training precision (default: `bf16-mixed`; use `32-true` if V5 loss becomes NaN).
 - `--find-batch-size`: Enable Lightning batch-size scaling.
 - `--no-find-lr`: Skip Lightning learning-rate finder before training.
-- `--num-workers`: Override DataLoader and dataset mapping worker count.
+- `--num-workers`: Override the DataLoader worker count.
 - `--log-pred`: Enable logging of predictions (default: True).
 
 To view the training/test logs:
@@ -218,7 +183,7 @@ uv run tensorboard --logdir ./build/train
 To run the test diagnostics for an existing checkpoint without retraining:
 
 ```bash
-uv run --extra <accelerator> python/test.py --ckpt-path build/train/mobilenet_v4_035/version_0/ckpts/best-epoch=00-val_acc=0.0000.ckpt
+uv run python/test.py --ckpt-path build/train/mobilenet_v4_035/version_0/ckpts/best-epoch=00-val_acc=0.0000.ckpt
 ```
 
 This writes TensorBoard logs under `build/train/eval/existing_model/version_*`,

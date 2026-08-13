@@ -3,9 +3,10 @@ from __future__ import annotations
 import gzip
 import logging
 import tarfile
+from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
-from detypify.config import HF_DATASET_REPO, DataSetName
+from detypify.config import HF_RAW_DATASET_PATH, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.types import DetexifySymInfo
 
@@ -14,9 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import polars as pl
-    from datasets import Features
     from detypify.types import Strokes
-    from huggingface_hub import CommitInfo
 
 RAW_POINT_COORD_COUNT = 3
 DETEXIFY_COPY_HEADER = b"COPY samples (id, key, strokes) FROM stdin;\n"
@@ -88,7 +87,7 @@ def _collect_mathwriting_raw(paths: DataPaths) -> pl.LazyFrame:
 
     labels = []
     strokes = []
-    for data in _iter_mathwriting_symbol_data(paths.mathwriting_raw_archive):
+    for data in _iter_mathwriting_symbol_data(paths.raw_mathwriting_dir / "mathwriting-2024.tgz"):
         sample = _parse_mathwriting_symbol(data)
         if sample is None:
             continue
@@ -105,11 +104,11 @@ def _collect_detexify_raw(paths: DataPaths) -> pl.LazyFrame:
     import polars as pl
     from msgspec import json
 
-    with (paths.detexify_raw_dir / "symbols.json").open("rb") as f:
+    with (paths.raw_detexify_dir / "symbols.json").open("rb") as f:
         tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
     key_to_command = {x.id: x.command for x in tex_sym_info}
 
-    dump_path = paths.detexify_raw_dir / "detexify.sql.gz"
+    dump_path = paths.raw_detexify_dir / "detexify.sql.gz"
     data_start = _find_detexify_copy_data_start(dump_path)
     strokes_dtype = pl.List(pl.List(pl.List(pl.Float32)))
 
@@ -139,25 +138,13 @@ def _collect_detexify_raw(paths: DataPaths) -> pl.LazyFrame:
     )
 
 
-def _raw_dataset_features() -> Features:
-    from datasets import Features, List, Value
-    from datasets import Sequence as DatasetSequence
-
-    return Features(
-        {
-            "latex_label": Value("string"),
-            "strokes": List(List(DatasetSequence(Value("float32"), length=2))),
-            "source": Value("string"),
-        }
-    )
-
-
 def convert_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths = DEFAULT_DATA_PATHS) -> pl.DataFrame:
     """Convert original source files into the local raw Parquet dataset."""
     import polars as pl
 
     logger = logging.getLogger(__name__)
-    logger.info("--- Converting Raw Dataset: %s ---", ",".join(dataset_names))
+    conversion_started = perf_counter()
+    logger.info("Converting raw datasets: %s", ", ".join(dataset_names))
 
     lfs: list[pl.LazyFrame] = []
     for dataset_name in dataset_names:
@@ -168,27 +155,59 @@ def convert_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths =
                 raw = _collect_detexify_raw(paths)
         source_col = pl.lit(dataset_name.value).alias("source")
         lfs.append(raw.sort("latex_label").with_columns(source_col))
-    df = pl.concat(lfs).collect(engine="streaming")
 
-    paths.raw_dataset_parquet.parent.mkdir(parents=True, exist_ok=True)
-    df.write_parquet(paths.raw_dataset_parquet, compression="zstd")
-    logger.info("--- Done. Raw dataset saved to %s. ---", paths.raw_dataset_parquet)
+    collect_started = perf_counter()
+    df = pl.concat(lfs).collect(engine="streaming")
+    logger.info(
+        "Collected %s samples with %s distinct LaTeX labels in %.2f s",
+        f"{len(df):,}",
+        f"{df.get_column('latex_label').n_unique():,}",
+        perf_counter() - collect_started,
+    )
+
+    paths.raw_converted_parquet.parent.mkdir(parents=True, exist_ok=True)
+    write_started = perf_counter()
+    logger.info("Writing Zstd Parquet to %s", paths.raw_converted_parquet)
+    df.write_parquet(paths.raw_converted_parquet, compression="zstd")
+    file_size_mib = paths.raw_converted_parquet.stat().st_size / (1024 * 1024)
+    logger.info(
+        "Saved raw dataset (%.1f MiB) in %.2f s; total conversion time %.2f s",
+        file_size_mib,
+        perf_counter() - write_started,
+        perf_counter() - conversion_started,
+    )
     return df
 
 
-def upload_raw_dataset(paths: DataPaths = DEFAULT_DATA_PATHS) -> CommitInfo:
+def upload_raw_dataset(paths: DataPaths = DEFAULT_DATA_PATHS) -> None:
     """Upload the locally converted raw Parquet dataset to Hugging Face."""
-    from datasets import Dataset
+    import fsspec
 
-    if not paths.raw_dataset_parquet.is_file():
-        msg = f"Raw dataset not found at {paths.raw_dataset_parquet}; run convert-raw first"
+    if not paths.raw_converted_parquet.is_file():
+        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run convert-raw first"
         raise FileNotFoundError(msg)
 
     logger = logging.getLogger(__name__)
-    dataset = Dataset.from_parquet(str(paths.raw_dataset_parquet), features=_raw_dataset_features())
-    dataset.info.description = "Raw detypify dataset with original LaTeX labels and vector strokes."
+    file_size = paths.raw_converted_parquet.stat().st_size
+    file_size_mib = file_size / (1024 * 1024)
+    upload_started = perf_counter()
 
-    logger.info("  -> Uploading raw dataset to %s...", HF_DATASET_REPO)
-    commit_info = dataset.push_to_hub(repo_id=HF_DATASET_REPO, config_name="raw", split="data")
-    logger.info("--- Done. Raw dataset uploaded. ---")
-    return commit_info
+    logger.info(
+        "Uploading raw dataset %s (%.1f MiB) to %s",
+        paths.raw_converted_parquet,
+        file_size_mib,
+        HF_RAW_DATASET_PATH,
+    )
+    fs = fsspec.filesystem("hf")
+    fs.put_file(
+        paths.raw_converted_parquet,
+        HF_RAW_DATASET_PATH,
+        commit_message="Upload raw dataset",
+    )
+    elapsed = perf_counter() - upload_started
+    throughput_mib_s = file_size_mib / elapsed if elapsed > 0 else 0
+    logger.info(
+        "Uploaded raw dataset in %.2f s (average %.1f MiB/s)",
+        elapsed,
+        throughput_mib_s,
+    )

@@ -3,9 +3,11 @@ from __future__ import annotations
 from functools import cache
 from hashlib import blake2b
 from json import dumps
-from typing import TYPE_CHECKING, Any, cast
+from math import floor, isclose
+from os import getpid
+from typing import TYPE_CHECKING, TypedDict
 
-from detypify.config import DETERMINISTIC_SPLIT_SEED, HF_DATASET_REPO, DataSetName
+from detypify.config import DETERMINISTIC_SPLIT_SEED, HF_RAW_DATASET_PATH, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.data.rendering import rasterize_strokes
 from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
@@ -13,7 +15,39 @@ from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from datasets import Dataset, DatasetDict
+    import numpy as np
+    import polars as pl
+
+
+class RenderedSample(TypedDict):
+    image: np.ndarray
+    label: int
+
+
+class RenderedDataset:
+    """A map-style dataset that memory-maps Polars rows and rasterizes them on demand."""
+
+    def __init__(self, ipc_path: str, sample_count: int, image_size: int) -> None:
+        self.ipc_path = ipc_path
+        self.sample_count = sample_count
+        self.image_size = image_size
+        self._frame: pl.DataFrame | None = None
+
+    def __len__(self) -> int:
+        return self.sample_count
+
+    def __getitem__(self, index: int) -> RenderedSample:
+        if self._frame is None:
+            import polars as pl
+
+            self._frame = pl.read_ipc(self.ipc_path, memory_map=True, rechunk=False)
+        strokes, label = self._frame.row(index)
+        return {"image": rasterize_strokes(strokes, self.image_size), "label": label}
+
+    def __getstate__(self) -> dict[str, object]:
+        state = self.__dict__.copy()
+        state["_frame"] = None
+        return state
 
 
 def _dataset_name_values(dataset_names: tuple[DataSetName, ...]) -> list[str]:
@@ -21,202 +55,202 @@ def _dataset_name_values(dataset_names: tuple[DataSetName, ...]) -> list[str]:
 
 
 @cache
-def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: DataPaths) -> Dataset:
-    """Load and normalize raw data once per process."""
-    from datasets import Dataset, load_dataset
+def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: DataPaths) -> pl.DataFrame:
+    """Read the local raw Parquet file, downloading it only when absent."""
+    import polars as pl
 
-    paths.datasets_cache_dir.mkdir(parents=True, exist_ok=True)
-    dataset = load_dataset(HF_DATASET_REPO, name="raw", split="data", cache_dir=str(paths.datasets_cache_dir))
-    if not isinstance(dataset, Dataset):
-        msg = "Raw data is not a datasets.Dataset"
-        raise TypeError(msg)
+    if not paths.raw_converted_parquet.is_file():
+        import fsspec
 
-    sources = set(_dataset_name_values(dataset_names))
-    dataset = dataset.filter(lambda source: source in sources, input_columns="source")
-    return cast("Dataset", dataset)
+        paths.raw_converted_parquet.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = paths.raw_converted_parquet.with_name(f".{paths.raw_converted_parquet.name}.{getpid()}.tmp")
+        try:
+            fsspec.filesystem("hf").get_file(HF_RAW_DATASET_PATH, temp_path)
+            temp_path.replace(paths.raw_converted_parquet)
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    dataset = pl.read_parquet(paths.raw_converted_parquet)
+    return dataset.filter(pl.col("source").is_in(_dataset_name_values(dataset_names)))
 
 
-def load_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths) -> Dataset:
-    """Load the raw Hugging Face dataset and filter by source."""
+def load_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths) -> pl.DataFrame:
+    """Load the raw Parquet dataset and filter by source."""
     return _load_raw_dataset_cached(tuple(dataset_names), paths)
 
 
 @cache
 def _map_raw_dataset_cached(
     dataset_names: tuple[DataSetName, ...],
-    num_proc: int,
     paths: DataPaths,
-) -> tuple[Dataset, dict[str, set[str]]]:
-    """Map and filter raw data once per process; datasets persists Arrow cache on disk."""
-    from datasets import Value
+) -> tuple[pl.DataFrame, dict[str, set[str]]]:
+    """Map raw LaTeX labels to Typst characters with Polars."""
+    import polars as pl
 
-    hf_num_proc = num_proc or None
-    tex_to_char = get_tex_to_char()
-    tex_typ_map_digest = get_tex_typ_map_digest()
-    raw_dataset = _load_raw_dataset_cached(dataset_names, paths)
-    raw_dataset_fingerprint = getattr(raw_dataset, "_fingerprint", "")
-    map_fingerprint = blake2b(
-        data=dumps(
-            {
-                "base": raw_dataset_fingerprint,
-                "dataset_names": _dataset_name_values(dataset_names),
-                "stage": "latex-to-typst-v1",
-                "tex_typ_map_digest": tex_typ_map_digest,
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode(),
-        # len(hexdigest) is 2 * digest_size
-        # but the num_proc is also hashed implicitly by huggingface datasets, causing a hexdigest + num_proc size internal fingerprint
-        # so use 16 here
-        digest_size=16,
-    ).hexdigest()
-
-    def map_labels(batch, mapping: dict[str, str]):
-        return {"label": [mapping.get(label) for label in batch["latex_label"]]}
-
-    mapped = cast(
-        "Dataset",
-        raw_dataset.map(
-            map_labels,
-            batched=True,
-            num_proc=hf_num_proc,
-            fn_kwargs={"mapping": tex_to_char},
-            new_fingerprint=map_fingerprint,
-            writer_batch_size=1000,
-            desc="Mapping LaTeX labels",
-        ),
+    mapped = _load_raw_dataset_cached(dataset_names, paths).with_columns(
+        pl.col("latex_label").replace_strict(get_tex_to_char(), default=None, return_dtype=pl.String).alias("label")
     )
-    mapped = cast("Dataset", mapped.cast_column("label", Value("string")))
-
-    unmapped: dict[str, set[str]] = {}
-    unmapped_rows = cast(
-        "Dataset",
-        mapped.filter(lambda label: label is None, input_columns="label").select_columns(["latex_label", "source"]),
-    )
-    for row in cast("list[dict[str, Any]]", unmapped_rows.to_list()):
-        unmapped.setdefault(row["source"], set()).add(row["latex_label"])
-
-    def keep_mapped(label: str | None, strokes: list) -> bool:
-        return label is not None and len(strokes) > 0
-
-    mapped = cast(
-        "Dataset",
-        mapped.filter(
-            keep_mapped,
-            input_columns=["label", "strokes"],
-            num_proc=hf_num_proc,
-            desc="Dropping unmapped or empty samples",
-        ),
-    )
+    unmapped = {
+        source: set(labels)
+        for source, labels in mapped.filter(pl.col("label").is_null())
+        .group_by("source")
+        .agg(pl.col("latex_label").unique())
+        .iter_rows()
+    }
+    mapped = mapped.filter(pl.col("label").is_not_null() & (pl.col("strokes").list.len() > 0))
     return mapped, unmapped
 
 
 def map_raw_dataset(
     dataset_names: Sequence[DataSetName],
     *,
-    num_proc: int = 0,
     paths: DataPaths = DEFAULT_DATA_PATHS,
-) -> tuple[Dataset, dict[str, set[str]]]:
-    """Map raw LaTeX labels to Typst chars using Hugging Face dataset caching."""
-    return _map_raw_dataset_cached(tuple(dataset_names), num_proc, paths)
+) -> tuple[pl.DataFrame, dict[str, set[str]]]:
+    """Map raw LaTeX labels to Typst characters."""
+    return _map_raw_dataset_cached(tuple(dataset_names), paths)
+
+
+def _limit_samples(dataset: pl.DataFrame, max_samples: int | None) -> pl.DataFrame:
+    if max_samples is None or max_samples >= len(dataset):
+        return dataset
+    if max_samples <= 0:
+        return dataset.clear()
+    return dataset.sample(n=max_samples, shuffle=True, seed=DETERMINISTIC_SPLIT_SEED)
 
 
 def get_dataset_classes(
     dataset_names: Sequence[DataSetName],
     *,
     max_samples: int | None,
-    num_proc: int,
     paths: DataPaths = DEFAULT_DATA_PATHS,
 ) -> list[str]:
-    """Return classes from locally mapped raw labels, without relying on HF ClassLabel metadata."""
-    mapped, _ = map_raw_dataset(dataset_names, num_proc=num_proc, paths=paths)
-    if max_samples is not None:
-        shuffled = cast("Dataset", mapped.shuffle(seed=DETERMINISTIC_SPLIT_SEED))
-        mapped = cast("Dataset", shuffled.select(range(min(max_samples, len(shuffled)))))
-    return sorted(cast("list[str]", mapped.unique("label")))
+    """Return the sorted classes in the selected mapped samples."""
+    mapped, _ = map_raw_dataset(dataset_names, paths=paths)
+    mapped = _limit_samples(mapped, max_samples)
+    return mapped.get_column("label").unique().sort().to_list()
+
+
+def _allocate_split_counts(sample_count: int, split_ratio: tuple[float, float, float]) -> tuple[int, int, int]:
+    exact_counts = [sample_count * ratio for ratio in split_ratio]
+    counts = [floor(count) for count in exact_counts]
+    remainder = sample_count - sum(counts)
+    order = sorted(range(len(counts)), key=lambda index: exact_counts[index] - counts[index], reverse=True)
+    for index in order[:remainder]:
+        counts[index] += 1
+    return counts[0], counts[1], counts[2]
+
+
+def _split_frame(
+    dataset: pl.DataFrame,
+    split_ratio: tuple[float, float, float],
+    *,
+    stratified: bool,
+) -> dict[str, pl.DataFrame]:
+    import polars as pl
+
+    partitions = dataset.partition_by("label") if stratified else [dataset]
+    split_frames: dict[str, list[pl.DataFrame]] = {"train": [], "test": [], "val": []}
+    for partition in partitions:
+        shuffled = partition.sample(fraction=1.0, shuffle=True, seed=DETERMINISTIC_SPLIT_SEED)
+        train_count, test_count, val_count = _allocate_split_counts(len(shuffled), split_ratio)
+        split_frames["train"].append(shuffled.head(train_count))
+        split_frames["test"].append(shuffled.slice(train_count, test_count))
+        split_frames["val"].append(shuffled.tail(val_count))
+
+    empty = dataset.clear()
+    return {name: pl.concat(frames) if frames else empty for name, frames in split_frames.items()}
+
+
+def _validate_split_ratio(split_ratio: tuple[float, float, float]) -> None:
+    if any(ratio < 0 for ratio in split_ratio) or not isclose(sum(split_ratio), 1.0):
+        msg = "split_ratio must contain non-negative values that sum to 1"
+        raise ValueError(msg)
+    if split_ratio[1] == 0 or split_ratio[2] == 0:
+        msg = "test and validation split ratios must be greater than 0"
+        raise ValueError(msg)
+
+
+def _split_cache_key(
+    mapped: pl.DataFrame,
+    dataset_names: Sequence[DataSetName],
+    max_samples: int | None,
+    split_ratio: tuple[float, float, float],
+    min_split_class_count: int,
+) -> str:
+    row_hashes = mapped.hash_rows(seed=DETERMINISTIC_SPLIT_SEED)
+    content_hash = blake2b(row_hashes.to_numpy().tobytes(), digest_size=16).hexdigest()
+    payload = dumps(
+        {
+            "content_hash": content_hash,
+            "dataset_names": _dataset_name_values(tuple(dataset_names)),
+            "max_samples": max_samples,
+            "min_split_class_count": min_split_class_count,
+            "sample_count": len(mapped),
+            "split_ratio": split_ratio,
+            "stage": "polars-vector-splits-v1",
+            "tex_typ_map_digest": get_tex_typ_map_digest(),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return blake2b(payload.encode(), digest_size=16).hexdigest()
+
+
+def _write_split_cache(frame: pl.DataFrame, path: str) -> None:
+    from pathlib import Path
+
+    ipc_path = Path(path)
+    if ipc_path.is_file():
+        return
+    ipc_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = ipc_path.with_name(f".{ipc_path.name}.{getpid()}.tmp")
+    frame.write_ipc(temp_path)
+    temp_path.replace(ipc_path)
 
 
 def get_rendered_dataset_splits(
     dataset_names: Sequence[DataSetName],
     image_size: int,
-    num_proc: int,
     paths: DataPaths,
     max_samples: int | None,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
     min_split_class_count: int | None = None,
-) -> tuple[DatasetDict, list[str]]:
-    """Build rendered train/test/val splits using Hugging Face dataset caches."""
-    from collections import Counter
+) -> tuple[dict[str, RenderedDataset], list[str]]:
+    """Build deterministic train/test/validation datasets from mapped Polars rows."""
     from math import ceil
 
-    from datasets import Array2D, ClassLabel, DatasetDict, Features, concatenate_datasets
+    import polars as pl
 
-    mapped, _ = map_raw_dataset(dataset_names, num_proc=num_proc, paths=paths)
-    if max_samples is not None:
-        shuffled = cast("Dataset", mapped.shuffle(seed=DETERMINISTIC_SPLIT_SEED))
-        mapped = cast("Dataset", shuffled.select(range(min(max_samples, len(shuffled)))))
-    classes = sorted(cast("list[str]", mapped.unique("label")))
-    label_to_idx = {label: idx for idx, label in enumerate(classes)}
-
-    def rasterize_batch(batch, size: int, labels: dict[str, int]):
-        return {
-            "label": [labels[label] for label in batch["label"]],
-            "image": [rasterize_strokes(strokes, size).tolist() for strokes in batch["strokes"]],
-        }
-
-    rendered = cast(
-        "Dataset",
-        mapped.map(
-            rasterize_batch,
-            batched=True,
-            num_proc=num_proc,
-            fn_kwargs={"size": image_size, "labels": label_to_idx},
-            remove_columns=mapped.column_names,
-            writer_batch_size=128,
-            features=Features(
-                {
-                    "label": ClassLabel(names=classes),
-                    "image": Array2D(shape=(image_size, image_size), dtype="uint8"),
-                }
-            ),
-            desc=f"Rasterizing {image_size}px symbols",
-        ),
+    _validate_split_ratio(split_ratio)
+    mapped, _ = map_raw_dataset(dataset_names, paths=paths)
+    mapped = _limit_samples(mapped, max_samples)
+    classes: list[str] = mapped.get_column("label").unique().sort().to_list()
+    label_to_index = {label: index for index, label in enumerate(classes)}
+    mapped = mapped.select(
+        "strokes",
+        pl.col("label").replace_strict(label_to_index, return_dtype=pl.UInt32),
     )
 
-    _, test_r, val_r = split_ratio
-    holdout_r = test_r + val_r
+    _, test_ratio, val_ratio = split_ratio
     if min_split_class_count is None:
-        min_split_class_count = max(2, ceil(2 / holdout_r))
+        min_split_class_count = max(2, ceil(1 / test_ratio), ceil(1 / val_ratio))
+    cache_key = _split_cache_key(mapped, dataset_names, max_samples, split_ratio, min_split_class_count)
 
-    label_counts = Counter(cast("list[int]", rendered["label"]))
-    rare_labels = {label for label, count in label_counts.items() if count < min_split_class_count}
-    if rare_labels and len(rare_labels) < len(label_counts):
-        rare = cast("Dataset", rendered.filter(lambda label: label in rare_labels, input_columns="label"))
-        rendered = cast("Dataset", rendered.filter(lambda label: label not in rare_labels, input_columns="label"))
+    label_counts = mapped.group_by("label").len()
+    rare_labels = label_counts.filter(pl.col("len") < min_split_class_count).get_column("label")
+    if 0 < len(rare_labels) < len(label_counts):
+        rare = mapped.filter(pl.col("label").is_in(rare_labels))
+        mapped = mapped.filter(~pl.col("label").is_in(rare_labels))
     else:
-        rare = None
+        rare = mapped.clear()
 
-    split = cast(
-        "DatasetDict",
-        rendered.train_test_split(
-            test_size=holdout_r,
-            seed=DETERMINISTIC_SPLIT_SEED,
-            stratify_by_column=None if max_samples is not None else "label",
-        ),
-    )
-    holdout = split["test"]
-    test_val = cast(
-        "DatasetDict",
-        holdout.train_test_split(
-            test_size=val_r / holdout_r,
-            seed=DETERMINISTIC_SPLIT_SEED,
-            stratify_by_column=None if max_samples is not None else "label",
-        ),
-    )
-    train = split["train"]
-    if rare is not None:
-        train = concatenate_datasets([train, rare])
+    splits = _split_frame(mapped, split_ratio, stratified=max_samples is None)
+    if not rare.is_empty():
+        splits["train"] = pl.concat([splits["train"], rare])
 
-    splits = DatasetDict({"train": train, "test": test_val["train"], "val": test_val["test"]})
-    return splits.with_format("torch"), classes
+    rendered = {}
+    for name, frame in splits.items():
+        ipc_path = paths.dataset_splits_dir / cache_key / f"{name}.arrow"
+        _write_split_cache(frame, str(ipc_path))
+        rendered[name] = RenderedDataset(str(ipc_path), len(frame), image_size)
+    return rendered, classes

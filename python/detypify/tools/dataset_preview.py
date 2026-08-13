@@ -52,12 +52,11 @@ class DatasetPreviewServer:
         dataset_names: Sequence[DataSetName],
         image_size: int,
         default_page_size: int,
-        num_proc: int,
     ) -> None:
-        self.dataset, _ = map_raw_dataset(dataset_names, num_proc=num_proc)
+        self.dataset, _ = map_raw_dataset(dataset_names)
         self.image_size = image_size
         self.default_page_size = default_page_size
-        self.classes = sorted(self.dataset.unique("label"))
+        self.classes = self.dataset.get_column("label").unique().sort().to_list()
         self.class_to_index = {label: index for index, label in enumerate(self.classes)}
         self.search_labels = [str(label).lower() for label in self.dataset["label"]]
         self.search_sources = [str(source).lower() for source in self.dataset["source"]]
@@ -94,7 +93,7 @@ class DatasetPreviewServer:
         start = (page - 1) * page_size
         end = min(total, start + page_size)
         page_indices = filtered_indices[start:end]
-        rows = self.dataset.select(page_indices) if page_indices else []
+        rows = self.dataset[list(page_indices)].iter_rows(named=True) if page_indices else ()
 
         cards = []
         for sample_index, row in zip(page_indices, rows, strict=True):
@@ -199,13 +198,11 @@ def serve_dataset_preview(
     port: int,
     image_size: int,
     page_size: int,
-    num_proc: int,
 ) -> None:
     preview = DatasetPreviewServer(
         dataset_names=dataset_names,
         image_size=image_size,
         default_page_size=page_size,
-        num_proc=num_proc,
     )
     server = ThreadingHTTPServer((host, port), preview.handler_class())
     print(f"Serving dataset preview at http://{host}:{port}")  # noqa: T201

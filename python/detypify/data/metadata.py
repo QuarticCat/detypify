@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from typing import cast
 
 from detypify.config import DataSetName
 from detypify.data.datasets import map_raw_dataset
@@ -13,10 +12,10 @@ def generate_data_info(dataset_names: Sequence[DataSetName], paths: DataPaths = 
 
     from msgspec import json
 
-    paths.generated_dir.mkdir(exist_ok=True, parents=True)
+    paths.raw_metadata_dir.mkdir(exist_ok=True, parents=True)
 
     mapped, unmapped = map_raw_dataset(dataset_names, paths=paths)
-    classes = sorted(cast("list[str]", mapped.unique("label")))
+    classes = mapped.get_column("label").unique().sort().to_list()
     typ_sym_info = get_typst_symbol_info()
     infer = []
     contrib = {n: s.char for s in typ_sym_info for n in s.names}
@@ -33,10 +32,13 @@ def generate_data_info(dataset_names: Sequence[DataSetName], paths: DataPaths = 
         infer.append(info)
 
     logger = logging.getLogger(__name__)
-    for path, info_data in [(paths.infer_json, infer), (paths.contrib_json, contrib)]:
+    for path, info_data in [
+        (paths.raw_metadata_dir / "infer.json", infer),
+        (paths.raw_metadata_dir / "contrib.json", contrib),
+    ]:
         with path.open("wb") as f:
             f.write(json.encode(info_data))
         logger.info("Generated data at %s", path)
 
-    with paths.unmapped_latex_symbols_json.open("wb") as f:
+    with (paths.raw_metadata_dir / "unmapped_latex_symbols.json").open("wb") as f:
         f.write(json.format(json.encode(unmapped)))
