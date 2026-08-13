@@ -60,7 +60,7 @@ class Args:
     """Enable learning rate finder."""
 
     num_workers: int = process_cpu_count() or 1
-    """Number of DataLoader and dataset mapping workers."""
+    """Number of DataLoader workers."""
 
     use_ema: Annotated[bool, cappa.Arg(long="--ema/--no-ema")] = True
     """Enable EMA weight averaging."""
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     dev_max_samples = 2048 if is_debug_dev_run else None
     if is_debug_dev_run:
         args.num_workers = 0
-    classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples, num_proc=args.num_workers)
+    classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples)
 
     # compatibility check for graphics
     if not is_bf16_supported() and args.amp_precision == "bf16-mixed":

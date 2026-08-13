@@ -51,7 +51,6 @@ class MathSymbolDataModule(LightningDataModule):
         dataset, self.classes = get_rendered_dataset_splits(
             self.dataset_names,
             self.image_size,
-            num_proc=self.num_workers,
             paths=self.paths,
             max_samples=self.max_samples,
         )

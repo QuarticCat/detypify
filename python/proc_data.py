@@ -1,7 +1,7 @@
 """Data processing entry script."""
 
+import logging
 from dataclasses import dataclass, field
-from os import process_cpu_count
 from typing import Annotated
 
 import cappa
@@ -60,9 +60,6 @@ class Preview(CommonArgs):
     page_size: int = 120
     """Default samples per page."""
 
-    num_workers: int = process_cpu_count() or 1
-    """Dataset mapping worker count."""
-
 
 @cappa.command(name="proc-data")
 @dataclass
@@ -73,6 +70,10 @@ class Args:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     args = cappa.parse(Args, completion=False)
     match args.command:
         case Digest():
@@ -92,5 +93,4 @@ if __name__ == "__main__":
                 port=preview.port,
                 image_size=preview.image_size,
                 page_size=preview.page_size,
-                num_proc=preview.num_workers,
             )

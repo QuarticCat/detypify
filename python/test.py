@@ -25,7 +25,7 @@ class Args:
     ckpt_path: Annotated[Path, cappa.Arg(short="-c")]
     """Checkpoint path to evaluate."""
 
-    out_dir: Path = DEFAULT_DATA_PATHS.train_dir / "eval"
+    out_dir: Path = DEFAULT_DATA_PATHS.train_dir / "_eval"
     """TensorBoard output directory."""
 
     run_name: str = "existing_model"
@@ -43,7 +43,7 @@ class Args:
     """Override image size. Defaults to the checkpoint hparams image size."""
 
     num_workers: int = process_cpu_count() or 1
-    """DataLoader and dataset mapping workers."""
+    """Number of DataLoader workers."""
 
     max_samples: int | None = None
     """Limit samples for a quick test run."""
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     model = MobileNetModel.load_from_checkpoint(args.ckpt_path)
     args.image_size = args.image_size or int(model.hparams["image_size"])
     dataset_names = tuple(dict.fromkeys(args.datasets))
-    classes = get_dataset_classes(dataset_names, max_samples=args.max_samples, num_proc=args.num_workers)
+    classes = get_dataset_classes(dataset_names, max_samples=args.max_samples)
 
     dm = MathSymbolDataModule(
         batch_size=args.batch_size,
