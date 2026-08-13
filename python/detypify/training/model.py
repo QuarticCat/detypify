@@ -14,8 +14,6 @@ from torchmetrics import Accuracy, F1Score
 from detypify.config import ModelFamily, parse_mobilenet_model_name
 
 _GELU = partial(nn.GELU, approximate="tanh")
-_IMAGE_MIN = -1e-4
-_IMAGE_MAX = 1.0001
 
 # Keep the recognition-specific MobileNetV5 layout explicit so its channel multiplier remains configurable.
 _MOBILENET_V5_ARCH_DEF = [
@@ -33,26 +31,25 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
         if model_spec.family == ModelFamily.v4:
             from timm.models.mobilenetv3 import _gen_mobilenet_v4
 
-            return _gen_mobilenet_v4(
+            model = _gen_mobilenet_v4(
                 "mobilenetv4_conv_small",
                 channel_multiplier=model_spec.size,
                 aa_layer="blurpc",
                 **kwargs,
             )
-        return MobileNetV5(
-            block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
-            num_features=384,
-            stem_size=24,
-            use_msfa=True,
-            norm_layer=nn.BatchNorm2d,
-            act_layer=_GELU,
-            round_chs_fn=partial(round_channels, multiplier=model_spec.size),
-            layer_scale_init_value=1e-5,
-            **kwargs,
-        )
-
-    err_msg = f"Unsupported model family: {model_spec.family!r}"
-    raise AssertionError(err_msg)
+        else:
+            model = MobileNetV5(
+                block_args=decode_arch_def(_MOBILENET_V5_ARCH_DEF),
+                num_features=384,
+                stem_size=24,
+                use_msfa=True,
+                norm_layer=nn.BatchNorm2d,
+                act_layer=_GELU,
+                round_chs_fn=partial(round_channels, multiplier=model_spec.size),
+                layer_scale_init_value=1e-5,
+                **kwargs,
+            )
+    return model
 
 
 class BaseModel(LightningModule):
@@ -166,7 +163,6 @@ class BaseModel(LightningModule):
             "lr_scheduler": {
                 "scheduler": scheduler,
                 "interval": "epoch",
-                "monitor": "val_loss",
             },
         }
 
@@ -208,7 +204,6 @@ class MobileNetModel(BaseModel):
         # Channels-last layout is shared by eager and compiled paths to avoid conversions inside the backbone.
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
         self.model_opt = torch.compile(self.model, mode="max-autotune", dynamic=False) if use_compile else None
-        self.model_name: str = model_name
 
     def forward(self, x):
         x = x.to(memory_format=torch.channels_last)

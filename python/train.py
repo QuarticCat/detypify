@@ -10,8 +10,6 @@ import cappa
 
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
-CUDA_AMPERE_VERSION = 8
-
 
 @cappa.command(name="train", default_long=True)
 @dataclass
@@ -107,20 +105,6 @@ if __name__ == "__main__":
         args.amp_precision = "16-mixed"
     else:
         set_float32_matmul_precision("medium")
-    model_instances: list[MobileNetModel] = [
-        MobileNetModel(
-            num_classes=len(classes),
-            model_name=model,
-            warmup_epochs=args.warmup_epochs,
-            total_epochs=args.total_epochs,
-            image_size=args.image_size,
-            learning_rate=args.learning_rate,
-            label_smoothing=args.label_smoothing,
-            use_compile=args.use_compile,
-        )
-        for model in args.models
-    ]
-
     # All model variants share the same deterministic dataset partitions and class order.
     dm = MathSymbolDataModule(
         batch_size=args.init_batch_size,
@@ -129,17 +113,27 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
     )
 
-    for model in model_instances:
+    for model_name in args.models:
+        model = MobileNetModel(
+            num_classes=len(classes),
+            model_name=model_name,
+            warmup_epochs=args.warmup_epochs,
+            total_epochs=args.total_epochs,
+            image_size=args.image_size,
+            learning_rate=args.learning_rate,
+            label_smoothing=args.label_smoothing,
+            use_compile=args.use_compile,
+        )
+
         # Each model gets an isolated TensorBoard version, checkpoints, and effective-argument record.
-        model_name_str = model.model_name
-        tb_logger = TensorBoardLogger(save_dir=args.out_dir, name=model_name_str, default_hp_metric=False)  # type: ignore
+        tb_logger = TensorBoardLogger(save_dir=args.out_dir, name=model_name, default_hp_metric=False)  # type: ignore
 
         final_output_dir = Path(tb_logger.log_dir)
         checkpoints_dir = final_output_dir / "ckpts"
         train_args_path = final_output_dir / "training_args.yaml"
         train_args_path.parent.mkdir(parents=True, exist_ok=True)
 
-        current_args = {**asdict(args), "model_name": model_name_str, "num_classes": len(classes)}
+        current_args = {**asdict(args), "model_name": model_name, "num_classes": len(classes)}
 
         with train_args_path.open("wb") as f:
             f.write(yaml.encode(current_args, enc_hook=str))
@@ -180,7 +174,7 @@ if __name__ == "__main__":
         callbacks.append(
             ExportBestModelToONNX(
                 save_dir=checkpoints_dir,
-                model_name=model_name_str,
+                model_name=model_name,
                 checkpoint_callback=checkpoint_callback,
                 use_compile=args.use_compile,
             )

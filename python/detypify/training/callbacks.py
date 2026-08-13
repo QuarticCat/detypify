@@ -50,9 +50,6 @@ class LogPredictCallback(Callback):
             return
 
         # This callback relies on test_step returning logits and ignores incompatible modules.
-        if outputs is None:
-            return
-
         if not isinstance(outputs, torch.Tensor):
             return
 
@@ -86,59 +83,51 @@ class LogPredictCallback(Callback):
         from lightning.pytorch.loggers import TensorBoardLogger
 
         if isinstance(trainer.logger, TensorBoardLogger):
-            from math import ceil
-
-            import matplotlib as mpl
-            import matplotlib.pyplot as plt
-
-            mpl.use("Agg")
-
-            tensorboard = trainer.logger.experiment
-
-            # Use a near-square grid and normalize matplotlib's scalar/array axes variants.
-            num_images = len(selected_images)
-            cols = ceil(num_images**0.5)
-            rows = ceil(num_images / cols)
-
-            fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
-            axes_flat = [axes] if num_images == 1 else axes.flatten()
-
-            for i, (img, pred_idx, true_idx) in enumerate(
-                zip(selected_images, selected_preds, true_labels, strict=True)
-            ):
-                ax = axes_flat[i]
-
-                img_np = img.cpu().numpy()
-                if img_np.shape[0] == 1:
-                    img_np = img_np.squeeze(0)
-
-                ax.imshow(img_np, cmap="gray")
-
-                pred_name = self.classes[pred_idx] if pred_idx < len(self.classes) else str(pred_idx.item())
-                true_name = self.classes[true_idx] if true_idx < len(self.classes) else str(true_idx.item())
-
-                is_correct = pred_idx == true_idx
-                title_color = "green" if is_correct else "red"
-
-                ax.set_title(f"Truth: {true_name}\nPrediction: {pred_name}", color=title_color)
-                ax.axis("off")
-
-            for i in range(num_images, len(axes_flat)):
-                axes_flat[i].axis("off")
-
-            plt.tight_layout()
-
-            if self.log_type == "wrong":
-                tag = "wrong_predictions"
-            elif self.log_type == "right":
-                tag = "right_predictions"
-            else:
-                tag = "predictions"
-
-            tensorboard.add_figure(tag, fig, global_step=batch_idx)
-            plt.close(fig)
+            self._log_prediction_grid(
+                trainer.logger.experiment,
+                selected_images,
+                selected_preds,
+                true_labels,
+                batch_idx,
+            )
 
         self.logged_batches += 1
+
+    def _log_prediction_grid(self, tensorboard, images, preds, labels, batch_idx: int) -> None:
+        """Render selected predictions as a near-square TensorBoard figure."""
+        from math import ceil
+
+        import matplotlib as mpl
+        import matplotlib.pyplot as plt
+
+        mpl.use("Agg")
+
+        num_images = len(images)
+        cols = ceil(num_images**0.5)
+        rows = ceil(num_images / cols)
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
+        axes_flat = [axes] if num_images == 1 else axes.flatten()
+
+        for i, (img, pred_idx, true_idx) in enumerate(zip(images, preds, labels, strict=True)):
+            ax = axes_flat[i]
+            img_np = img.cpu().numpy()
+            if img_np.shape[0] == 1:
+                img_np = img_np.squeeze(0)
+
+            ax.imshow(img_np, cmap="gray")
+            pred_name = self.classes[pred_idx] if pred_idx < len(self.classes) else str(pred_idx.item())
+            true_name = self.classes[true_idx] if true_idx < len(self.classes) else str(true_idx.item())
+            title_color = "green" if pred_idx == true_idx else "red"
+            ax.set_title(f"Truth: {true_name}\nPrediction: {pred_name}", color=title_color)
+            ax.axis("off")
+
+        for ax in axes_flat[num_images:]:
+            ax.axis("off")
+
+        plt.tight_layout()
+        tag = {"wrong": "wrong_predictions", "right": "right_predictions"}.get(self.log_type, "predictions")
+        tensorboard.add_figure(tag, fig, global_step=batch_idx)
+        plt.close(fig)
 
 
 class LogTestConfusionCallback(Callback):
@@ -180,7 +169,7 @@ class LogTestConfusionCallback(Callback):
         """Add one batch to confusion counts and retain representative mistakes."""
         import torch
 
-        if outputs is None or self.confusion_matrix is None:
+        if self.confusion_matrix is None:
             return
 
         if not isinstance(outputs, torch.Tensor):
@@ -351,10 +340,9 @@ def get_ema_multi_avg_fn(decay: float, min_decay: float, warmup_gamma: float, wa
 
     @torch.no_grad()
     def ema_multi_update(averaged_param_list: list[Tensor], current_param_list: list[Tensor], num_averaged: Tensor):
-        step = num_averaged.item()
-
         # Ramp decay from min_decay to its cap to reduce initialization bias in early updates.
         if use_warmup:
+            step = num_averaged.item()
             cur_decay = 1 - (1 + step / warmup_gamma) ** -warmup_power
             cur_decay = max(min(decay, cur_decay), min_decay)
         else:
@@ -378,8 +366,8 @@ def get_ema_multi_avg_fn(decay: float, min_decay: float, warmup_gamma: float, wa
         if lerp_ema_params:
             torch._foreach_lerp_(lerp_ema_params, lerp_curr_params, weight=1.0 - cur_decay)
 
-        for ema_p, curr_p in zip(copy_ema_params, copy_curr_params, strict=True):
-            ema_p.copy_(curr_p)
+        if copy_ema_params:
+            torch._foreach_copy_(copy_ema_params, copy_curr_params)
 
     return ema_multi_update
 
@@ -457,8 +445,7 @@ class ExportBestModelToONNX(Callback):
 
         best_model = MobileNetModel.load_from_checkpoint(best_model_path, model_name=self.model_name)
         best_model.freeze()
-        if hasattr(best_model, "use_compile"):
-            best_model.use_compile = False  # type: ignore
+        best_model.use_compile = False
 
         save_path = self.save_dir / f"{best_model_path.stem}.onnx"
 
