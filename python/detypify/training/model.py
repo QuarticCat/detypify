@@ -3,7 +3,6 @@ from functools import partial
 from typing import override
 
 import torch
-from detypify.config import ModelFamily, parse_mobilenet_model_name
 from lightning import LightningModule
 from timm.layers import set_layer_config
 from timm.models._efficientnet_builder import decode_arch_def, round_channels  # noqa: PLC2701
@@ -11,6 +10,8 @@ from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torchmetrics import Accuracy, F1Score
+
+from detypify.config import ModelFamily, parse_mobilenet_model_name
 
 _GELU = partial(nn.GELU, approximate="tanh")
 _IMAGE_MIN = -1e-4
@@ -139,7 +140,13 @@ class BaseModel(LightningModule):
             {"params": no_decay, "weight_decay": 0.0},
         ]
 
-        optimizer = optim.AdamW(optim_groups, lr=self.learning_rate, betas=(0.9, 0.999), eps=1e-7)
+        optimizer = optim.AdamW(
+            optim_groups,
+            lr=self.learning_rate,
+            betas=(0.9, 0.999),
+            eps=1e-7,
+            fused=next(self.parameters()).is_cuda,
+        )
 
         warmup_scheduler = LinearLR(optimizer, total_iters=self.warm_up_epochs)
 

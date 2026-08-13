@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 import cappa
+
 from detypify.config import DataSetName
 from detypify.data.metadata import generate_data_info
 from detypify.data.raw import convert_raw_dataset, upload_raw_dataset

@@ -6,15 +6,17 @@ from pathlib import Path
 from typing import Annotated
 
 import cappa
+from lightning import Trainer
+from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.loggers import TensorBoardLogger
+from torch.cuda import is_bf16_supported
+
 from detypify.config import DataSetName
 from detypify.data.datasets import get_dataset_classes
 from detypify.data.paths import DEFAULT_DATA_PATHS
 from detypify.training.callbacks import LogPredictCallback, LogTestConfusionCallback
 from detypify.training.datamodule import MathSymbolDataModule
 from detypify.training.model import MobileNetModel
-from lightning import Trainer
-from lightning.pytorch.loggers import TensorBoardLogger
-from torch.cuda import is_bf16_supported
 
 
 @cappa.command(name="test", default_long=True)
@@ -66,7 +68,7 @@ class Args:
 
 if __name__ == "__main__":
     args = cappa.parse(Args, completion=False)
-    if args.amp_precision == "bf16-mixed" and not is_bf16_supported():
+    if args.amp_precision == "bf16-mixed" and not is_bf16_supported(including_emulation=False):
         args.amp_precision = "16-mixed"
 
     model = MobileNetModel.load_from_checkpoint(args.ckpt_path)
@@ -82,7 +84,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
     )
 
-    callbacks = [
+    callbacks: list[Callback] = [
         LogTestConfusionCallback(
             classes,
             top_k_false_predicted_labels=args.top_false_labels,
