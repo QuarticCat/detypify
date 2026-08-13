@@ -24,14 +24,8 @@ class Args:
     out_dir: Path = DEFAULT_DATA_PATHS.train_dir
     """Output directory."""
 
-    debug: bool = False
-    """Enable debug mode."""
-
     profiling: bool = False
     """Enable performance profiler."""
-
-    dev_run: bool = False
-    """Fast dev run (valid only when debug is true)."""
 
     log_pred: Annotated[bool, cappa.Arg(long="--log-pred/--no-log-pred")] = True
     """Log predictions for review."""
@@ -105,19 +99,14 @@ if __name__ == "__main__":
     from detypify.training.model import MobileNetModel
 
     dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
-    is_debug_dev_run = args.debug and args.dev_run
-    if is_debug_dev_run:
-        args.num_workers = 0
     classes = get_dataset_classes(dataset_names)
 
-    # Use a deterministic CPU path for fast development runs; otherwise choose the best native mixed precision.
-    if not is_debug_dev_run:
-        # Emulated BF16 can be reported as supported but is not a useful training acceleration path.
-        if not is_bf16_supported(including_emulation=False) and args.amp_precision == "bf16-mixed":
-            logger.warning("Current device does not support native bfloat16 precision; using float16 instead.")
-            args.amp_precision = "16-mixed"
-        else:
-            set_float32_matmul_precision("medium")
+    # Emulated BF16 can be reported as supported but is not a useful training acceleration path.
+    if not is_bf16_supported(including_emulation=False) and args.amp_precision == "bf16-mixed":
+        logger.warning("Current device does not support native bfloat16 precision; using float16 instead.")
+        args.amp_precision = "16-mixed"
+    else:
+        set_float32_matmul_precision("medium")
     model_instances: list[MobileNetModel] = [
         MobileNetModel(
             num_classes=len(classes),
@@ -127,7 +116,7 @@ if __name__ == "__main__":
             image_size=args.image_size,
             learning_rate=args.learning_rate,
             label_smoothing=args.label_smoothing,
-            use_compile=args.use_compile and not args.debug,
+            use_compile=args.use_compile,
         )
         for model in args.models
     ]
@@ -152,9 +141,8 @@ if __name__ == "__main__":
 
         current_args = {**asdict(args), "model_name": model_name_str, "num_classes": len(classes)}
 
-        if not args.debug:
-            with train_args_path.open("wb") as f:
-                f.write(yaml.encode(current_args, enc_hook=str))
+        with train_args_path.open("wb") as f:
+            f.write(yaml.encode(current_args, enc_hook=str))
 
         callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
 
@@ -187,26 +175,23 @@ if __name__ == "__main__":
         )
         callbacks.append(checkpoint_callback)
 
-        # Production runs export the same best checkpoint selected above.
-        if not args.debug:
-            from detypify.training.callbacks import ExportBestModelToONNX
+        from detypify.training.callbacks import ExportBestModelToONNX
 
-            callbacks.append(
-                ExportBestModelToONNX(
-                    save_dir=checkpoints_dir,
-                    model_name=model_name_str,
-                    checkpoint_callback=checkpoint_callback,
-                    use_compile=args.use_compile and not args.debug,
-                )
+        callbacks.append(
+            ExportBestModelToONNX(
+                save_dir=checkpoints_dir,
+                model_name=model_name_str,
+                checkpoint_callback=checkpoint_callback,
+                use_compile=args.use_compile,
             )
+        )
 
         trainer = Trainer(
             max_epochs=args.total_epochs,
             default_root_dir=args.out_dir,
             logger=tb_logger,
-            fast_dev_run=args.debug and args.dev_run,
-            accelerator="cpu" if is_debug_dev_run else "auto",
-            precision="32-true" if is_debug_dev_run else args.amp_precision,  # type: ignore
+            accelerator="auto",
+            precision=args.amp_precision,  # type: ignore
             profiler="simple" if args.profiling else None,
             callbacks=callbacks,
         )
@@ -215,11 +200,11 @@ if __name__ == "__main__":
         tuner = Tuner(trainer)
         model.use_compile = False
         batch_size = args.init_batch_size
-        if not args.debug and trainer.num_devices == 1 and args.find_batch_size:
+        if trainer.num_devices == 1 and args.find_batch_size:
             suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=args.init_batch_size)
             batch_size = suggested_batch_size or args.init_batch_size
         logger.info("The final batch size is %s.", batch_size)
-        if args.find_lr and not args.debug and not args.dev_run:
+        if args.find_lr:
             min_lr = min(1e-4, args.learning_rate / 20)
             max_lr = max(1e-3, args.learning_rate * 5)
             lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=min_lr, max_lr=max_lr)
@@ -242,6 +227,6 @@ if __name__ == "__main__":
 
         # Restore the requested compiled path only after tuning has fixed the effective settings.
         dm.batch_size = batch_size
-        model.use_compile = args.use_compile and not args.debug
+        model.use_compile = args.use_compile
         trainer.fit(model, datamodule=dm)
-        trainer.test(model, datamodule=dm, ckpt_path=None if is_debug_dev_run else "best")
+        trainer.test(model, datamodule=dm, ckpt_path="best")
