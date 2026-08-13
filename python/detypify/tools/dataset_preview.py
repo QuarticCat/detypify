@@ -48,6 +48,8 @@ def _page_options(current: int) -> str:
 
 
 class DatasetPreviewServer:
+    """Prepare mapped samples and render searchable HTML pages for the local server."""
+
     def __init__(
         self,
         dataset_names: Sequence[DataSetName],
@@ -64,6 +66,7 @@ class DatasetPreviewServer:
         self.filter_cache: dict[str, tuple[int, ...]] = {}
 
     def filtered_indices(self, query: str) -> tuple[int, ...]:
+        """Resolve an index query or substring search, caching recent result sets."""
         query = query.strip().lower()
         if query in self.filter_cache:
             return self.filter_cache[query]
@@ -80,12 +83,14 @@ class DatasetPreviewServer:
                     matches_list.append(index)
             matches = tuple(matches_list)
 
+        # Dict insertion order provides a small FIFO cache without retaining every search.
         if len(self.filter_cache) >= FILTER_CACHE_SIZE:
             self.filter_cache.pop(next(iter(self.filter_cache)))
         self.filter_cache[query] = matches
         return matches
 
     def page_html(self, page: int, page_size: int, query: str) -> str:
+        """Render one bounded page of matching samples as a self-contained document."""
         query = query.strip()
         filtered_indices = self.filtered_indices(query)
         total = len(filtered_indices)
@@ -96,6 +101,7 @@ class DatasetPreviewServer:
         page_indices = filtered_indices[start:end]
         rows = self.dataset[list(page_indices)].iter_rows(named=True) if page_indices else ()
 
+        # Rasterize only visible rows; embedding PNGs keeps the HTTP handler stateless.
         cards = []
         for sample_index, row in zip(page_indices, rows, strict=True):
             label = str(row["label"])
@@ -169,6 +175,7 @@ class DatasetPreviewServer:
 """
 
     def handler_class(self) -> type[BaseHTTPRequestHandler]:
+        """Bind this preview instance into a request-handler class for ThreadingHTTPServer."""
         preview = self
 
         class Handler(BaseHTTPRequestHandler):

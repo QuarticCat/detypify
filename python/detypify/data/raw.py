@@ -50,6 +50,7 @@ def _parse_mathwriting_symbol(data: bytes) -> tuple[str, Strokes] | None:
         if not trace_text:
             continue
 
+        # InkML points contain x, y, and time; only geometry is needed for rasterization.
         stroke = []
         for raw_point in trace_text.split(","):
             point = raw_point.split()
@@ -64,6 +65,7 @@ def _parse_mathwriting_symbol(data: bytes) -> tuple[str, Strokes] | None:
 def _iter_mathwriting_symbol_data(filepath: Path) -> Iterator[bytes]:
     """Yield the official archive's contiguous section of symbol InkML files."""
     in_symbol_section = False
+    # Stream the large archive and stop once its ordered symbol section ends.
     with tarfile.open(filepath, "r|gz") as archive:
         for member in archive:
             if not member.name.startswith(MATHWRITING_SYMBOL_PREFIX):
@@ -113,6 +115,7 @@ def _collect_detexify_raw(paths: DataPaths) -> pl.LazyFrame:
     data_start = _find_detexify_copy_data_start(dump_path)
     strokes_dtype = pl.List(pl.List(pl.List(pl.Float32)))
 
+    # Decode the PostgreSQL COPY section lazily and normalize every point to its x/y coordinates.
     return (
         pl.scan_csv(
             dump_path,
@@ -157,6 +160,7 @@ def convert_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths =
         source_col = pl.lit(dataset_name.value).alias("source")
         lfs.append(raw.sort("latex_label").with_columns(source_col))
 
+    # Execute all source pipelines together so Polars can collect them with its streaming engine.
     collect_started = perf_counter()
     df = pl.concat(lfs).collect(engine="streaming")
     logger.info(

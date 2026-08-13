@@ -34,6 +34,8 @@ def get_typst_symbol_info() -> list[TypstSymInfo]:
             char = li["data-value"][0]
             if is_invisible(char) or li.get("data-deprecation"):
                 continue
+
+            # Typst exposes aliases as separate HTML entries, but downstream code needs one record per character.
             if char in sym_info:
                 sym_info[char].names.append(name)
                 continue
@@ -65,6 +67,7 @@ def get_tex_typ_map() -> dict[str, TypstSymInfo]:
     tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
     name_to_typ = {name: s for s in typ_sym_info for name in s.names}
 
+    # Supplementary entries intentionally override mappings inferred from Typst's LaTeX metadata.
     mapping_path = resources.files("detypify") / "assets" / "tex_to_typ_sup.yaml"
     with mapping_path.open("rb") as f:
         from msgspec.yaml import decode
