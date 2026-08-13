@@ -5,7 +5,7 @@ from typing import override
 import torch
 from lightning import LightningModule
 from timm.layers import set_layer_config
-from timm.models._efficientnet_builder import decode_arch_def, round_channels  # noqa: PLC2701
+from timm.models._efficientnet_builder import decode_arch_def, round_channels
 from timm.models.mobilenetv5 import MobileNetV5
 from torch import Tensor, nn, optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
@@ -29,7 +29,7 @@ def create_project_model(model_name: str, **kwargs) -> nn.Module:
     model_spec = parse_mobilenet_model_name(model_name)
     with set_layer_config(exportable=True):
         if model_spec.family == ModelFamily.v4:
-            from timm.models.mobilenetv3 import _gen_mobilenet_v4  # noqa: PLC2701
+            from timm.models.mobilenetv3 import _gen_mobilenet_v4
 
             return _gen_mobilenet_v4(
                 "mobilenetv4_conv_small",
