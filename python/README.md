@@ -1,37 +1,42 @@
 # Detypify Model
 
-This directory contains the Python package and entry scripts for data preprocessing, model training, and frontend metadata generation.
+This directory contains the Python package and entry scripts for data preprocessing,
+model training, checkpoint evaluation, and frontend metadata generation.
 
 ## Project Structure
 
-- `proc_data.py`: Compatibility entry script for raw dataset upload and metadata generation.
-- `train.py`: Compatibility entry script for model training.
-- `detypify/config.py`: Shared enum and remote dataset config.
+- `proc_data.py`: Data conversion, upload, metadata, mapping-digest, and preview CLI.
+- `train.py`: Model training and post-training evaluation CLI.
+- `test.py`: Standalone checkpoint evaluation and diagnostic logging CLI.
+- `detypify/config.py`: Shared dataset and model configuration.
 - `detypify/types.py`: Shared stroke aliases and msgspec structs.
 - `detypify/data/`: Raw source parsing, Polars transforms, rendering, metadata, and path config.
 - `detypify/training/`: Lightning data module, model definitions, and training callbacks.
-- `detypify/tools/`: Maintainer tools.
+- `detypify/tools/`: Local dataset inspection tools.
 - `detypify/assets/tex_to_typ_sup.yaml`: Manual mapping overrides for LaTeX to Typst symbol names.
 
 ## Development
 
 ### Prerequisites
 
-This project uses `uv` for dependency management. Run commands from the repository root unless noted otherwise.
+This project requires Python 3.13 or newer and uses `uv` for dependency management.
+Run commands from the repository root unless noted otherwise.
 
 >[!WARNING]
 > On Linux, plain `uv run` still installs PyTorch indirectly through Lightning
 > and timm. The default PyPI build can be CUDA-enabled, and training automatically
 > uses CUDA when a compatible GPU is available. Select exactly one accelerator
 > extra to pin the intended PyTorch build: `cpu`, `cuda12`, `cuda13`, or `rocm`.
+> Pass it to `uv run`, for example `uv run --extra cuda13 python/train.py`.
 
 ### Data Preprocessing
 
 Training reads `build/raw/_converted/data.parquet` with Polars, using the output of
 `convert-raw` directly when available. If the file is absent, it is downloaded
 from Hugging Face through `fsspec`. Polars handles label mapping, filtering,
-sampling, and splitting, and the PyTorch data loader rasterizes samples on
-demand.
+sampling, and deterministic splitting. Split rows are cached as Arrow IPC files
+under `build/train/_dataset_splits`, while the PyTorch data loader rasterizes
+strokes on demand.
 
 #### Preparing Raw Data
 
@@ -95,6 +100,7 @@ uv run python/proc_data.py gen-metadata
 ```
 
 Generated frontend metadata is written to `build/raw/_metadata`:
+
 - `infer.json`: model output symbol metadata.
 - `contrib.json`: Typst symbol-name to character mapping for contribution UI.
 - `unmapped_latex_symbols.json`: unmapped source labels for review.
@@ -115,26 +121,28 @@ uv run python/proc_data.py preview
 The browser is served at `http://127.0.0.1:8000` by default. Use
 `--datasets`, `--port`, `--page-size`, and `--image-size` to change what is shown.
 
-See more options with:
+See available subcommands and options with:
 
 ```bash
 uv run python/proc_data.py --help
+uv run python/proc_data.py preview --help
 ```
 
 ### Model Training
 
 >[!NOTE]
-> The ema gamma and decay params are crucial things to change if you're meeting with
-> accuracy low problem.
-> By default, these options are tuned for batch size 128 as default.
+> EMA decay and warmup are step-dependent. Their defaults are tuned around the
+> default batch size of 128; revisit them when the effective batch size changes
+> substantially.
 
-To train the default MobileNet comparison set:
+To train the default model with the default settings:
 
 ```bash
-uv run python/train.py --total-epochs 35 --image-size 224
+uv run python/train.py
 ```
 
-This trains `mobilenet_v4_035`.
+This trains `mobilenet_v4_035` for 40 epochs with 224x224 inputs and an initial
+batch size of 128.
 
 You can specify models to be trained:
 
@@ -158,24 +166,39 @@ uv run python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learnin
 ```
 
 The script will:
-1. Read the local raw Parquet data (downloading it only when absent) and cache deterministic Polars splits under `build/train/_dataset_splits`.
-2. Optionally find the largest batch size when `--find-batch-size` is set.
-3. Find a learning rate for non-debug, non-`--dev-run` training unless `--no-find-lr` is set.
-4. Train each requested model.
-5. Export best checkpoints to ONNX under `build/train/{model_name}/version_*/ckpts`.
+
+1. Read the local raw Parquet data, downloading it only when absent.
+2. Build deterministic 80/10/10 Polars splits and cache their vector rows under `build/train/_dataset_splits`.
+3. Optionally find the largest batch size when `--find-batch-size` is set.
+4. Find a learning rate for non-debug, non-`--dev-run` training unless `--no-find-lr` is set.
+5. Train each requested model and retain the best and last Lightning checkpoints.
+6. Export the best checkpoint to ONNX, then evaluate the best checkpoint on the test split.
+
+Each production run writes to `build/train/{model_name}/version_*`. Its `ckpts`
+directory contains checkpoints and the exported ONNX model; `training_args.yaml`
+records the final batch size and effective learning rate. Debug runs skip ONNX
+export.
 
 **Key Options:**
+
 - `--out-dir`: Output directory (default: `build/train`).
 - `--debug --dev-run`: Use a small CPU-only fast dev run.
+- `--init-batch-size`: Initial batch size (default: `128`).
+- `--total-epochs`: Total training epochs (default: `40`).
+- `--warmup-epochs`: Linear learning-rate warmup epochs (default: `3`).
 - `--learning-rate`: Optimizer learning rate used when LR finder is disabled.
 - `--amp-precision`: Training precision (default: `bf16-mixed`; use `32-true` if V5 loss becomes NaN).
 - `--find-batch-size`: Enable Lightning batch-size scaling.
 - `--no-find-lr`: Skip Lightning learning-rate finder before training.
 - `--num-workers`: Override the DataLoader worker count.
-- `--log-pred`: Enable logging of predictions (default: True).
+- `--ema` / `--no-ema`: Enable or disable EMA weight averaging (enabled by default).
+- `--ema-warmup` / `--no-ema-warmup`: Enable or disable inverse-gamma EMA warmup.
+- `--compile`: Enable `torch.compile` for the final training run (disabled by default).
+- `--log-pred` / `--no-log-pred`: Enable or disable test prediction diagnostics (enabled by default).
 
-CUDA training automatically uses fused AdamW. The default `bf16-mixed` precision falls back to `16-mixed` when the
-GPU does not provide native BF16 instructions; emulated BF16 support is not used for training.
+CUDA training automatically uses fused AdamW. The default `bf16-mixed` precision
+falls back to `16-mixed` when the GPU does not provide native BF16 instructions;
+emulated BF16 support is not used for training.
 
 To view the training/test logs:
 
@@ -186,11 +209,24 @@ uv run tensorboard --logdir ./build/train
 To run the test diagnostics for an existing checkpoint without retraining:
 
 ```bash
-uv run python/test.py --ckpt-path build/train/mobilenet_v4_035/version_0/ckpts/best-epoch=00-val_acc=0.0000.ckpt
+uv run python/test.py --ckpt-path build/train/mobilenet_v4_035/version_0/ckpts/last.ckpt
 ```
 
-This writes TensorBoard logs under `build/train/eval/existing_model/version_*`,
-including `test/confusion_matrix`, `test/top_false_predicted_labels`, and
+By default, evaluation uses both source datasets, takes the image size from the
+checkpoint, and writes TensorBoard logs under
+`build/train/_eval/existing_model/version_*`. Logs include prediction grids,
+`test/confusion_matrix`, `test/top_false_predicted_labels`, and
 `test/top_false_predicted_label_examples`.
 
-See more tunable options with: `uv run python/train.py --help`
+Use `--out-dir` and `--run-name` to organize output, `--max-samples` for a quick
+run, `--no-log-predictions` to omit prediction grids, and
+`--top-false-labels`, `--examples-per-label`, or `--max-confusion-labels` to
+control error diagnostics. Dataset selection must preserve the class ordering
+used to train the checkpoint.
+
+See all current options with:
+
+```bash
+uv run python/train.py --help
+uv run python/test.py --help
+```

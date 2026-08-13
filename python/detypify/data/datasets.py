@@ -37,6 +37,7 @@ class RenderedDataset:
         return self.sample_count
 
     def __getitem__(self, index: int) -> RenderedSample:
+        # Each DataLoader worker opens its own memory map on first access.
         if self._frame is None:
             import polars as pl
 
@@ -45,6 +46,7 @@ class RenderedDataset:
         return {"image": rasterize_strokes(strokes, self.image_size), "label": label}
 
     def __getstate__(self) -> dict[str, object]:
+        """Drop the process-local memory map when serializing a worker dataset."""
         state = self.__dict__.copy()
         state["_frame"] = None
         return state
@@ -62,6 +64,7 @@ def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: Data
     if not paths.raw_converted_parquet.is_file():
         import fsspec
 
+        # Publish the download atomically so interrupted or concurrent readers never see a partial Parquet file.
         paths.raw_converted_parquet.parent.mkdir(parents=True, exist_ok=True)
         temp_path = paths.raw_converted_parquet.with_name(f".{paths.raw_converted_parquet.name}.{getpid()}.tmp")
         try:
@@ -90,6 +93,7 @@ def _map_raw_dataset_cached(
     mapped = _load_raw_dataset_cached(dataset_names, paths).with_columns(
         pl.col("latex_label").replace_strict(get_tex_to_char(), default=None, return_dtype=pl.String).alias("label")
     )
+    # Preserve missing labels for review before discarding samples that cannot be used for training.
     unmapped = {
         source: set(labels)
         for source, labels in mapped.filter(pl.col("label").is_null())
@@ -131,6 +135,7 @@ def get_dataset_classes(
 
 
 def _allocate_split_counts(sample_count: int, split_ratio: tuple[float, float, float]) -> tuple[int, int, int]:
+    """Round fractional split sizes while preserving the exact sample count."""
     exact_counts = [sample_count * ratio for ratio in split_ratio]
     counts = [floor(count) for count in exact_counts]
     remainder = sample_count - sum(counts)
@@ -146,6 +151,7 @@ def _split_frame(
     *,
     stratified: bool,
 ) -> dict[str, pl.DataFrame]:
+    """Shuffle and split either the full frame or each label partition independently."""
     import polars as pl
 
     partitions = dataset.partition_by("label") if stratified else [dataset]
@@ -177,6 +183,7 @@ def _split_cache_key(
     split_ratio: tuple[float, float, float],
     min_split_class_count: int,
 ) -> str:
+    """Fingerprint both mapped content and every option that changes split membership."""
     row_hashes = mapped.hash_rows(seed=DETERMINISTIC_SPLIT_SEED)
     content_hash = blake2b(row_hashes.to_numpy().tobytes(), digest_size=16).hexdigest()
     payload = dumps(
@@ -197,6 +204,7 @@ def _split_cache_key(
 
 
 def _write_split_cache(frame: pl.DataFrame, path: str) -> None:
+    """Atomically materialize a split as an Arrow IPC file if it is not cached."""
     from pathlib import Path
 
     ipc_path = Path(path)
@@ -224,6 +232,8 @@ def get_rendered_dataset_splits(
     _validate_split_ratio(split_ratio)
     mapped, _ = map_raw_dataset(dataset_names, paths=paths)
     mapped = _limit_samples(mapped, max_samples)
+
+    # Freeze the sorted character order into compact numeric targets shared by all splits.
     classes: list[str] = mapped.get_column("label").unique().sort().to_list()
     label_to_index = {label: index for index, label in enumerate(classes)}
     mapped = mapped.select(
@@ -236,6 +246,7 @@ def get_rendered_dataset_splits(
         min_split_class_count = max(2, ceil(1 / test_ratio), ceil(1 / val_ratio))
     cache_key = _split_cache_key(mapped, dataset_names, max_samples, split_ratio, min_split_class_count)
 
+    # Labels too small to reliably reach both evaluation splits remain training-only.
     label_counts = mapped.group_by("label").len()
     rare_labels = label_counts.filter(pl.col("len") < min_split_class_count).get_column("label")
     if 0 < len(rare_labels) < len(label_counts):
@@ -244,12 +255,14 @@ def get_rendered_dataset_splits(
     else:
         rare = mapped.clear()
 
+    # Full runs are stratified; capped debug subsets use one global split to avoid repeatedly rounding tiny classes.
     splits = _split_frame(mapped, split_ratio, stratified=max_samples is None)
     if not rare.is_empty():
         splits["train"] = pl.concat([splits["train"], rare])
 
     rendered = {}
     for name, frame in splits.items():
+        # Rasterization stays lazy; only compact vector strokes and labels are cached here.
         ipc_path = paths.dataset_splits_dir / cache_key / f"{name}.arrow"
         _write_split_cache(frame, str(ipc_path))
         rendered[name] = RenderedDataset(str(ipc_path), len(frame), image_size)

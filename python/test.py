@@ -73,6 +73,7 @@ if __name__ == "__main__":
 
     model = MobileNetModel.load_from_checkpoint(args.ckpt_path)
     args.image_size = args.image_size or int(model.hparams["image_size"])
+    # Recreate the checkpoint's sorted target space from the exact dataset selection under evaluation.
     dataset_names = tuple(dict.fromkeys(args.datasets))
     classes = get_dataset_classes(dataset_names, max_samples=args.max_samples)
 
@@ -84,6 +85,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
     )
 
+    # Confusion diagnostics are always emitted; image grids can be disabled for lighter evaluations.
     callbacks: list[Callback] = [
         LogTestConfusionCallback(
             classes,

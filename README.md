@@ -20,7 +20,7 @@ You can also use it in [Tinymist](https://github.com/Myriad-Dreamin/tinymist).
 ### File Structure
 
 ```text
-- python     # training scripts
+- python     # data processing, model training, and evaluation
 - frontend
   - service  # inference lib
   - ui       # web UI

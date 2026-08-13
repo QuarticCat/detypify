@@ -17,6 +17,8 @@ def generate_data_info(dataset_names: Sequence[DataSetName], paths: DataPaths = 
     mapped, unmapped = map_raw_dataset(dataset_names, paths=paths)
     classes = mapped.get_column("label").unique().sort().to_list()
     typ_sym_info = get_typst_symbol_info()
+
+    # Inference metadata follows model class order, while contribution metadata accepts every Typst alias.
     infer = []
     contrib = {n: s.char for s in typ_sym_info for n in s.names}
     chr_to_sym = {s.char: s for s in typ_sym_info}
@@ -31,6 +33,7 @@ def generate_data_info(dataset_names: Sequence[DataSetName], paths: DataPaths = 
             info["mathShorthand"] = sym.math_shorthand
         infer.append(info)
 
+    # Keep generated files independent so consumers can load only the metadata they need.
     logger = logging.getLogger(__name__)
     for path, info_data in [
         (paths.raw_metadata_dir / "infer.json", infer),

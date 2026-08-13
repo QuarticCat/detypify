@@ -17,6 +17,7 @@ _GELU = partial(nn.GELU, approximate="tanh")
 _IMAGE_MIN = -1e-4
 _IMAGE_MAX = 1.0001
 
+# Keep the recognition-specific MobileNetV5 layout explicit so its channel multiplier remains configurable.
 _MOBILENET_V5_ARCH_DEF = [
     ["er_r1_k3_s2_e4_c64", "er_r1_k3_s1_e4_c64"],
     ["uir_r1_a3_k5_s2_e6_c128", "uir_r1_a3_k0_s1_e4_c128"],
@@ -26,6 +27,7 @@ _MOBILENET_V5_ARCH_DEF = [
 
 
 def create_project_model(model_name: str, **kwargs) -> nn.Module:
+    """Create an exportable MobileNet variant from the project's compact model name."""
     model_spec = parse_mobilenet_model_name(model_name)
     with set_layer_config(exportable=True):
         if model_spec.family == ModelFamily.v4:
@@ -124,12 +126,13 @@ class BaseModel(LightningModule):
         return pred
 
     def configure_optimizers(self):
+        """Configure AdamW with selective decay and linear-warmup cosine scheduling."""
         decay = []
         no_decay = []
         for name, param in self.named_parameters():
             if not param.requires_grad:
                 continue
-            # Check for bias, norm, or batchnorm layers to exclude from decay
+            # Biases and scale/normalization parameters should not be regularized by weight decay.
             if param.ndim <= 1 or name.endswith(".bias") or "norm" in name or "bn" in name:
                 no_decay.append(param)
             else:
@@ -148,8 +151,8 @@ class BaseModel(LightningModule):
             fused=next(self.parameters()).is_cuda,
         )
 
+        # SequentialLR switches once from warmup to cosine decay at the configured epoch boundary.
         warmup_scheduler = LinearLR(optimizer, total_iters=self.warm_up_epochs)
-
         decay_scheduler = CosineAnnealingLR(optimizer, T_max=(self.total_epochs - self.warm_up_epochs), eta_min=1e-6)
 
         scheduler = SequentialLR(
@@ -169,6 +172,8 @@ class BaseModel(LightningModule):
 
 
 class MobileNetModel(BaseModel):
+    """Lightning wrapper around the project's grayscale MobileNet classifiers."""
+
     def __init__(
         self,
         num_classes: int,
@@ -200,10 +205,9 @@ class MobileNetModel(BaseModel):
             "label_smoothing",
         )
         model = create_project_model(model_name, num_classes=num_classes, in_chans=1, drop_rate=0.15)
+        # Channels-last layout is shared by eager and compiled paths to avoid conversions inside the backbone.
         self.model = model.to(memory_format=torch.channels_last)  # type: ignore
-
         self.model_opt = torch.compile(self.model, mode="max-autotune", dynamic=False) if use_compile else None
-
         self.model_name: str = model_name
 
     def forward(self, x):

@@ -9,6 +9,8 @@ from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 
 
 class MathSymbolDataModule(LightningDataModule):
+    """Build deterministic symbol splits and apply stage-specific image transforms."""
+
     def __init__(
         self,
         image_size: int,
@@ -30,6 +32,7 @@ class MathSymbolDataModule(LightningDataModule):
         self.max_samples = max_samples
         self.classes: list[str] = []
 
+        # Keep cached samples as uint8 and move augmentation to batched tensors after device transfer.
         self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
         self.train_transform = v2.Compose(
             [
@@ -98,7 +101,7 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def on_after_batch_transfer(self, batch, dataloader_idx):
-        # when batch is not a dict, means its not from dataloader, do nothing.
+        """Convert uint8 images to model inputs, augmenting training batches only."""
         if isinstance(batch, dict) and self.trainer:
             from lightning.pytorch.trainer.states import RunningStage
             from torch import uint8 as t_uint8

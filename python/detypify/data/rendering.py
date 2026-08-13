@@ -10,6 +10,7 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     if not stroke_arrays:
         return np.zeros((output_size, output_size), dtype=np.uint8)
 
+    # Fit the square bounding box around all strokes so the original aspect ratio is preserved.
     all_points = np.vstack(stroke_arrays)
     min_x, min_y = all_points.min(axis=0)
     max_x, max_y = all_points.max(axis=0)
@@ -24,6 +25,7 @@ def rasterize_strokes(strokes: Strokes, output_size: int):
     all_points = ((all_points - [center_x, center_y]) * scale) + [output_size / 2, output_size / 2]
     all_points = np.rint(all_points)
 
+    # Restore stroke boundaries after transforming all points in one vectorized operation.
     lengths = [len(a) for a in stroke_arrays]
     split_indices = np.cumsum(lengths)[:-1]
     normalized_strokes = np.split(all_points.astype(np.int32), split_indices)

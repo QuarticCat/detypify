@@ -90,7 +90,7 @@ if __name__ == "__main__":
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    # Lazy import
+    # Delay the heavy training stack until after CLI parsing so help output stays lightweight.
     from lightning import Trainer
     from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
     from lightning.pytorch.loggers import TensorBoardLogger
@@ -111,6 +111,7 @@ if __name__ == "__main__":
         args.num_workers = 0
     classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples)
 
+    # Use a deterministic CPU path for fast development runs; otherwise choose the best native mixed precision.
     if not is_debug_dev_run:
         # Emulated BF16 can be reported as supported but is not a useful training acceleration path.
         if not is_bf16_supported(including_emulation=False) and args.amp_precision == "bf16-mixed":
@@ -132,7 +133,7 @@ if __name__ == "__main__":
         for model in args.models
     ]
 
-    # define data module
+    # All model variants share the same deterministic dataset partitions and class order.
     dm = MathSymbolDataModule(
         batch_size=args.init_batch_size,
         image_size=args.image_size,
@@ -142,6 +143,7 @@ if __name__ == "__main__":
     )
 
     for model in model_instances:
+        # Each model gets an isolated TensorBoard version, checkpoints, and effective-argument record.
         model_name_str = model.model_name
         tb_logger = TensorBoardLogger(save_dir=args.out_dir, name=model_name_str, default_hp_metric=False)  # type: ignore
 
@@ -158,7 +160,7 @@ if __name__ == "__main__":
 
         callbacks: list = [LearningRateMonitor(logging_interval="epoch")]
 
-        # Lazy import callbacks only when needed
+        # Optional callbacks pull in plotting or averaging dependencies only when enabled.
         if args.log_pred:
             from detypify.training.callbacks import LogPredictCallback, LogTestConfusionCallback
 
@@ -176,7 +178,7 @@ if __name__ == "__main__":
                 )
             )
 
-        # Add checkpoint callback to save best model
+        # Keep the best validation checkpoint for evaluation and the last checkpoint for resuming.
         checkpoint_callback = ModelCheckpoint(
             dirpath=checkpoints_dir,
             filename="best-{epoch:02d}-{val_acc:.4f}",
@@ -187,7 +189,7 @@ if __name__ == "__main__":
         )
         callbacks.append(checkpoint_callback)
 
-        # Add ONNX export callback for best model
+        # Production runs export the same best checkpoint selected above.
         if not args.debug:
             from detypify.training.callbacks import ExportBestModelToONNX
 
@@ -211,11 +213,9 @@ if __name__ == "__main__":
             callbacks=callbacks,
         )
 
-        # finetune learning rate and batch size
+        # Tune with eager execution because probing uses variable batch sizes and short trial runs.
         tuner = Tuner(trainer)
-        # disable compiling as it required fixed batch size
         model.use_compile = False
-        # NOTE: don't use fast_dev_run=True with scale batch and lr finder
         batch_size = args.init_batch_size
         if not args.debug and trainer.num_devices == 1 and args.find_batch_size:
             suggested_batch_size = tuner.scale_batch_size(model, datamodule=dm, init_val=args.init_batch_size)
@@ -242,7 +242,7 @@ if __name__ == "__main__":
         with train_args_path.open("wb") as f:
             f.write(yaml.encode(current_args, enc_hook=str))
 
-        # training
+        # Restore the requested compiled path only after tuning has fixed the effective settings.
         dm.batch_size = batch_size
         model.use_compile = args.use_compile and not args.debug
         trainer.fit(model, datamodule=dm)
