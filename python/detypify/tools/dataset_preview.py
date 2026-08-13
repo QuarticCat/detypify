@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, quote_plus, urlparse
 
 import cv2
 import numpy as np
+
 from detypify.data.datasets import map_raw_dataset
 from detypify.data.rendering import rasterize_strokes
 

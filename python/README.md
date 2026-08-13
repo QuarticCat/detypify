@@ -174,6 +174,9 @@ The script will:
 - `--num-workers`: Override the DataLoader worker count.
 - `--log-pred`: Enable logging of predictions (default: True).
 
+CUDA training automatically uses fused AdamW. The default `bf16-mixed` precision falls back to `16-mixed` when the
+GPU does not provide native BF16 instructions; emulated BF16 support is not used for training.
+
 To view the training/test logs:
 
 ```bash

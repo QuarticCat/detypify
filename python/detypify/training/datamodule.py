@@ -1,10 +1,11 @@
 from typing import override
 
+from lightning import LightningDataModule
+from torch.utils.data import DataLoader
+
 from detypify.config import DataSetName
 from detypify.data.datasets import get_rendered_dataset_splits, load_raw_dataset
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
-from lightning import LightningDataModule
-from torch.utils.data import DataLoader
 
 
 class MathSymbolDataModule(LightningDataModule):

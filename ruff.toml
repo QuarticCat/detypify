@@ -1,4 +1,5 @@
 line-length = 120
+src = ["python"]
 exclude = [
   ".git",
   ".mypy_cache",
@@ -9,6 +10,12 @@ exclude = [
 
 [format]
 docstring-code-line-length = 120
+
+[lint.isort]
+known-first-party = ["detypify"]
+
+[lint.per-file-ignores]
+"python/*.py" = ["INP001"]
 
 [lint]
 preview = true

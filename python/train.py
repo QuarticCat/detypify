@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import cappa
+
 from detypify.data.paths import DEFAULT_DATA_PATHS
 
 CUDA_AMPERE_VERSION = 8
@@ -90,10 +91,6 @@ if __name__ == "__main__":
     logger.setLevel(logging.INFO)
 
     # Lazy import
-    from detypify.config import DataSetName
-    from detypify.data.datasets import get_dataset_classes
-    from detypify.training.datamodule import MathSymbolDataModule
-    from detypify.training.model import MobileNetModel
     from lightning import Trainer
     from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
     from lightning.pytorch.loggers import TensorBoardLogger
@@ -102,6 +99,11 @@ if __name__ == "__main__":
     from torch import set_float32_matmul_precision
     from torch.cuda import is_bf16_supported
 
+    from detypify.config import DataSetName
+    from detypify.data.datasets import get_dataset_classes
+    from detypify.training.datamodule import MathSymbolDataModule
+    from detypify.training.model import MobileNetModel
+
     dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
     is_debug_dev_run = args.debug and args.dev_run
     dev_max_samples = 2048 if is_debug_dev_run else None
@@ -109,13 +111,13 @@ if __name__ == "__main__":
         args.num_workers = 0
     classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples)
 
-    # compatibility check for graphics
-    if not is_bf16_supported() and args.amp_precision == "bf16-mixed":
-        logger.warning("Current device don't support bfloat16 precision, use float16 instead.")
-        args.amp_precision = "16-mixed"
-    else:
-        # use low precision acceleration
-        set_float32_matmul_precision("medium")
+    if not is_debug_dev_run:
+        # Emulated BF16 can be reported as supported but is not a useful training acceleration path.
+        if not is_bf16_supported(including_emulation=False) and args.amp_precision == "bf16-mixed":
+            logger.warning("Current device does not support native bfloat16 precision; using float16 instead.")
+            args.amp_precision = "16-mixed"
+        else:
+            set_float32_matmul_precision("medium")
     model_instances: list[MobileNetModel] = [
         MobileNetModel(
             num_classes=len(classes),
@@ -223,14 +225,15 @@ if __name__ == "__main__":
             min_lr = min(1e-4, args.learning_rate / 20)
             max_lr = max(1e-3, args.learning_rate * 5)
             lr_finder = tuner.lr_find(model, datamodule=dm, min_lr=min_lr, max_lr=max_lr)
-            fig = lr_finder.plot(suggest=True)  # type: ignore
-            save_path = final_output_dir / f"lr_{batch_size}_{args.image_size}.svg"
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(save_path)  # type: ignore
-            suggested_lr = lr_finder.suggestion()
-            if suggested_lr is not None:
-                model.learning_rate = suggested_lr
-                model.hparams["learning_rate"] = suggested_lr
+            if lr_finder is not None:
+                fig = lr_finder.plot(suggest=True)  # type: ignore
+                save_path = final_output_dir / f"lr_{batch_size}_{args.image_size}.svg"
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                fig.savefig(save_path)  # type: ignore
+                suggested_lr = lr_finder.suggestion()
+                if suggested_lr is not None:
+                    model.learning_rate = suggested_lr
+                    model.hparams["learning_rate"] = suggested_lr
 
         current_args["final_batch_size"] = batch_size
         current_args["effective_learning_rate"] = model.learning_rate
@@ -243,4 +246,4 @@ if __name__ == "__main__":
         dm.batch_size = batch_size
         model.use_compile = args.use_compile and not args.debug
         trainer.fit(model, datamodule=dm)
-        trainer.test(model, datamodule=dm, ckpt_path="best")
+        trainer.test(model, datamodule=dm, ckpt_path=None if is_debug_dev_run else "best")

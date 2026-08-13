@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import polars as pl
+
     from detypify.types import Strokes
 
 RAW_POINT_COORD_COUNT = 3
