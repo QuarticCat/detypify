@@ -47,9 +47,6 @@ class Args:
     num_workers: int = process_cpu_count() or 1
     """Number of DataLoader workers."""
 
-    max_samples: int | None = None
-    """Limit samples for a quick test run."""
-
     amp_precision: str = "32-true"
     """Precision: 64, 32, 16-mixed, bf16-mixed."""
 
@@ -75,13 +72,12 @@ if __name__ == "__main__":
     args.image_size = args.image_size or int(model.hparams["image_size"])
     # Recreate the checkpoint's sorted target space from the exact dataset selection under evaluation.
     dataset_names = tuple(dict.fromkeys(args.datasets))
-    classes = get_dataset_classes(dataset_names, max_samples=args.max_samples)
+    classes = get_dataset_classes(dataset_names)
 
     dm = MathSymbolDataModule(
         batch_size=args.batch_size,
         image_size=args.image_size,
         dataset_names=dataset_names,
-        max_samples=args.max_samples,
         num_workers=args.num_workers,
     )
 

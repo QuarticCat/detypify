@@ -17,7 +17,6 @@ class MathSymbolDataModule(LightningDataModule):
         batch_size: int,
         num_workers: int,
         dataset_names: tuple[DataSetName, ...],
-        max_samples: int | None,
         paths: DataPaths = DEFAULT_DATA_PATHS,
     ):
         from torch import float32 as t_float32
@@ -29,7 +28,6 @@ class MathSymbolDataModule(LightningDataModule):
         self.image_size = image_size
         self.dataset_names = dataset_names
         self.paths = paths
-        self.max_samples = max_samples
         self.classes: list[str] = []
 
         # Keep cached samples as uint8 and move augmentation to batched tensors after device transfer.
@@ -56,7 +54,6 @@ class MathSymbolDataModule(LightningDataModule):
             self.dataset_names,
             self.image_size,
             paths=self.paths,
-            max_samples=self.max_samples,
         )
 
         if stage == "fit" or stage is None:

@@ -182,7 +182,7 @@ export.
 **Key Options:**
 
 - `--out-dir`: Output directory (default: `build/train`).
-- `--debug --dev-run`: Use a small CPU-only fast dev run.
+- `--debug --dev-run`: Use a CPU-only Lightning fast dev run.
 - `--init-batch-size`: Initial batch size (default: `128`).
 - `--total-epochs`: Total training epochs (default: `40`).
 - `--warmup-epochs`: Linear learning-rate warmup epochs (default: `3`).
@@ -218,8 +218,8 @@ checkpoint, and writes TensorBoard logs under
 `test/confusion_matrix`, `test/top_false_predicted_labels`, and
 `test/top_false_predicted_label_examples`.
 
-Use `--out-dir` and `--run-name` to organize output, `--max-samples` for a quick
-run, `--no-log-predictions` to omit prediction grids, and
+Use `--out-dir` and `--run-name` to organize output,
+`--no-log-predictions` to omit prediction grids, and
 `--top-false-labels`, `--examples-per-label`, or `--max-confusion-labels` to
 control error diagnostics. Dataset selection must preserve the class ordering
 used to train the checkpoint.

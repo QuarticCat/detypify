@@ -106,10 +106,9 @@ if __name__ == "__main__":
 
     dataset_names = (DataSetName.detexify, DataSetName.mathwriting)
     is_debug_dev_run = args.debug and args.dev_run
-    dev_max_samples = 2048 if is_debug_dev_run else None
     if is_debug_dev_run:
         args.num_workers = 0
-    classes = get_dataset_classes(dataset_names, max_samples=dev_max_samples)
+    classes = get_dataset_classes(dataset_names)
 
     # Use a deterministic CPU path for fast development runs; otherwise choose the best native mixed precision.
     if not is_debug_dev_run:
@@ -138,7 +137,6 @@ if __name__ == "__main__":
         batch_size=args.init_batch_size,
         image_size=args.image_size,
         dataset_names=dataset_names,
-        max_samples=dev_max_samples,
         num_workers=args.num_workers,
     )
 

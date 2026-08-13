@@ -114,23 +114,13 @@ def map_raw_dataset(
     return _map_raw_dataset_cached(tuple(dataset_names), paths)
 
 
-def _limit_samples(dataset: pl.DataFrame, max_samples: int | None) -> pl.DataFrame:
-    if max_samples is None or max_samples >= len(dataset):
-        return dataset
-    if max_samples <= 0:
-        return dataset.clear()
-    return dataset.sample(n=max_samples, shuffle=True, seed=DETERMINISTIC_SPLIT_SEED)
-
-
 def get_dataset_classes(
     dataset_names: Sequence[DataSetName],
     *,
-    max_samples: int | None,
     paths: DataPaths = DEFAULT_DATA_PATHS,
 ) -> list[str]:
-    """Return the sorted classes in the selected mapped samples."""
+    """Return the sorted classes in the mapped dataset."""
     mapped, _ = map_raw_dataset(dataset_names, paths=paths)
-    mapped = _limit_samples(mapped, max_samples)
     return mapped.get_column("label").unique().sort().to_list()
 
 
@@ -148,15 +138,12 @@ def _allocate_split_counts(sample_count: int, split_ratio: tuple[float, float, f
 def _split_frame(
     dataset: pl.DataFrame,
     split_ratio: tuple[float, float, float],
-    *,
-    stratified: bool,
 ) -> dict[str, pl.DataFrame]:
-    """Shuffle and split either the full frame or each label partition independently."""
+    """Shuffle and split each label partition independently."""
     import polars as pl
 
-    partitions = dataset.partition_by("label") if stratified else [dataset]
     split_frames: dict[str, list[pl.DataFrame]] = {"train": [], "test": [], "val": []}
-    for partition in partitions:
+    for partition in dataset.partition_by("label"):
         shuffled = partition.sample(fraction=1.0, shuffle=True, seed=DETERMINISTIC_SPLIT_SEED)
         train_count, test_count, val_count = _allocate_split_counts(len(shuffled), split_ratio)
         split_frames["train"].append(shuffled.head(train_count))
@@ -179,7 +166,6 @@ def _validate_split_ratio(split_ratio: tuple[float, float, float]) -> None:
 def _split_cache_key(
     mapped: pl.DataFrame,
     dataset_names: Sequence[DataSetName],
-    max_samples: int | None,
     split_ratio: tuple[float, float, float],
     min_split_class_count: int,
 ) -> str:
@@ -190,7 +176,6 @@ def _split_cache_key(
         {
             "content_hash": content_hash,
             "dataset_names": _dataset_name_values(tuple(dataset_names)),
-            "max_samples": max_samples,
             "min_split_class_count": min_split_class_count,
             "sample_count": len(mapped),
             "split_ratio": split_ratio,
@@ -220,7 +205,6 @@ def get_rendered_dataset_splits(
     dataset_names: Sequence[DataSetName],
     image_size: int,
     paths: DataPaths,
-    max_samples: int | None,
     split_ratio: tuple[float, float, float] = (0.8, 0.1, 0.1),
     min_split_class_count: int | None = None,
 ) -> tuple[dict[str, RenderedDataset], list[str]]:
@@ -231,7 +215,6 @@ def get_rendered_dataset_splits(
 
     _validate_split_ratio(split_ratio)
     mapped, _ = map_raw_dataset(dataset_names, paths=paths)
-    mapped = _limit_samples(mapped, max_samples)
 
     # Freeze the sorted character order into compact numeric targets shared by all splits.
     classes: list[str] = mapped.get_column("label").unique().sort().to_list()
@@ -244,7 +227,7 @@ def get_rendered_dataset_splits(
     _, test_ratio, val_ratio = split_ratio
     if min_split_class_count is None:
         min_split_class_count = max(2, ceil(1 / test_ratio), ceil(1 / val_ratio))
-    cache_key = _split_cache_key(mapped, dataset_names, max_samples, split_ratio, min_split_class_count)
+    cache_key = _split_cache_key(mapped, dataset_names, split_ratio, min_split_class_count)
 
     # Labels too small to reliably reach both evaluation splits remain training-only.
     label_counts = mapped.group_by("label").len()
@@ -255,8 +238,7 @@ def get_rendered_dataset_splits(
     else:
         rare = mapped.clear()
 
-    # Full runs are stratified; capped debug subsets use one global split to avoid repeatedly rounding tiny classes.
-    splits = _split_frame(mapped, split_ratio, stratified=max_samples is None)
+    splits = _split_frame(mapped, split_ratio)
     if not rare.is_empty():
         splits["train"] = pl.concat([splits["train"], rare])
 
