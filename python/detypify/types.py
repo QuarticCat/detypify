@@ -1,14 +1,11 @@
-from typing import Literal
-
 from msgspec import Struct
 
 type Point = tuple[float, float]
 type Stroke = list[Point]
 type Strokes = list[Stroke]
-type SplitName = Literal["train", "test", "val"]
 
 
-class TypstSymInfo(Struct, kw_only=True, omit_defaults=True):
+class TypstSymInfo(Struct, kw_only=True):
     char: str
     names: list[str]
     latex_name: str | None
@@ -18,11 +15,6 @@ class TypstSymInfo(Struct, kw_only=True, omit_defaults=True):
     alternates: list[str]
 
 
-class UnmappedSymbols(Struct, kw_only=True, omit_defaults=True):
-    name: str
-    unmapped: set[str] | None
-
-
-class DetexifySymInfo(Struct, kw_only=True, omit_defaults=True):
+class DetexifySymInfo(Struct, kw_only=True):
     command: str
     id: str

@@ -1,15 +1,19 @@
-from typing import override
+from typing import cast, override
 
 from lightning import LightningDataModule
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from detypify.config import DataSetName
-from detypify.data.datasets import get_rendered_dataset_splits, load_raw_dataset
+from detypify.data.datasets import RenderedDataset, get_rendered_dataset_splits, load_raw_dataset
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 
 
 class MathSymbolDataModule(LightningDataModule):
     """Build deterministic symbol splits and apply stage-specific image transforms."""
+
+    train_dataset: RenderedDataset
+    val_dataset: RenderedDataset
+    test_dataset: RenderedDataset
 
     def __init__(
         self,
@@ -28,7 +32,6 @@ class MathSymbolDataModule(LightningDataModule):
         self.image_size = image_size
         self.dataset_names = dataset_names
         self.paths = paths
-        self.classes: list[str] = []
 
         # Keep cached samples as uint8 and move augmentation to batched tensors after device transfer.
         self.eval_transform = v2.Compose([v2.ToImage(), v2.ToDtype(dtype=t_float32, scale=True)])
@@ -50,7 +53,7 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def setup(self, stage: str | None = None):
-        dataset, self.classes = get_rendered_dataset_splits(
+        dataset, _ = get_rendered_dataset_splits(
             self.dataset_names,
             self.image_size,
             paths=self.paths,
@@ -65,32 +68,22 @@ class MathSymbolDataModule(LightningDataModule):
 
     @override
     def train_dataloader(self):
-        return DataLoader(
-            self.train_dataset,  # type: ignore
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            persistent_workers=self.num_workers > 0,
-        )
+        return self._dataloader(self.train_dataset, shuffle=True)
 
     @override
     def val_dataloader(self):
-        return DataLoader(
-            self.val_dataset,  # type: ignore
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=True,
-            persistent_workers=self.num_workers > 0,
-        )
+        return self._dataloader(self.val_dataset, shuffle=False)
 
     @override
     def test_dataloader(self):
+        return self._dataloader(self.test_dataset, shuffle=False)
+
+    def _dataloader(self, dataset: RenderedDataset, *, shuffle: bool):
+        """Create a loader with the worker and memory settings shared by every split."""
         return DataLoader(
-            self.test_dataset,  # type: ignore
+            cast("Dataset", dataset),
             batch_size=self.batch_size,
-            shuffle=False,
+            shuffle=shuffle,
             num_workers=self.num_workers,
             pin_memory=True,
             persistent_workers=self.num_workers > 0,
@@ -101,9 +94,8 @@ class MathSymbolDataModule(LightningDataModule):
         """Convert uint8 images to model inputs, augmenting training batches only."""
         if isinstance(batch, dict) and self.trainer:
             from lightning.pytorch.trainer.states import RunningStage
-            from torch import uint8 as t_uint8
 
-            original_images = batch["image"].to(dtype=t_uint8).unsqueeze(1)
+            original_images = batch["image"].unsqueeze(1)
             match self.trainer.state.stage:
                 case RunningStage.TRAINING:
                     batch["image"] = self.train_transform(original_images)

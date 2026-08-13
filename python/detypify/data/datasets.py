@@ -14,6 +14,7 @@ from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from pathlib import Path
 
     import numpy as np
     import polars as pl
@@ -188,17 +189,14 @@ def _split_cache_key(
     return blake2b(payload.encode(), digest_size=16).hexdigest()
 
 
-def _write_split_cache(frame: pl.DataFrame, path: str) -> None:
+def _write_split_cache(frame: pl.DataFrame, path: Path) -> None:
     """Atomically materialize a split as an Arrow IPC file if it is not cached."""
-    from pathlib import Path
-
-    ipc_path = Path(path)
-    if ipc_path.is_file():
+    if path.is_file():
         return
-    ipc_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = ipc_path.with_name(f".{ipc_path.name}.{getpid()}.tmp")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{getpid()}.tmp")
     frame.write_ipc(temp_path)
-    temp_path.replace(ipc_path)
+    temp_path.replace(path)
 
 
 def get_rendered_dataset_splits(
@@ -246,6 +244,6 @@ def get_rendered_dataset_splits(
     for name, frame in splits.items():
         # Rasterization stays lazy; only compact vector strokes and labels are cached here.
         ipc_path = paths.dataset_splits_dir / cache_key / f"{name}.arrow"
-        _write_split_cache(frame, str(ipc_path))
+        _write_split_cache(frame, ipc_path)
         rendered[name] = RenderedDataset(str(ipc_path), len(frame), image_size)
     return rendered, classes

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import cv2
-import numpy as np
 
 from detypify.data.datasets import map_raw_dataset
 from detypify.data.rendering import rasterize_strokes
@@ -32,7 +31,7 @@ def _int_param(params: dict[str, list[str]], name: str, default: int, minimum: i
 
 
 def _image_data_url(strokes: list, image_size: int) -> str:
-    image = np.asarray(rasterize_strokes(strokes, image_size), dtype=np.uint8)
+    image = rasterize_strokes(strokes, image_size)
     ok, encoded = cv2.imencode(".png", image)
     if not ok:
         msg = "Failed to encode rendered sample as PNG"
