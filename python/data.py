@@ -7,8 +7,8 @@ from typing import Annotated
 import cappa
 
 from detypify.config import DataSetName
-from detypify.data.metadata import generate_data_info
-from detypify.data.raw import convert_raw_dataset
+from detypify.tools.metadata import generate_data_info
+from detypify.tools.raw import convert_raw_dataset
 
 
 @dataclass
@@ -49,7 +49,7 @@ class Preview(CommonArgs):
     """Default samples per page."""
 
 
-@cappa.command(name="proc-data")
+@cappa.command(name="data")
 @dataclass
 class Args:
     """Process and inspect datasets."""
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         case GenMetadata(datasets=datasets):
             generate_data_info(dataset_names=list(dict.fromkeys(datasets)))
         case Preview() as preview:
-            from detypify.tools.dataset_preview import serve_dataset_preview
+            from detypify.tools.preview import serve_dataset_preview
 
             serve_dataset_preview(
                 dataset_names=tuple(dict.fromkeys(preview.datasets)),

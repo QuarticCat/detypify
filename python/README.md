@@ -5,14 +5,14 @@ model training, checkpoint evaluation, and frontend metadata generation.
 
 ## Project Structure
 
-- `proc_data.py`: Data conversion, metadata, and preview CLI.
+- `data.py`: Data conversion, metadata, and preview CLI.
 - `train.py`: Model training and post-training evaluation CLI.
 - `test.py`: Standalone checkpoint evaluation and diagnostic logging CLI.
 - `detypify/config.py`: Shared dataset and model configuration.
 - `detypify/types.py`: Shared stroke aliases and msgspec structs.
-- `detypify/data/`: Raw source parsing, Polars transforms, rendering, metadata, and path config.
+- `detypify/data/`: Polars transforms, rendering, and path config.
 - `detypify/training/`: Lightning data module, model definitions, and training callbacks.
-- `detypify/tools/`: Local dataset inspection tools.
+- `detypify/tools/`: Raw source conversion, metadata generation, and local dataset inspection tools.
 - `detypify/assets/tex_to_typ_sup.yaml`: Manual mapping overrides for LaTeX to Typst symbol names.
 
 ## Development
@@ -76,13 +76,13 @@ gzip --test build/raw/mathwriting/mathwriting-2024.tgz
 Convert the original sources into the local Parquet cache:
 
 ```bash
-uv run python/proc_data.py convert-raw --datasets detexify --datasets mathwriting
+uv run python/data.py convert-raw --datasets detexify --datasets mathwriting
 ```
 
 To generate frontend inference metadata:
 
 ```bash
-uv run python/proc_data.py gen-metadata
+uv run python/data.py gen-metadata
 ```
 
 Generated frontend metadata is written to `build/raw/_metadata`:
@@ -95,7 +95,7 @@ To browse mapped dataset samples locally, including truth labels, source, sample
 index, pagination, and search:
 
 ```bash
-uv run python/proc_data.py preview
+uv run python/data.py preview
 ```
 
 The browser is served at `http://127.0.0.1:8000` by default. Use
@@ -104,8 +104,8 @@ The browser is served at `http://127.0.0.1:8000` by default. Use
 See available subcommands and options with:
 
 ```bash
-uv run python/proc_data.py --help
-uv run python/proc_data.py preview --help
+uv run python/data.py --help
+uv run python/data.py preview --help
 ```
 
 ### Model Training

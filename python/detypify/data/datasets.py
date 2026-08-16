@@ -63,7 +63,7 @@ def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: Data
     import polars as pl
 
     if not paths.raw_converted_parquet.is_file():
-        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run proc_data.py convert-raw first"
+        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run python/data.py convert-raw first"
         raise FileNotFoundError(msg)
 
     dataset = pl.read_parquet(paths.raw_converted_parquet)
