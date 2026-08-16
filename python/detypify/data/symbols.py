@@ -1,7 +1,5 @@
 from functools import cache
-from hashlib import blake2b
 from importlib import resources
-from json import dumps
 from typing import cast
 
 from detypify.types import TypstSymInfo
@@ -76,20 +74,6 @@ def get_tex_typ_map() -> dict[str, TypstSymInfo]:
 
     tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
     return tex_to_typ
-
-
-def get_tex_typ_map_digest() -> str:
-    """Return a stable digest for the effective LaTeX-to-Typst mapping."""
-    records = [
-        {
-            "char": typ.char,
-            "latex": latex,
-            "names": sorted(typ.names),
-        }
-        for latex, typ in sorted(get_tex_typ_map().items())
-    ]
-    payload = dumps(records, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
-    return blake2b(payload).hexdigest()
 
 
 def get_tex_to_char() -> dict[str, str]:

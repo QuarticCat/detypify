@@ -9,7 +9,6 @@ import cappa
 from detypify.config import DataSetName
 from detypify.data.metadata import generate_data_info
 from detypify.data.raw import convert_raw_dataset
-from detypify.data.symbols import get_tex_typ_map_digest
 
 
 @dataclass
@@ -18,12 +17,6 @@ class CommonArgs:
         default_factory=lambda: [DataSetName.detexify, DataSetName.mathwriting]
     )
     """Datasets to process."""
-
-
-@cappa.command(name="digest")
-@dataclass
-class Digest:
-    """Print the effective LaTeX-to-Typst mapping digest."""
 
 
 @cappa.command(name="convert-raw", default_long=True)
@@ -61,7 +54,7 @@ class Preview(CommonArgs):
 class Args:
     """Process and inspect datasets."""
 
-    command: cappa.Subcommands[Digest | ConvertRaw | GenMetadata | Preview]
+    command: cappa.Subcommands[ConvertRaw | GenMetadata | Preview]
 
 
 if __name__ == "__main__":
@@ -71,8 +64,6 @@ if __name__ == "__main__":
     )
     args = cappa.parse(Args, completion=False)
     match args.command:
-        case Digest():
-            print(get_tex_typ_map_digest())  # noqa: T201
         case ConvertRaw(datasets=datasets):
             convert_raw_dataset(dataset_names=list(dict.fromkeys(datasets)))
         case GenMetadata(datasets=datasets):

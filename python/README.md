@@ -5,7 +5,7 @@ model training, checkpoint evaluation, and frontend metadata generation.
 
 ## Project Structure
 
-- `proc_data.py`: Data conversion, metadata, mapping-digest, and preview CLI.
+- `proc_data.py`: Data conversion, metadata, and preview CLI.
 - `train.py`: Model training and post-training evaluation CLI.
 - `test.py`: Standalone checkpoint evaluation and diagnostic logging CLI.
 - `detypify/config.py`: Shared dataset and model configuration.
@@ -90,12 +90,6 @@ Generated frontend metadata is written to `build/raw/_metadata`:
 - `infer.json`: model output symbol metadata.
 - `contrib.json`: Typst symbol-name to character mapping for contribution UI.
 - `unmapped_latex_symbols.json`: unmapped source labels for review.
-
-To print the digest of the effective LaTeX-to-Typst mapping:
-
-```bash
-uv run python/proc_data.py digest
-```
 
 To browse mapped dataset samples locally, including truth labels, source, sample
 index, pagination, and search:
