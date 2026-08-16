@@ -5,7 +5,7 @@ model training, checkpoint evaluation, and frontend metadata generation.
 
 ## Project Structure
 
-- `proc_data.py`: Data conversion, upload, metadata, mapping-digest, and preview CLI.
+- `proc_data.py`: Data conversion, metadata, mapping-digest, and preview CLI.
 - `train.py`: Model training and post-training evaluation CLI.
 - `test.py`: Standalone checkpoint evaluation and diagnostic logging CLI.
 - `detypify/config.py`: Shared dataset and model configuration.
@@ -31,20 +31,18 @@ Run commands from the repository root unless noted otherwise.
 
 ### Data Preprocessing
 
-Training reads `build/raw/_converted/data.parquet` with Polars, using the output of
-`convert-raw` directly when available. If the file is absent, it is downloaded
-from Hugging Face through `fsspec`. Polars handles label mapping, filtering,
-sampling, and deterministic splitting. Split rows are cached as Arrow IPC files
-under `build/train/_dataset_splits`, while the PyTorch data loader rasterizes
-strokes on demand.
+Training reads the locally generated `build/raw/_converted/data.parquet` with
+Polars. Polars handles label mapping, filtering, sampling, and deterministic
+splitting. Split rows are cached as Arrow IPC files under
+`build/train/_dataset_splits`, while the PyTorch data loader rasterizes strokes
+on demand.
 
 #### Preparing Raw Data
 
 Raw data conversion writes a reusable cache to
 `build/raw/_converted/data.parquet`. This file is also the input used by metadata
-generation, preview, training, testing, and `upload-raw`, so the entire pipeline
-can run locally without Hugging Face. If this file already exists, skip the
-source downloads and conversion below.
+generation, preview, training, and testing. If this file already exists, skip
+the source downloads and conversion below.
 
 Download the original Detexify PostgreSQL dump and symbol metadata from the
 [Detexify data archive](https://github.com/kirel/detexify-data):
@@ -80,18 +78,6 @@ Convert the original sources into the local Parquet cache:
 ```bash
 uv run python/proc_data.py convert-raw --datasets detexify --datasets mathwriting
 ```
-
-To optionally publish the cached Parquet dataset, authenticate with a token that
-has write access to `Cloud0310/detypify-datasets`, then run:
-
-```bash
-uv run hf auth login
-uv run python/proc_data.py upload-raw
-```
-
-`upload-raw` only reads `build/raw/_converted/data.parquet`; it does not access the
-original gz/tgz files. It uploads that file to `raw/data.parquet` in the dataset
-repository.
 
 To generate frontend inference metadata:
 
@@ -167,7 +153,7 @@ uv run python/train.py --models mobilenet_v5_035 --no-ema --no-find-lr --learnin
 
 The script will:
 
-1. Read the local raw Parquet data, downloading it only when absent.
+1. Read the locally generated raw Parquet data.
 2. Build deterministic 80/10/10 Polars splits and cache their vector rows under `build/train/_dataset_splits`.
 3. Optionally find the largest batch size when `--find-batch-size` is set.
 4. Find a learning rate unless `--no-find-lr` is set.
