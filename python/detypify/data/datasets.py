@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, TypedDict
 from detypify.config import DETERMINISTIC_SPLIT_SEED, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.data.rendering import rasterize_strokes
-from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
+from detypify.data.symbols import get_tex_to_char
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -173,7 +173,6 @@ def _split_cache_key(
             "sample_count": len(mapped),
             "split_ratio": split_ratio,
             "stage": "polars-vector-splits-v1",
-            "tex_typ_map_digest": get_tex_typ_map_digest(),
         },
         separators=(",", ":"),
         sort_keys=True,
