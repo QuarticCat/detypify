@@ -2,8 +2,6 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-HF_DATASET_REPO = "Cloud0310/detypify-datasets"
-HF_RAW_DATASET_PATH = f"datasets/{HF_DATASET_REPO}/raw/data.parquet"
 DETERMINISTIC_SPLIT_SEED = 114514
 MOBILENET_MODEL_NAME_RE = re.compile(r"^mobilenet_(v4|v5)_(\d{3})$")
 

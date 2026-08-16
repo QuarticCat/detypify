@@ -7,7 +7,7 @@ from math import floor, isclose
 from os import getpid
 from typing import TYPE_CHECKING, TypedDict
 
-from detypify.config import DETERMINISTIC_SPLIT_SEED, HF_RAW_DATASET_PATH, DataSetName
+from detypify.config import DETERMINISTIC_SPLIT_SEED, DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.data.rendering import rasterize_strokes
 from detypify.data.symbols import get_tex_to_char, get_tex_typ_map_digest
@@ -59,20 +59,12 @@ def _dataset_name_values(dataset_names: tuple[DataSetName, ...]) -> list[str]:
 
 @cache
 def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: DataPaths) -> pl.DataFrame:
-    """Read the local raw Parquet file, downloading it only when absent."""
+    """Read the locally converted raw Parquet file."""
     import polars as pl
 
     if not paths.raw_converted_parquet.is_file():
-        import fsspec
-
-        # Publish the download atomically so interrupted or concurrent readers never see a partial Parquet file.
-        paths.raw_converted_parquet.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = paths.raw_converted_parquet.with_name(f".{paths.raw_converted_parquet.name}.{getpid()}.tmp")
-        try:
-            fsspec.filesystem("hf").get_file(HF_RAW_DATASET_PATH, temp_path)
-            temp_path.replace(paths.raw_converted_parquet)
-        finally:
-            temp_path.unlink(missing_ok=True)
+        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run proc_data.py convert-raw first"
+        raise FileNotFoundError(msg)
 
     dataset = pl.read_parquet(paths.raw_converted_parquet)
     return dataset.filter(pl.col("source").is_in(_dataset_name_values(dataset_names)))

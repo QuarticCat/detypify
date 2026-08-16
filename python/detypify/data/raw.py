@@ -6,7 +6,7 @@ import tarfile
 from time import perf_counter
 from typing import TYPE_CHECKING, cast
 
-from detypify.config import HF_RAW_DATASET_PATH, DataSetName
+from detypify.config import DataSetName
 from detypify.data.paths import DEFAULT_DATA_PATHS, DataPaths
 from detypify.types import DetexifySymInfo
 
@@ -182,37 +182,3 @@ def convert_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths =
         perf_counter() - conversion_started,
     )
     return df
-
-
-def upload_raw_dataset(paths: DataPaths = DEFAULT_DATA_PATHS) -> None:
-    """Upload the locally converted raw Parquet dataset to Hugging Face."""
-    import fsspec
-
-    if not paths.raw_converted_parquet.is_file():
-        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run convert-raw first"
-        raise FileNotFoundError(msg)
-
-    logger = logging.getLogger(__name__)
-    file_size = paths.raw_converted_parquet.stat().st_size
-    file_size_mib = file_size / (1024 * 1024)
-    upload_started = perf_counter()
-
-    logger.info(
-        "Uploading raw dataset %s (%.1f MiB) to %s",
-        paths.raw_converted_parquet,
-        file_size_mib,
-        HF_RAW_DATASET_PATH,
-    )
-    fs = fsspec.filesystem("hf")
-    fs.put_file(
-        paths.raw_converted_parquet,
-        HF_RAW_DATASET_PATH,
-        commit_message="Upload raw dataset",
-    )
-    elapsed = perf_counter() - upload_started
-    throughput_mib_s = file_size_mib / elapsed if elapsed > 0 else 0
-    logger.info(
-        "Uploaded raw dataset in %.2f s (average %.1f MiB/s)",
-        elapsed,
-        throughput_mib_s,
-    )
