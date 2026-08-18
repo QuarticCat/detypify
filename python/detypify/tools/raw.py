@@ -90,7 +90,7 @@ def _collect_mathwriting_raw(paths: DataPaths) -> pl.LazyFrame:
 
     labels = []
     strokes = []
-    for data in _iter_mathwriting_symbol_data(paths.raw_mathwriting_dir / "mathwriting-2024.tgz"):
+    for data in _iter_mathwriting_symbol_data(paths.mathwriting_dir / "mathwriting-2024.tgz"):
         sample = _parse_mathwriting_symbol(data)
         if sample is None:
             continue
@@ -107,11 +107,11 @@ def _collect_detexify_raw(paths: DataPaths) -> pl.LazyFrame:
     import polars as pl
     from msgspec import json
 
-    with (paths.raw_detexify_dir / "symbols.json").open("rb") as f:
+    with (paths.detexify_dir / "symbols.json").open("rb") as f:
         tex_sym_info = json.decode(f.read(), type=list[DetexifySymInfo])
     key_to_command = {x.id: x.command for x in tex_sym_info}
 
-    dump_path = paths.raw_detexify_dir / "detexify.sql.gz"
+    dump_path = paths.detexify_dir / "detexify.sql.gz"
     data_start = _find_detexify_copy_data_start(dump_path)
     strokes_dtype = pl.List(pl.List(pl.List(pl.Float32)))
 
@@ -170,11 +170,11 @@ def convert_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths =
         perf_counter() - collect_started,
     )
 
-    paths.raw_converted_parquet.parent.mkdir(parents=True, exist_ok=True)
+    paths.data_parquet.parent.mkdir(parents=True, exist_ok=True)
     write_started = perf_counter()
-    logger.info("Writing Zstd Parquet to %s", paths.raw_converted_parquet)
-    df.write_parquet(paths.raw_converted_parquet, compression="zstd")
-    file_size_mib = paths.raw_converted_parquet.stat().st_size / (1024 * 1024)
+    logger.info("Writing Zstd Parquet to %s", paths.data_parquet)
+    df.write_parquet(paths.data_parquet, compression="zstd")
+    file_size_mib = paths.data_parquet.stat().st_size / (1024 * 1024)
     logger.info(
         "Saved raw dataset (%.1f MiB) in %.2f s; total conversion time %.2f s",
         file_size_mib,
