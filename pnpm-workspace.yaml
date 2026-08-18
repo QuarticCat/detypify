@@ -1,5 +1,7 @@
 packages:
   - 'frontend/*'
+# Rebuild the service when generated files in service/train change.
+optimisticRepeatInstall: false
 allowBuilds:
   esbuild: true
   protobufjs: true
