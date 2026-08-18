@@ -176,7 +176,6 @@ if __name__ == "__main__":
                 save_dir=checkpoints_dir,
                 model_name=model_name,
                 checkpoint_callback=checkpoint_callback,
-                use_compile=args.use_compile,
             )
         )
 
