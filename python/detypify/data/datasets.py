@@ -62,11 +62,11 @@ def _load_raw_dataset_cached(dataset_names: tuple[DataSetName, ...], paths: Data
     """Read the locally converted raw Parquet file."""
     import polars as pl
 
-    if not paths.raw_converted_parquet.is_file():
-        msg = f"Raw dataset not found at {paths.raw_converted_parquet}; run python/data.py convert-raw first"
+    if not paths.data_parquet.is_file():
+        msg = f"Raw dataset not found at {paths.data_parquet}; run python/data.py prepare first"
         raise FileNotFoundError(msg)
 
-    dataset = pl.read_parquet(paths.raw_converted_parquet)
+    dataset = pl.read_parquet(paths.data_parquet)
     return dataset.filter(pl.col("source").is_in(_dataset_name_values(dataset_names)))
 
 
@@ -79,30 +79,21 @@ def load_raw_dataset(dataset_names: Sequence[DataSetName], paths: DataPaths) -> 
 def _map_raw_dataset_cached(
     dataset_names: tuple[DataSetName, ...],
     paths: DataPaths,
-) -> tuple[pl.DataFrame, dict[str, set[str]]]:
+) -> pl.DataFrame:
     """Map raw LaTeX labels to Typst characters with Polars."""
     import polars as pl
 
     mapped = _load_raw_dataset_cached(dataset_names, paths).with_columns(
         pl.col("latex_label").replace_strict(get_tex_to_char(), default=None, return_dtype=pl.String).alias("label")
     )
-    # Preserve missing labels for review before discarding samples that cannot be used for training.
-    unmapped = {
-        source: set(labels)
-        for source, labels in mapped.filter(pl.col("label").is_null())
-        .group_by("source")
-        .agg(pl.col("latex_label").unique())
-        .iter_rows()
-    }
-    mapped = mapped.filter(pl.col("label").is_not_null() & (pl.col("strokes").list.len() > 0))
-    return mapped, unmapped
+    return mapped.filter(pl.col("label").is_not_null() & (pl.col("strokes").list.len() > 0))
 
 
 def map_raw_dataset(
     dataset_names: Sequence[DataSetName],
     *,
     paths: DataPaths = DEFAULT_DATA_PATHS,
-) -> tuple[pl.DataFrame, dict[str, set[str]]]:
+) -> pl.DataFrame:
     """Map raw LaTeX labels to Typst characters."""
     return _map_raw_dataset_cached(tuple(dataset_names), paths)
 
@@ -113,7 +104,7 @@ def get_dataset_classes(
     paths: DataPaths = DEFAULT_DATA_PATHS,
 ) -> list[str]:
     """Return the sorted classes in the mapped dataset."""
-    mapped, _ = map_raw_dataset(dataset_names, paths=paths)
+    mapped = map_raw_dataset(dataset_names, paths=paths)
     return mapped.get_column("label").unique().sort().to_list()
 
 
@@ -203,7 +194,7 @@ def get_rendered_dataset_splits(
     import polars as pl
 
     _validate_split_ratio(split_ratio)
-    mapped, _ = map_raw_dataset(dataset_names, paths=paths)
+    mapped = map_raw_dataset(dataset_names, paths=paths)
 
     # Freeze the sorted character order into compact numeric targets shared by all splits.
     classes: list[str] = mapped.get_column("label").unique().sort().to_list()

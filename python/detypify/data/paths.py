@@ -7,20 +7,28 @@ class DataPaths:
     build_dir: Path = Path("build")
 
     @property
-    def raw_mathwriting_dir(self) -> Path:
-        return self.build_dir / "raw" / "mathwriting"
+    def mathwriting_dir(self) -> Path:
+        return self.build_dir / "data" / "mathwriting"
 
     @property
-    def raw_detexify_dir(self) -> Path:
-        return self.build_dir / "raw" / "detexify"
+    def detexify_dir(self) -> Path:
+        return self.build_dir / "data" / "detexify"
 
     @property
-    def raw_converted_parquet(self) -> Path:
-        return self.build_dir / "raw" / "_converted" / "data.parquet"
+    def converted_dir(self) -> Path:
+        return self.build_dir / "data" / "_converted"
 
     @property
-    def raw_metadata_dir(self) -> Path:
-        return self.build_dir / "raw" / "_metadata"
+    def data_parquet(self) -> Path:
+        return self.converted_dir / "data.parquet"
+
+    @property
+    def typst_symbols(self) -> Path:
+        return self.converted_dir / "typst_symbols.json"
+
+    @property
+    def metadata_dir(self) -> Path:
+        return self.build_dir / "data" / "_metadata"
 
     @property
     def train_dir(self) -> Path:

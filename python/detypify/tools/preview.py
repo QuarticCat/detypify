@@ -55,7 +55,7 @@ class DatasetPreviewServer:
         image_size: int,
         default_page_size: int,
     ) -> None:
-        self.dataset, _ = map_raw_dataset(dataset_names)
+        self.dataset = map_raw_dataset(dataset_names)
         self.image_size = image_size
         self.default_page_size = default_page_size
         self.classes = self.dataset.get_column("label").unique().sort().to_list()

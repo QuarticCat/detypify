@@ -1,78 +1,32 @@
-from functools import cache
 from importlib import resources
-from typing import cast
 
+from detypify.data.paths import DEFAULT_DATA_PATHS
 from detypify.types import TypstSymInfo
 
 
-def is_invisible(c: str) -> bool:
-    from unicodedata import category
-
-    return category(c) in {"Zs", "Cc", "Cf"}
-
-
-@cache
 def get_typst_symbol_info() -> list[TypstSymInfo]:
-    """Parse Typst symbol metadata from the online reference."""
-    import logging
-    import re
-    from urllib.request import urlopen
+    """Load non-ASCII, non-deprecated Typst `sym` metadata."""
+    from msgspec.json import decode
 
-    from bs4 import BeautifulSoup
-
-    page_url = "https://typst.app/docs/reference/symbols/sym/"
-    with urlopen(page_url) as resp:
-        page_data = resp.read()
-
-    sym_info = {}
-    if page_data:
-        soup = BeautifulSoup(page_data, "lxml")
-        for li in soup.find_all("li", id=re.compile("^symbol-")):
-            name = li["id"][len("symbol-") :]
-            char = li["data-value"][0]
-            if is_invisible(char) or li.get("data-deprecation"):
-                continue
-
-            # Typst exposes aliases as separate HTML entries, but downstream code needs one record per character.
-            if char in sym_info:
-                sym_info[char].names.append(name)
-                continue
-
-            latex_name, markup_shorthand, math_shorthand, alternates = (
-                li.get("data-latex-name"),
-                li.get("data-markup-shorthand"),
-                li.get("data-math-shorthand"),
-                li.get("data-alternates", ""),
-            )
-            sym_info[char] = TypstSymInfo(
-                char=char,
-                names=[cast("str", name)],
-                latex_name=cast("str | None", latex_name),
-                markup_shorthand=cast("str | None", markup_shorthand),
-                math_shorthand=cast("str | None", math_shorthand),
-                accent=li.get("accent") == "true",
-                alternates=cast("str", alternates).split(),
-            )
-    else:
-        logging.getLogger(__name__).warning("Unable to retrieve page data.")
-
-    return list(sym_info.values())
+    with DEFAULT_DATA_PATHS.typst_symbols.open("rb") as f:
+        return decode(f.read(), type=list[TypstSymInfo])
 
 
 def get_tex_typ_map() -> dict[str, TypstSymInfo]:
-    """Create a mapping from TeX command names to Typst symbol information."""
-    typ_sym_info = get_typst_symbol_info()
-    tex_to_typ = {s.latex_name: s for s in typ_sym_info if s.latex_name is not None}
-    name_to_typ = {name: s for s in typ_sym_info for name in s.names}
+    """Map LaTeX labels only to eligible characters from Typst's `sym` module."""
+    from msgspec.yaml import decode
+    from unicodeit.data import REPLACEMENTS
 
-    # Supplementary entries intentionally override mappings inferred from Typst's LaTeX metadata.
+    typ_sym_info = get_typst_symbol_info()
+    char_to_typ = {s.char: s for s in typ_sym_info}
+    tex_to_typ = {latex: char_to_typ[char] for latex, char in REPLACEMENTS if len(char) == 1 and char in char_to_typ}
+
+    # The small manual table fills dataset-specific aliases and corrects visually distinct variants.
     mapping_path = resources.files("detypify") / "assets" / "tex_to_typ_sup.yaml"
     with mapping_path.open("rb") as f:
-        from msgspec.yaml import decode
-
         manual_mapping = decode(f.read(), type=dict[str, str])
-
-    tex_to_typ |= {k: name_to_typ[v] for k, v in manual_mapping.items()}
+    name_to_typ = {name: info for info in typ_sym_info for name in info.names}
+    tex_to_typ.update({latex: name_to_typ[name] for latex, name in manual_mapping.items()})
     return tex_to_typ
 
 
