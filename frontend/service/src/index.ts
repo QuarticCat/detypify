@@ -41,7 +41,9 @@ export function drawStrokes(strokes: Strokes): HTMLCanvasElement {
     }
     ctx.fillStyle = "black";
     ctx.strokeStyle = "white";
-    ctx.lineWidth = 8;
+    // Match OpenCV's inclusive stroke footprint on pixel-centered coordinates.
+    ctx.lineWidth = 9;
+    ctx.lineCap = "round";
 
     // Find bounding rect.
     let minX = Infinity;
@@ -58,7 +60,7 @@ export function drawStrokes(strokes: Strokes): HTMLCanvasElement {
     }
 
     // Normalize.
-    const padding = 10;
+    const padding = 9;
     const targetSize = canvas.width - 2 * padding;
     let width = Math.max(maxX - minX, maxY - minY);
     const scale = width > 1e-6 ? targetSize / width : 1;
@@ -67,6 +69,8 @@ export function drawStrokes(strokes: Strokes): HTMLCanvasElement {
 
     // Draw to canvas.
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Canvas integer coordinates lie on pixel edges; shift to OpenCV-style pixel centers.
+    ctx.translate(0.5, 0.5);
     for (const stroke of strokes) {
         ctx.beginPath();
         for (const [x, y] of stroke) {
