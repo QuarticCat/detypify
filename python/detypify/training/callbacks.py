@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from typing import Literal
 
     from lightning import LightningModule, Trainer
+    from onnx import GraphProto
     from torch import Tensor, device
 
 
@@ -408,6 +409,26 @@ class EMAWeightAveraging(WeightAveraging):
         )
 
 
+def _clear_onnx_node_metadata(graph: GraphProto) -> None:
+    """Remove exporter-only metadata from every node in an ONNX graph and its subgraphs."""
+    for node in graph.node:
+        node.ClearField("metadata_props")
+        for attribute in node.attribute:
+            if attribute.HasField("g"):
+                _clear_onnx_node_metadata(attribute.g)
+            for subgraph in attribute.graphs:
+                _clear_onnx_node_metadata(subgraph)
+
+
+def _sanitize_onnx_export(path: Path) -> None:
+    """Remove PyTorch exporter diagnostics that may contain local filesystem paths."""
+    import onnx
+
+    model = onnx.load_model(path, load_external_data=False)
+    _clear_onnx_node_metadata(model.graph)
+    onnx.save_model(model, path)
+
+
 class ExportBestModelToONNX(Callback):
     """Export the checkpoint selected by ModelCheckpoint after training completes."""
 
@@ -417,7 +438,6 @@ class ExportBestModelToONNX(Callback):
         model_name: str,
         checkpoint_callback: ModelCheckpoint,
         *,
-        use_compile: bool,
         dynamo: bool = True,
         external_data: bool = False,
     ) -> None:
@@ -425,7 +445,6 @@ class ExportBestModelToONNX(Callback):
         self.save_dir = Path(save_dir)
         self.model_name = model_name
         self.checkpoint_callback = checkpoint_callback
-        self.use_compile = use_compile
         self.dynamo = dynamo
         self.external_data = external_data
 
@@ -460,7 +479,7 @@ class ExportBestModelToONNX(Callback):
                 best_model.example_input_array,
                 dynamo=self.dynamo,
                 external_data=self.external_data,
-                optimize=self.use_compile,
+                optimize=True,
             )
         except Exception:
             if not self.dynamo:
@@ -474,4 +493,5 @@ class ExportBestModelToONNX(Callback):
                 optimize=False,
             )
 
+        _sanitize_onnx_export(save_path)
         logger.info("Successfully exported best model to: %s", save_path)
