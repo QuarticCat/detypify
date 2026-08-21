@@ -1,8 +1,9 @@
-import servicePackage from "../service/package.json" with { type: "json" };
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+import servicePackage from "../service/package.json" with { type: "json" };
 
 const ortVersion = servicePackage.dependencies["onnxruntime-web"];
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(ortVersion)) {

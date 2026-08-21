@@ -1,0 +1,12 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "tabWidth": 4,
+    "printWidth": 120,
+    "sortImports": true,
+    "sortPackageJson": false,
+    "sortTailwindcss": {
+        "stylesheet": "frontend/ui/src/app.css"
+    },
+    "svelte": true,
+    "ignorePatterns": ["*.md", "*.toml", "*.yml", "*.yaml", "worker-configuration.d.ts"]
+}

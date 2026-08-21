@@ -1,10 +1,11 @@
 <script lang="ts">
-    import Candidate from "../lib/Candidate.svelte";
-    import Canvas from "../lib/Canvas.svelte";
     import type { Strokes } from "detypify-service";
     import { Detypify, inferSyms } from "detypify-service";
     import { Alert, Button } from "flowbite-svelte";
     import { fly } from "svelte/transition";
+
+    import Candidate from "../lib/Candidate.svelte";
+    import Canvas from "../lib/Canvas.svelte";
 
     const { session }: { session: Detypify } = $props();
 
