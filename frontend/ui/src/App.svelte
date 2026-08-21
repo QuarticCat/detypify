@@ -1,13 +1,14 @@
 <script lang="ts">
-    import Contrib from "./routes/Contrib.svelte";
-    import FAQ from "./routes/FAQ.svelte";
-    import Home from "./routes/Home.svelte";
     import { Detypify, ortEnv } from "detypify-service";
     import { Navbar, NavBrand, NavLi, NavUl, NavHamburger } from "flowbite-svelte";
     import { Spinner, DarkMode, Tooltip, ToolbarButton, Heading } from "flowbite-svelte";
     import { GithubSolid } from "flowbite-svelte-icons";
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
+
+    import Contrib from "./routes/Contrib.svelte";
+    import FAQ from "./routes/FAQ.svelte";
+    import Home from "./routes/Home.svelte";
 
     ortEnv.wasm.numThreads = 1;
     ortEnv.wasm.wasmPaths = import.meta.env.VITE_ORT_DIST_URL;

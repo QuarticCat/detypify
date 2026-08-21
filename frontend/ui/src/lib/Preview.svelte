@@ -1,8 +1,9 @@
 <script lang="ts">
-    import Card from "./Card.svelte";
     import { contribSyms } from "detypify-service";
     import { Avatar, Hr, Tooltip } from "flowbite-svelte";
     import { CloseOutline } from "flowbite-svelte-icons";
+
+    import Card from "./Card.svelte";
 
     const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAP7//wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
     const { name, img = BLANK, ondelete }: { name: string; img?: string; ondelete?: () => void } = $props();

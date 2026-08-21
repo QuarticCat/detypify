@@ -1,6 +1,7 @@
+import { InferenceSession, Tensor } from "onnxruntime-web/wasm";
+
 import contribSymsRaw from "../train/contrib.json";
 import inferSymsRaw from "../train/infer.json";
-import { InferenceSession, Tensor } from "onnxruntime-web/wasm";
 
 export { env as ortEnv } from "onnxruntime-web/wasm";
 

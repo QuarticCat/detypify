@@ -1,8 +1,9 @@
 <script lang="ts">
-    import Card from "./Card.svelte";
-    import CopyButton from "./CopyButton.svelte";
     import type { SymbolInfo } from "detypify-service";
     import { Avatar, P } from "flowbite-svelte";
+
+    import Card from "./Card.svelte";
+    import CopyButton from "./CopyButton.svelte";
 
     const { info }: { info: SymbolInfo } = $props();
 </script>

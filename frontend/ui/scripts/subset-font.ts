@@ -1,8 +1,9 @@
-import { contribSyms } from "detypify-service";
 import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { contribSyms } from "detypify-service";
 
 const FONT_URL = "https://mirrors.ctan.org/fonts/newcomputermodern/otf/NewCMMath-Regular.otf";
 
