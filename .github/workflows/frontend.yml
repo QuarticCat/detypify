@@ -48,8 +48,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Prettier check
-        run: pnpm exec prettier --check .
+      - name: Oxfmt check
+        run: pnpm exec oxfmt --check .
 
       - name: Type check
         run: pnpm run check

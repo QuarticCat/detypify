@@ -1,11 +1,12 @@
 <script lang="ts">
+    import type { Strokes } from "detypify-service";
+    import { drawStrokes } from "detypify-service";
+    import { Hr, Alert } from "flowbite-svelte";
+
     import Canvas from "../lib/Canvas.svelte";
     import ContribPanel from "../lib/ContribPanel.svelte";
     import type { Sample } from "../lib/ContribPanel.svelte";
     import Preview from "../lib/Preview.svelte";
-    import type { Strokes } from "detypify-service";
-    import { drawStrokes } from "detypify-service";
-    import { Hr, Alert } from "flowbite-svelte";
 
     let input = $state("");
     let strokes: Strokes = $state([]);
