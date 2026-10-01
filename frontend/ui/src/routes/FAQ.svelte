@@ -1,9 +1,5 @@
 <script lang="ts">
-    import { inferSyms } from "detypify-service";
-    import { AccordionItem, Accordion, A, P, Li, List } from "flowbite-svelte";
-
-    const supportedSyms = inferSyms.flatMap((info) => info.names);
-    supportedSyms.sort();
+    import { AccordionItem, Accordion, A, P } from "flowbite-svelte";
 </script>
 
 <div class="ui-sub-container w-180">
@@ -11,17 +7,9 @@
         <AccordionItem>
             {#snippet header()}Can't find your symbol?{/snippet}
             <P>
-                Supported symbols are listed in section below. To recognize characters out of this scope, consider
-                giving <A href="https://shapecatcher.com/">shapecatcher</A> a try!
+                Supported symbols are listed on the <A href="#symbols">Symbols</A> page. To recognize characters out of this
+                scope, consider giving <A href="https://shapecatcher.com/">shapecatcher</A> a try!
             </P>
-        </AccordionItem>
-        <AccordionItem>
-            {#snippet header()}Supported symbols?{/snippet}
-            <List>
-                {#each supportedSyms as name}
-                    <Li>{name}</Li>
-                {/each}
-            </List>
         </AccordionItem>
         <AccordionItem>
             {#snippet header()}Results are inaccurate?{/snippet}

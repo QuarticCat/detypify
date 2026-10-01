@@ -9,6 +9,7 @@
     import Contrib from "./routes/Contrib.svelte";
     import FAQ from "./routes/FAQ.svelte";
     import Home from "./routes/Home.svelte";
+    import Symbols from "./routes/Symbols.svelte";
 
     ortEnv.wasm.numThreads = 1;
     ortEnv.wasm.wasmPaths = import.meta.env.VITE_ORT_DIST_URL;
@@ -34,6 +35,7 @@
     <div class="flex">
         <NavUl activeUrl={activeHash}>
             <NavLi href="#">Home</NavLi>
+            <NavLi href="#symbols">Symbols</NavLi>
             <NavLi href="#contrib">Contrib</NavLi>
             <NavLi href="#faq">FAQ</NavLi>
         </NavUl>
@@ -59,6 +61,8 @@
         <div class="ui-container" in:fade={{ duration: 50, delay: 50 }} out:fade={{ duration: 50 }}>
             {#if activeHash === "#"}
                 <Home {session} />
+            {:else if activeHash === "#symbols"}
+                <Symbols />
             {:else if activeHash === "#contrib"}
                 <Contrib />
             {:else if activeHash === "#faq"}

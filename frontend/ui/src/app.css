@@ -49,6 +49,12 @@
         @apply m-[2vw] flex flex-wrap justify-center gap-x-16 gap-y-4;
     }
 
+    .ui-grid {
+        @apply mx-auto grid gap-4;
+        width: min(100%, 90rem);
+        grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+    }
+
     .ui-sub-container {
         @apply flex flex-col gap-4;
     }
