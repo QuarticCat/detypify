@@ -4,9 +4,6 @@
     "version": "0.3.0",
     "type": "module",
     "scripts": {
-        "dev": "vite",
-        "build": "vite build",
-        "preview": "vite preview",
         "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
         "postinstall": "node scripts/subset-font.ts"
     },
@@ -26,7 +23,8 @@
         "svelte-check": "^4.7.6",
         "tailwindcss": "^4.3.3",
         "typescript": "~6.0.3",
-        "vite": "^8.2.1",
-        "vite-plugin-pwa": "^1.3.0"
+        "vite": "catalog:",
+        "vite-plugin-pwa": "^1.3.0",
+        "vite-plus": "catalog:"
     }
 }

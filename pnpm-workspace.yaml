@@ -14,3 +14,12 @@ allowBuilds:
 # Keep vulnerable transitive dependencies above their patched versions.
 overrides:
   sharp@<0.35.0: 0.35.2
+  vite@*: 'catalog:'
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
+  vite-plus: 1.0.0
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: '*'

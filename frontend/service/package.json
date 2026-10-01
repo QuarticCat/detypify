@@ -26,15 +26,13 @@
         "train/*.onnx"
     ],
     "scripts": {
-        "dev": "tsdown --watch",
-        "build": "tsdown",
-        "prepare": "tsdown"
+        "prepare": "vp pack"
     },
     "dependencies": {
         "onnxruntime-web": "1.27.0"
     },
     "devDependencies": {
-        "tsdown": "^0.22.14",
-        "typescript": "^6.0.3"
+        "typescript": "^6.0.3",
+        "vite-plus": "catalog:"
     }
 }

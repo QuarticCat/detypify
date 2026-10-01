@@ -43,7 +43,7 @@ To compile it for production:
 ```console
 $ cd assets
 $ inkscape manuscript.svg --export-text-to-path --export-filename=logo.svg  # convert text to path
-$ bunx svgo --multipass logo.svg  # optimize SVG
+$ vpx svgo --multipass logo.svg  # optimize SVG
 ```
 
 ## License
