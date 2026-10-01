@@ -1,7 +1,7 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 import servicePackage from "../service/package.json" with { type: "json" };
 
@@ -19,7 +19,7 @@ export default defineConfig({
         conditions: ["module", "browser", "onnxruntime-web-use-extern-wasm"],
     },
     assetsInclude: ["**/*.onnx"],
-    plugins: [
+    plugins: lazyPlugins(() => [
         tailwindcss(),
         svelte(),
         VitePWA({
@@ -45,5 +45,5 @@ export default defineConfig({
                 image: "public/favicon.svg",
             },
         }),
-    ],
+    ]),
 });

@@ -1,9 +1,13 @@
 {
     "name": "detypify-frontend",
-    "scripts": {
-        "format": "oxfmt ."
-    },
     "devDependencies": {
-        "oxfmt": "^0.64.0"
+        "vite-plus": "catalog:"
+    },
+    "devEngines": {
+        "packageManager": {
+            "name": "pnpm",
+            "version": "12.8.1",
+            "onFail": "download"
+        }
     }
 }

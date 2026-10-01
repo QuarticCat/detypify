@@ -10,21 +10,18 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: latest
-          cache: pnpm
+      - name: Prepare train folder
+        working-directory: frontend/service
+        run: |
+          mkdir -p train
+          echo '[]' > train/infer.json
+          echo '{}' > train/contrib.json
+          echo '??' > train/model.onnx
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -37,20 +34,14 @@ jobs:
           path: frontend/ui/.cache
           key: ${{ runner.os }}-frontend-postinstall-cache
 
-      - name: Prepare train folder
-        run: |
-          mkdir -p train
-          echo '[]' > train/infer.json
-          echo '{}' > train/contrib.json
-          echo '??' > train/model.onnx
-        working-directory: frontend/service
+      - name: Setup Vite+ and install dependencies
+        uses: voidzero-dev/setup-vp@v1.21.1
+        with:
+          node-version: latest
+          cache: true
 
-      - name: Install dependencies
-        run: pnpm install
+      - name: Vite+ check
+        run: vp check
 
-      - name: Oxfmt check
-        run: pnpm exec oxfmt --check .
-
-      - name: Type check
-        run: pnpm run check
-        working-directory: frontend/ui
+      - name: Svelte type check
+        run: vp run detypify-ui#check
