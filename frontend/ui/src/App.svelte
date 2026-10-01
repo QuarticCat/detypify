@@ -6,6 +6,7 @@
     import { onMount } from "svelte";
     import { fade } from "svelte/transition";
 
+    import logo from "../../../assets/logo.svg";
     import Contrib from "./routes/Contrib.svelte";
     import FAQ from "./routes/FAQ.svelte";
     import Home from "./routes/Home.svelte";
@@ -29,7 +30,7 @@
 
 <Navbar>
     <NavBrand href="/">
-        <!--  TODO: logo -->
+        <img src={logo} alt="" aria-hidden="true" class="mx-3 h-8" />
         <span class="self-center text-2xl font-semibold whitespace-nowrap dark:text-white">Detypify</span>
     </NavBrand>
     <div class="flex">
