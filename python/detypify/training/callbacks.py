@@ -304,7 +304,7 @@ class LogTestConfusionCallback(Callback):
 
         if len(self.classes) > num_labels:
             _, indices = torch.topk(candidate_scores, k=num_labels)
-            indices = indices.sort().values
+            indices, _ = indices.sort()
             matrix = confusion[indices][:, indices]
             class_names = [self.classes[i] for i in indices.tolist()]
             title = f"Test confusion matrix - top {num_labels} error-involved labels"
