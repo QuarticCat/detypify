@@ -1,12 +1,22 @@
-from detypify.types import Strokes
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import numpy as np
+
+    from detypify.types import Strokes
 
 
-def rasterize_strokes(strokes: Strokes, output_size: int):
-    """Normalize vector strokes and rasterize them into a uint8 image."""
+def rasterize_strokes(strokes: Strokes | Sequence[np.ndarray], output_size: int):
+    """Normalize vector strokes (point lists or ``(n, 2)`` arrays) and rasterize them into a uint8 image."""
     import cv2
     import numpy as np
 
-    stroke_arrays = [np.array(s, dtype=np.float32) for s in strokes if s]
+    # asarray avoids copying strokes that already are float32 arrays (memory-mapped split caches).
+    stroke_arrays = [np.asarray(s, dtype=np.float32) for s in strokes if len(s)]
     if not stroke_arrays:
         return np.zeros((output_size, output_size), dtype=np.uint8)
 

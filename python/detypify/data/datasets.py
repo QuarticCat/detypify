@@ -5,6 +5,7 @@ from hashlib import blake2b
 from json import dumps
 from math import floor, isclose
 from os import getpid
+from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 from detypify.config import DETERMINISTIC_SPLIT_SEED, DataSetName
@@ -14,7 +15,6 @@ from detypify.data.symbols import get_tex_to_char
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from pathlib import Path
 
     import numpy as np
     import polars as pl
@@ -25,31 +25,57 @@ class RenderedSample(TypedDict):
     label: int
 
 
-class RenderedDataset:
-    """A map-style dataset that memory-maps Polars rows and rasterizes them on demand."""
+SPLIT_ARRAYS = ("points", "stroke_offsets", "sample_offsets", "labels")
+"""Files of a split cache directory. Strokes are stored CSR-style: ``points`` holds every (x, y) pair, stroke ``j``
+is ``points[stroke_offsets[j]:stroke_offsets[j + 1]]`` and sample ``i`` owns strokes
+``sample_offsets[i]:sample_offsets[i + 1]``."""
 
-    def __init__(self, ipc_path: str, sample_count: int, image_size: int) -> None:
-        self.ipc_path = ipc_path
-        self.sample_count = sample_count
+
+class RenderedDataset:
+    """A map-style dataset over memory-mapped stroke arrays that rasterizes samples on demand.
+
+    Every process maps the same ``.npy`` files, so DataLoader workers share the OS page cache instead of each holding
+    a private copy of the split.
+    """
+
+    def __init__(self, directory: str, image_size: int) -> None:
+        import numpy as np
+
+        self.directory = directory
         self.image_size = image_size
-        self._frame: pl.DataFrame | None = None
+        self.sample_count = len(np.load(Path(directory) / "labels.npy", mmap_mode="r"))
+        self._arrays: dict[str, np.ndarray] | None = None
+
+    def _open(self) -> dict[str, np.ndarray]:
+        # Each process (main or DataLoader worker) maps the files on first access.
+        if self._arrays is None:
+            import numpy as np
+
+            directory = Path(self.directory)
+            self._arrays = {name: np.load(directory / f"{name}.npy", mmap_mode="r") for name in SPLIT_ARRAYS}
+        return self._arrays
 
     def __len__(self) -> int:
         return self.sample_count
 
-    def __getitem__(self, index: int) -> RenderedSample:
-        # Each DataLoader worker opens its own memory map on first access.
-        if self._frame is None:
-            import polars as pl
+    def strokes(self, index: int) -> list[np.ndarray]:
+        """Strokes of one sample as read-only ``(points, 2)`` float32 views into the memory map."""
+        import numpy as np
 
-            self._frame = pl.read_ipc(self.ipc_path, memory_map=True, rechunk=False)
-        strokes, label = self._frame.row(index)
-        return {"image": rasterize_strokes(strokes, self.image_size), "label": label}
+        arrays = self._open()
+        first, last = arrays["sample_offsets"][index], arrays["sample_offsets"][index + 1]
+        offsets = arrays["stroke_offsets"][first : last + 1]
+        points = arrays["points"][offsets[0] : offsets[-1]]
+        return np.split(points, offsets[1:-1] - offsets[0])
+
+    def __getitem__(self, index: int) -> RenderedSample:
+        arrays = self._open()
+        return {"image": rasterize_strokes(self.strokes(index), self.image_size), "label": int(arrays["labels"][index])}
 
     def __getstate__(self) -> dict[str, object]:
-        """Drop the process-local memory map when serializing a worker dataset."""
+        """Never pickle the memory maps; each worker maps the files itself."""
         state = self.__dict__.copy()
-        state["_frame"] = None
+        state["_arrays"] = None
         return state
 
 
@@ -163,7 +189,7 @@ def _split_cache_key(
             "min_split_class_count": min_split_class_count,
             "sample_count": len(mapped),
             "split_ratio": split_ratio,
-            "stage": "polars-vector-splits-v1",
+            "stage": "numpy-mmap-splits-v1",
         },
         separators=(",", ":"),
         sort_keys=True,
@@ -171,14 +197,42 @@ def _split_cache_key(
     return blake2b(payload.encode(), digest_size=16).hexdigest()
 
 
-def _write_split_cache(frame: pl.DataFrame, path: Path) -> None:
-    """Atomically materialize a split as an Arrow IPC file if it is not cached."""
-    if path.is_file():
+def _write_split_cache(frame: pl.DataFrame, directory: Path) -> None:
+    """Atomically materialize a split as memory-mappable ``.npy`` arrays if it is not cached (see SPLIT_ARRAYS)."""
+    import shutil
+
+    import numpy as np
+    import polars as pl
+
+    if directory.is_dir():
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(f".{path.name}.{getpid()}.tmp")
-    frame.write_ipc(temp_path)
-    temp_path.replace(path)
+    strokes = frame.get_column("strokes")
+    # Empty lists vanish instead of becoming null rows, so lengths and flattened values stay consistent.
+    flat_strokes = strokes.explode(empty_as_null=False)  # one row per stroke
+    flat_points = flat_strokes.explode(empty_as_null=False)  # one row per point
+    coords = flat_points.cast(pl.List(pl.Float32)).explode(empty_as_null=False).to_numpy()
+    if coords.size != 2 * len(flat_points):
+        msg = "every stroke point must have exactly two coordinates"
+        raise ValueError(msg)
+    arrays = {
+        "points": coords.reshape(-1, 2).astype(np.float32, copy=False),
+        "stroke_offsets": np.concatenate([[0], np.cumsum(flat_strokes.list.len().to_numpy())]).astype(np.int64),
+        "sample_offsets": np.concatenate([[0], np.cumsum(strokes.list.len().to_numpy())]).astype(np.int64),
+        "labels": frame.get_column("label").to_numpy().astype(np.uint32),
+    }
+
+    temp_dir = directory.with_name(f".{directory.name}.{getpid()}.tmp")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        for name, array in arrays.items():
+            np.save(temp_dir / f"{name}.npy", np.ascontiguousarray(array))
+        temp_dir.replace(directory)
+    except OSError:
+        # Another process may have published the same split first; its copy is identical.
+        if not directory.is_dir():
+            raise
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def get_rendered_dataset_splits(
@@ -225,7 +279,7 @@ def get_rendered_dataset_splits(
     rendered = {}
     for name, frame in splits.items():
         # Rasterization stays lazy; only compact vector strokes and labels are cached here.
-        ipc_path = paths.dataset_splits_dir / cache_key / f"{name}.arrow"
-        _write_split_cache(frame, ipc_path)
-        rendered[name] = RenderedDataset(str(ipc_path), len(frame), image_size)
+        split_dir = paths.dataset_splits_dir / cache_key / name
+        _write_split_cache(frame, split_dir)
+        rendered[name] = RenderedDataset(str(split_dir), image_size)
     return rendered, classes
