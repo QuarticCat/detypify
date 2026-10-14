@@ -158,11 +158,11 @@ if __name__ == "__main__":
                 )
             )
 
-        # Keep the best validation checkpoint for evaluation and the last checkpoint for resuming.
+        # Keep the best validation macro-F1 checkpoint for evaluation and the last checkpoint for resuming.
         checkpoint_callback = ModelCheckpoint(
             dirpath=checkpoints_dir,
-            filename="best-{epoch:02d}-{val_acc:.4f}",
-            monitor="val_acc",
+            filename="best-{epoch:02d}-{val_f1:.4f}",
+            monitor="val_f1",
             mode="max",
             save_top_k=1,
             save_last=True,
