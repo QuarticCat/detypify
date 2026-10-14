@@ -94,8 +94,11 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("train_loss", loss)
-        self.log("train_acc", self.train_acc_top1(pred, label))
-        self.log("train_f1", self.train_f1_macro(pred, label))
+        self.train_acc_top1.update(pred, label)
+        self.train_f1_macro.update(pred, label)
+        # Logging Metric objects lets Lightning compute and reset their state at epoch boundaries.
+        self.log("train_acc", self.train_acc_top1, on_step=False, on_epoch=True)
+        self.log("train_f1", self.train_f1_macro, on_step=False, on_epoch=True)
         return loss
 
     @override
@@ -104,10 +107,14 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", self.val_acc_top1(pred, label), prog_bar=True)
-        self.log("val_top3", self.val_acc_top3(pred, label))
-        self.log("val_top5", self.val_acc_top5(pred, label))
-        self.log("val_f1", self.val_f1_macro(pred, label), prog_bar=True)
+        self.val_acc_top1.update(pred, label)
+        self.val_acc_top3.update(pred, label)
+        self.val_acc_top5.update(pred, label)
+        self.val_f1_macro.update(pred, label)
+        self.log("val_acc", self.val_acc_top1, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_top3", self.val_acc_top3, on_step=False, on_epoch=True)
+        self.log("val_top5", self.val_acc_top5, on_step=False, on_epoch=True)
+        self.log("val_f1", self.val_f1_macro, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     @override
@@ -116,10 +123,14 @@ class BaseModel(LightningModule):
         pred = self.forward(image)
         loss = self.criterion(pred, label)
         self.log("test_loss", loss, prog_bar=True)
-        self.log("test_acc", self.test_acc_top1(pred, label), prog_bar=True)
-        self.log("test_top3", self.test_acc_top3(pred, label))
-        self.log("test_top5", self.test_acc_top5(pred, label))
-        self.log("test_f1", self.test_f1_macro(pred, label), prog_bar=True)
+        self.test_acc_top1.update(pred, label)
+        self.test_acc_top3.update(pred, label)
+        self.test_acc_top5.update(pred, label)
+        self.test_f1_macro.update(pred, label)
+        self.log("test_acc", self.test_acc_top1, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test_top3", self.test_acc_top3, on_step=False, on_epoch=True)
+        self.log("test_top5", self.test_acc_top5, on_step=False, on_epoch=True)
+        self.log("test_f1", self.test_f1_macro, on_step=False, on_epoch=True, prog_bar=True)
         return pred
 
     def configure_optimizers(self):
