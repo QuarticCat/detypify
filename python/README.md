@@ -20,6 +20,42 @@ The commands below use `uv run --no-sync` to preserve the selected PyTorch
 environment. Run `uv sync --extra=<extra>` again after changing `pyproject.toml`
 or `uv.lock`.
 
+### AMD ROCm installation
+
+> [!NOTE]
+> A full ROCm installation is large. This project installs only the selected GPU
+> target's device kernels to reduce download and disk usage.
+
+Query the native GPU target:
+
+```bash
+env -u HSA_OVERRIDE_GFX_VERSION amdgpu-arch
+```
+
+In `pyproject.toml`, select a GPU/driver-compatible release via the `pytorch-rocm`
+index URL. Set the device target consistently in:
+
+- The `rocm-sdk-device-*` dependency.
+- The `device-*` extra in `tool.uv.override-dependencies`.
+- The `rocm-sdk-device-*` entry in `tool.uv.sources`.
+
+Use the selected PyTorch build's required SDK version and keep the existing
+SDK and `triton-rocm` source mappings.
+
+> [!NOTE]
+> **Radeon 680M:** the tested PyTorch ROCm 7.14 wheel lacks native gfx1035 support.
+> Select `gfx1030` in all three entries and enable the verified compatibility path:
+
+```bash
+export HSA_OVERRIDE_GFX_VERSION=10.3.0
+```
+
+Install after configuration:
+
+```bash
+uv lock && uv sync --locked --extra=rocm
+```
+
 ## Development
 
 Run these commands from the repository root.

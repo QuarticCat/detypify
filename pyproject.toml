@@ -38,6 +38,11 @@ rocm = [
   "torch>=2.6.0",
   "torchvision",
   "triton-rocm ; sys_platform == 'linux'",
+  "rocm ; sys_platform == 'linux'",
+  "rocm-sdk-core ; sys_platform == 'linux'",
+  "rocm-sdk-libraries ; sys_platform == 'linux'",
+  # GPU target: python/README.md#amd-rocm-installation
+  "rocm-sdk-device-gfx1030 ; sys_platform == 'linux'",
 ]
 
 [dependency-groups]
@@ -65,6 +70,11 @@ dev = [
 search-path = ["./python"]
 
 [tool.uv]
+# Select device kernels; also overrides PyTorch's ROCm version constraint.
+override-dependencies = [
+  # GPU target: python/README.md#amd-rocm-installation
+  "rocm[libraries,device-gfx1030] ; sys_platform == 'linux'",
+]
 environments = [
   "sys_platform == 'darwin'",
   "sys_platform == 'linux'",
@@ -81,6 +91,11 @@ conflicts = [
 
 # target torch to CPU, CUDA or RoCM
 [tool.uv.sources]
+rocm = { index = "pytorch-rocm", marker = "sys_platform == 'linux'" }
+rocm-sdk-core = { index = "pytorch-rocm", marker = "sys_platform == 'linux'" }
+rocm-sdk-libraries = { index = "pytorch-rocm", marker = "sys_platform == 'linux'" }
+# GPU target: python/README.md#amd-rocm-installation
+rocm-sdk-device-gfx1030 = { index = "pytorch-rocm", marker = "sys_platform == 'linux'" }
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
   { index = "pytorch-cu12", extra = "cuda12", marker = "platform_system != 'Darwin'" },
@@ -114,5 +129,6 @@ explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-rocm"
-url = "https://download.pytorch.org/whl/rocm7.2"
+# Release selection: python/README.md#amd-rocm-installation
+url = "https://download.pytorch.org/whl/rocm7.14"
 explicit = true
