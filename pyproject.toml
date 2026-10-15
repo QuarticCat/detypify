@@ -37,7 +37,6 @@ cuda13 = [
 rocm = [
   "torch>=2.6.0",
   "torchvision",
-  "pytorch-triton-rocm ; sys_platform == 'linux'",
   "triton-rocm ; sys_platform == 'linux'",
 ]
 
