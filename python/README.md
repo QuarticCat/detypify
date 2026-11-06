@@ -20,6 +20,12 @@ The commands below use `uv run --no-sync` to preserve the selected PyTorch
 environment. Run `uv sync --extra=<extra>` again after changing `pyproject.toml`
 or `uv.lock`.
 
+The default PyTorch indexes use CUDA 12.9, CUDA 13.4, and ROCm 10.0.
+Official indexes are enabled in `pyproject.toml`; matching SJTU mirror URLs are
+provided as commented alternatives. To use a mirror, comment out the official
+`url` and uncomment the corresponding SJTU `url`, keeping the backend version
+unchanged.
+
 ### AMD ROCm installation
 
 > [!NOTE]
@@ -43,8 +49,10 @@ Use the selected PyTorch build's required SDK version and keep the existing
 SDK and `triton-rocm` source mappings.
 
 > [!NOTE]
-> **Radeon 680M:** the tested PyTorch ROCm 7.14 wheel lacks native gfx1035 support.
-> Select `gfx1030` in all three entries and enable the verified compatibility path:
+> **Radeon 680M:** the previously tested PyTorch ROCm 7.14 wheel lacks native gfx1035 support.
+> This compatibility path has not been validated with the default ROCm 10.0 index.
+> To reproduce the tested setup, select ROCm 7.14 in the index URL, set `gfx1030`
+> in all three entries, and enable the compatibility override:
 
 ```bash
 export HSA_OVERRIDE_GFX_VERSION=10.3.0

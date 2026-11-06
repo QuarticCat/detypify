@@ -115,20 +115,24 @@ triton-rocm = [
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+# url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cpu"
 explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu12"
-url = "https://download.pytorch.org/whl/cu126"
+url = "https://download.pytorch.org/whl/cu129"
+# url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu129"
 explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu13"
-url = "https://download.pytorch.org/whl/cu132"
+url = "https://download.pytorch.org/whl/cu134"
+# url = "https://mirror.sjtu.edu.cn/pytorch-wheels/cu134"
 explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-rocm"
 # Release selection: python/README.md#amd-rocm-installation
-url = "https://download.pytorch.org/whl/rocm7.14"
+url = "https://download.pytorch.org/whl/rocm10.0"
+# url = "https://mirror.sjtu.edu.cn/pytorch-wheels/rocm10.0"
 explicit = true
